@@ -53,7 +53,8 @@ extern char latfile_smeared[];
 extern void usage(char** );
 
 extern int src[];
-extern int t_sinkSource;
+extern int Ntsink;
+extern char pathList_tsink[];
 extern int Q_sq;
 extern int nsmearAPE;
 extern int nsmearGauss;
@@ -65,7 +66,6 @@ extern double muValue;
 extern double kappa;
 extern char prop_path[];
 extern double csw;
-
 extern int numSourcePositions;
 extern char pathListSourcePositions[];
 extern int NeV;
@@ -360,7 +360,8 @@ int main(int argc, char **argv)
   info.lL[3] = tdim;
   info.Nsources = numSourcePositions;
   info.Q_sq = Q_sq;
-  info.tsinkSource=t_sinkSource;
+  //  info.tsinkSource=t_sinkSource;
+  info.Ntsink = Ntsink;
 
   FILE *ptr_sources;
   ptr_sources = fopen(pathListSourcePositions,"r");
@@ -371,11 +372,28 @@ int main(int argc, char **argv)
   for(int is = 0 ; is < numSourcePositions ; is++)
     fscanf(ptr_sources,"%d %d %d %d",&(info.sourcePosition[is][0]),&(info.sourcePosition[is][1]), &(info.sourcePosition[is][2]), &(info.sourcePosition[is][3]));
 
+  fclose(ptr_sources);
+
+
+  //-C.Kallidonis: Read in the sink-source separations
+  FILE *ptr_tsink;
+  ptr_tsink = fopen(pathList_tsink,"r");
+  if(ptr_sources == NULL){
+    fprintf(stderr,"Error opening file for sink-source separations\n");
+    exit(-1);
+  }
+  for(int it = 0 ; it < Ntsink ; it++){
+    fscanf(ptr_tsink,"%d\n",&(info.tsinkSource[it]));
+    printfQuda("Got source sink time separation %d: %d\n",it,info.tsinkSource[it]);
+  }
+
+  fclose(ptr_tsink);
+
 
 
   initQuda(device);
   init_qudaQKXTM_Kepler(&info);
-  printfQuda("The source sink time separation is %d\n",t_sinkSource);
+  //  printfQuda("The source sink time separation is %d\n",t_sinkSource);
   printf_qudaQKXTM_Kepler();
 
 

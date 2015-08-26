@@ -1576,7 +1576,9 @@ static int dim_partitioned[4] = {0,0,0,0};
 
 /////////////////////////////////            KX           ////////////////////////////////////////////
 int src[4] = {0,0,0,0}; 
-int t_sinkSource = 0;
+//int t_sinkSource = 0;
+int Ntsink = 1;
+char pathList_tsink[257] = "list_tsinksource.txt";
 int Q_sq = 0;
 int nsmearAPE = 20;
 int nsmearGauss = 50;
@@ -1658,7 +1660,8 @@ void usage(char** argv )
   printf("    --y_source                                # Source position in y direction (default 0)\n");
   printf("    --z_source                                # Source position in z direction (default 0)\n");
   printf("    --t_source                                # Source position in t direction (default 0)\n");
-  printf("    --t_sinkSource                            # Fix sinkSource Position (default 0)\n");
+  printf("    --pathListSinkSource                      # Path to find the list of the sink-source separations (default \" list_tsinksource.txt \")\n");
+  printf("    --Ntsink                                  # Number of sink-source separations (default \" list_tsinksource.txt \")\n");
   printf("    --Q_sqMax                                 # The maximum Q^2 momentum (default 0)\n");
   printf("    --nsmearAPE                               # Number of APE smearing iterations (default 20)\n");
   printf("    --alphaAPE                                # APE smearing parameter (default 0.5)\n");
@@ -1751,11 +1754,21 @@ int process_command_line_option(int argc, char** argv, int* idx)
     goto out;
   }
 
-  if( strcmp(argv[i], "--t_sinkSource") ==0){
+  if( strcmp(argv[i], "--Ntsink") ==0){
     if(i+1 >= argc){
       usage(argv);
     }
-    t_sinkSource = atoi(argv[i+1]);
+    Ntsink = atoi(argv[i+1]);
+    i++;
+    ret = 0;
+    goto out;
+  }
+
+  if( strcmp(argv[i], "--pathListSinkSource") == 0){
+    if(i+1 >= argc){
+      usage(argv);
+    }
+    strcpy(pathList_tsink,argv[i+1]);
     i++;
     ret = 0;
     goto out;

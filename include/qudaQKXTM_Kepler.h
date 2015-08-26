@@ -15,6 +15,8 @@
 #define QUDAQKXTM_DIM 4
 #define MAX_NSOURCES 1000
 #define MAX_NMOMENTA 1000
+#define MAX_TSINK 10
+
 
 #define LEXIC(it,iz,iy,ix,L) ( (it)*L[0]*L[1]*L[2] + (iz)*L[0]*L[1] + (iy)*L[0] + (ix) )
 #define LEXIC_TZY(it,iz,iy,L) ( (it)*L[1]*L[2] + (iz)*L[1] + (iy) )
@@ -37,7 +39,8 @@ namespace quda {
     int sourcePosition[MAX_NSOURCES][QUDAQKXTM_DIM];
     QudaPrecision Precision;
     int Q_sq;
-    int tsinkSource;
+    int Ntsink;
+    int tsinkSource[MAX_TSINK];
   } qudaQKXTMinfo_Kepler;
 
   // forward declaration
