@@ -55,13 +55,7 @@ void initComms(int argc, char **argv, const int *commDims)
   QMP_declare_logical_topology(commDims, 4);
 
 #elif defined(MPI_COMMS)
-#ifdef PTHREADS
-  int provided;
-  MPI_Init_thread(&argc, &argv, MPI_THREAD_MULTIPLE, &provided);
-#else
   MPI_Init(&argc, &argv);
-#endif
-
 #endif
   initCommsGridQuda(4, commDims, NULL, NULL);
   initRand();
@@ -726,7 +720,7 @@ static void applyGaugeFieldScaling(Float **gauge, int Vh, QudaGaugeParam *param)
 }
 
 template <typename Float>
-void applyGaugeFieldScaling_long(Float **gauge, int Vh, QudaGaugeParam *param, QudaDslashType dslash_type)
+void applyGaugeFieldScaling_long(Float **gauge, int Vh, QudaGaugeParam *param)
 {
 
   int X1h=param->X[0]/2;
@@ -736,11 +730,9 @@ void applyGaugeFieldScaling_long(Float **gauge, int Vh, QudaGaugeParam *param, Q
   int X4 =param->X[3];
 
   // rescale long links by the appropriate coefficient
-  if (dslash_type == QUDA_ASQTAD_DSLASH) {
-    for(int d=0; d<4; d++){
-      for(int i=0; i < V*gaugeSiteSize; i++){
-	gauge[d][i] /= (-24*param->tadpole_coeff*param->tadpole_coeff);
-      }
+  for(int d=0; d<4; d++){
+    for(int i=0; i < V*gaugeSiteSize; i++){
+      gauge[d][i] /= (-24*param->tadpole_coeff*param->tadpole_coeff);
     }
   }
 
@@ -755,7 +747,7 @@ void applyGaugeFieldScaling_long(Float **gauge, int Vh, QudaGaugeParam *param, Q
       int i3 = (index - i4*(X3*X2*X1))/(X2*X1);
       int i2 = (index - i4*(X3*X2*X1) - i3*(X2*X1))/X1;
       int i1 = index - i4*(X3*X2*X1) - i3*(X2*X1) - i2*X1;
-      int sign = 1;
+      int sign=1;
 
       if (d == 0) {
 	if (i4 % 2 == 1){
@@ -785,17 +777,17 @@ void applyGaugeFieldScaling_long(Float **gauge, int Vh, QudaGaugeParam *param, Q
       int i3 = (index - i4*(X3*X2*X1))/(X2*X1);
       int i2 = (index - i4*(X3*X2*X1) - i3*(X2*X1))/X1;
       int i1 = index - i4*(X3*X2*X1) - i3*(X2*X1) - i2*X1;
-      int sign = 1;
+      int sign=1;
 
       if (d == 0) {
 	if (i4 % 2 == 1){
-	  sign = -1;
+	  sign= -1;
 	}
       }
 
       if (d == 1){
 	if ((i4+i1) % 2 == 1){
-	  sign = -1;
+	  sign= -1;
 	}
       }
       if (d == 2){
@@ -815,14 +807,8 @@ void applyGaugeFieldScaling_long(Float **gauge, int Vh, QudaGaugeParam *param, Q
   if (param->t_boundary == QUDA_ANTI_PERIODIC_T) {
     for (int j = 0; j < Vh; j++) {
       int sign =1;
-      if (dslash_type == QUDA_ASQTAD_DSLASH) {
-	if (j >= (X4-3)*X1h*X2*X3 ){
-	  sign = -1;
-	}
-      } else {
-	if (j >= (X4-1)*X1h*X2*X3 ){
-	  sign = -1;
-	}
+      if (j >= (X4-3)*X1h*X2*X3 ){
+	sign= -1;
       }
 
       for (int i = 0; i < 6; i++) {
@@ -831,7 +817,6 @@ void applyGaugeFieldScaling_long(Float **gauge, int Vh, QudaGaugeParam *param, Q
       }
     }
   }
-
 }
 
 
@@ -877,7 +862,7 @@ static void orthogonalize(complex<Float> *a, complex<Float> *b, int len) {
 }
 
 template <typename Float> 
-static void constructGaugeField(Float **res, QudaGaugeParam *param, QudaDslashType dslash_type=QUDA_WILSON_DSLASH) {
+static void constructGaugeField(Float **res, QudaGaugeParam *param) {
   Float *resOdd[4], *resEven[4];
   for (int dir = 0; dir < 4; dir++) {  
     resEven[dir] = res[dir];
@@ -936,7 +921,7 @@ static void constructGaugeField(Float **res, QudaGaugeParam *param, QudaDslashTy
   if (param->type == QUDA_WILSON_LINKS){  
     applyGaugeFieldScaling(res, Vh, param);
   } else if (param->type == QUDA_ASQTAD_LONG_LINKS){
-    applyGaugeFieldScaling_long(res, Vh, param, dslash_type);
+    applyGaugeFieldScaling_long(res, Vh, param);      
   } else if (param->type == QUDA_ASQTAD_FAT_LINKS){
     for (int dir = 0; dir < 4; dir++){ 
       for (int i = 0; i < Vh; i++) {
@@ -1044,16 +1029,15 @@ construct_fat_long_gauge_field(void **fatlink, void** longlink, int type,
     }
   } else {
     if (precision == QUDA_DOUBLE_PRECISION) {
-      // if doing naive staggered then set to long links so that the staggered phase is applied
-      param->type = dslash_type == QUDA_ASQTAD_DSLASH ? QUDA_ASQTAD_FAT_LINKS : QUDA_ASQTAD_LONG_LINKS;
-      constructGaugeField((double**)fatlink, param, dslash_type);
+      param->type = QUDA_ASQTAD_FAT_LINKS;
+      constructGaugeField((double**)fatlink, param);
       param->type = QUDA_ASQTAD_LONG_LINKS;
-      if (dslash_type == QUDA_ASQTAD_DSLASH) constructGaugeField((double**)longlink, param, dslash_type);
+      constructGaugeField((double**)longlink, param);
     }else {
-      param->type = dslash_type == QUDA_ASQTAD_DSLASH ? QUDA_ASQTAD_FAT_LINKS : QUDA_ASQTAD_LONG_LINKS;
-      constructGaugeField((float**)fatlink, param, dslash_type);
+      param->type = QUDA_ASQTAD_FAT_LINKS;
+      constructGaugeField((float**)fatlink, param);
       param->type = QUDA_ASQTAD_LONG_LINKS;
-      if (dslash_type == QUDA_ASQTAD_DSLASH) constructGaugeField((float**)longlink, param, dslash_type);
+      constructGaugeField((float**)longlink, param);
     }
   }
 
@@ -1080,8 +1064,7 @@ construct_fat_long_gauge_field(void **fatlink, void** longlink, int type,
     }
   }
 
-  // set all links to zero to emulate the 1-link operator (needed for host comparison)
-  if (dslash_type == QUDA_STAGGERED_DSLASH) { 
+  if (dslash_type == QUDA_STAGGERED_DSLASH) { // set all links to zero to emulate the 1-link operator
     for(int dir=0; dir<4; ++dir){
       for(int i=0; i<V; ++i){
 	for(int j=0; j<gaugeSiteSize; j+=2){
@@ -1096,6 +1079,7 @@ construct_fat_long_gauge_field(void **fatlink, void** longlink, int type,
       }
     }
   }
+
 
 }
 
@@ -1583,14 +1567,44 @@ QudaInverterType precon_type = QUDA_INVALID_INVERTER;
 int multishift = 0;
 bool verify_results = true;
 double mass = 0.1;
-double tol = 1e-7;
-double tol_hq = 0.;
 QudaTwistFlavorType twist_flavor = QUDA_TWIST_MINUS;
 bool kernel_pack_t = false;
 QudaMassNormalization normalization = QUDA_KAPPA_NORMALIZATION;
 QudaMatPCType matpc_type = QUDA_MATPC_EVEN_EVEN;
 
 static int dim_partitioned[4] = {0,0,0,0};
+
+/////////////////////////////////            KX           ////////////////////////////////////////////
+int src[4] = {0,0,0,0}; 
+int t_sinkSource = 0;
+int Q_sq = 0;
+int nsmearAPE = 20;
+int nsmearGauss = 50;
+double alphaAPE = 0.5;
+double alphaGauss = 4.0;
+
+char twop_filename[257] = "twop";
+char threep_filename[257] = "threep";
+char prop_path[257] = "prop";
+double muValue = 0.0085;
+double kappa = 0.161231;
+
+unsigned long int seed = 12345;
+int Nstoch = 1;
+char latfile_smeared[257] = "";
+double csw = 1.57551;
+
+int numSourcePositions = 1;
+char pathListSourcePositions[257] = "listSourcePositions.txt";
+int NeV = 20;
+char pathEigenVectorsUp[257] = "ev_u.0000";
+char pathEigenVectorsDown[257] = "ev_d.0000";
+char pathEigenValuesUp[257] = "evals_u.dat";
+char pathEigenValuesDown[257] = "evals_d.dat";
+char loop_filename[257] = "loop";
+int NdumpStep = 1;
+//////////////////////////////////////////////////////////////////////////////////////////////////////
+
 
 int dimPartitioned(int dim)
 {
@@ -1635,11 +1649,43 @@ void usage(char** argv )
   printf("    --mass                                    # Mass of Dirac operator (default 0.1)\n");
   printf("    --mass-normalization                      # Mass normalization (kappa (default) / mass)\n");
   printf("    --matpc                                   # Matrix preconditioning type (even-even, odd_odd, even_even_asym, odd_odd_asym) \n");
-  printf("    --tol  <resid_tol>                        # Set L2 residual tolerance\n");
-  printf("    --tolhq  <resid_hq_tol>                   # Set heavy-quark residual tolerance\n");
   printf("    --tune <true/false>                       # Whether to autotune or not (default true)\n");     
   printf("    --test                                    # Test method (different for each test)\n");
   printf("    --verify <true/false>                     # Verify the GPU results using CPU results (default true)\n");
+
+  ////////////////////// KX ///////////////////////////////////////////
+  printf("    --x_source                                # Source position in x direction (default 0)\n");
+  printf("    --y_source                                # Source position in y direction (default 0)\n");
+  printf("    --z_source                                # Source position in z direction (default 0)\n");
+  printf("    --t_source                                # Source position in t direction (default 0)\n");
+  printf("    --t_sinkSource                            # Fix sinkSource Position (default 0)\n");
+  printf("    --Q_sqMax                                 # The maximum Q^2 momentum (default 0)\n");
+  printf("    --nsmearAPE                               # Number of APE smearing iterations (default 20)\n");
+  printf("    --alphaAPE                                # APE smearing parameter (default 0.5)\n");
+  printf("    --nsmearGauss                             # Number of Gauss smearing iterations (default 50)\n");
+  printf("    --alphaGauss                              # Gauss smearing parameter (default 4.0)\n");
+  printf("    --mu                                      # Mu value for twisted mass fermions (default 0.0085) \n");
+  printf("    --kappa                                   # Kappa value for a specific enseble (default 0.161231\n");
+  printf("    --twop_filename                           # File name to save twopoint function (default \"twop\")\n");
+  printf("    --threep_filename                         # File name to save threepoint function (default \"threep\")\n");
+  printf("    --prop_path                               # File name to save propagators is (default \"prop_path\")\n");
+  printf("    --seed                                    # Seed for ranlux random number generator (default 12345)\n");
+  printf("    --Nstoch                                  # Number of stochastic noise vectors for loop (default 1)\n");
+  printf("    --csw                                     # Clover csw coefficient (default 1.57551)\n");
+
+  // new
+  printf("    --numSourcePositions                      # The number of source positions we want to calculate (default 1)\n");
+  printf("    --pathListSourcePositions                 # Path where the list with the source positions is (default \" listSourcePositions.txt \")\n");
+  printf("    --NeV                                     # The number of eigenVectors we will deflate (default 20)\n");
+  printf("    --pathEigenVectorsUp                      # Path where the eigenVectors for up flavor are (default ev_u.0000)\n");
+  printf("    --pathEigenVectorsDown                      # Path where the eigenVectors for up flavor are (default ev_d.0000)\n");
+  printf("    --pathEigenValuesUp                      # Path where the eigenVectors for up flavor are (default evals_u.dat)\n");
+  printf("    --pathEigenValuesDown                      # Path where the eigenVectors for up flavor are (default evals_d.dat)\n");
+  printf("    --loop_filename                           # File name to save loops (default \"loop\")\n");
+  printf("    --NdumpStep                           # Every how many noise vectors it will dump the data (default 1)\n");
+  ////////////////////////////////////////////////////////////////
+
+  
   printf("    --help                                    # Print out this message\n"); 
   usage_extra(argv); 
 #ifdef MULTI_GPU
@@ -1663,6 +1709,291 @@ int process_command_line_option(int argc, char** argv, int* idx)
   int ret = -1;
   
   int i = *idx;
+
+  //////////////////////// KX /////////////////////
+  if( strcmp(argv[i], "--x_source") ==0){
+    if(i+1 >= argc){
+      usage(argv);
+    }
+    src[0] = atoi(argv[i+1]);
+    i++;
+    ret = 0;
+    goto out;
+  }
+
+  if( strcmp(argv[i], "--y_source") ==0){
+    if(i+1 >= argc){
+      usage(argv);
+    }
+    src[1] = atoi(argv[i+1]);
+    i++;
+    ret = 0;
+    goto out;
+  }
+
+  if( strcmp(argv[i], "--z_source") ==0){
+    if(i+1 >= argc){
+      usage(argv);
+    }
+    src[2] = atoi(argv[i+1]);
+    i++;
+    ret = 0;
+    goto out;
+  }
+
+  if( strcmp(argv[i], "--t_source") ==0){
+    if(i+1 >= argc){
+      usage(argv);
+    }
+    src[3] = atoi(argv[i+1]);
+    i++;
+    ret = 0;
+    goto out;
+  }
+
+  if( strcmp(argv[i], "--t_sinkSource") ==0){
+    if(i+1 >= argc){
+      usage(argv);
+    }
+    t_sinkSource = atoi(argv[i+1]);
+    i++;
+    ret = 0;
+    goto out;
+  }
+
+  if( strcmp(argv[i], "--Q_sqMax") ==0){
+    if(i+1 >= argc){
+      usage(argv);
+    }
+    Q_sq = atoi(argv[i+1]);
+    i++;
+    ret = 0;
+    goto out;
+  }
+
+  if( strcmp(argv[i], "--nsmearAPE") ==0){
+    if(i+1 >= argc){
+      usage(argv);
+    }
+    nsmearAPE = atoi(argv[i+1]);
+    i++;
+    ret = 0;
+    goto out;
+  }
+
+  if( strcmp(argv[i], "--alphaAPE") ==0){
+    if(i+1 >= argc){
+      usage(argv);
+    }
+    alphaAPE = atof(argv[i+1]);
+    i++;
+    ret = 0;
+    goto out;
+  }
+
+  if( strcmp(argv[i], "--nsmearGauss") ==0){
+    if(i+1 >= argc){
+      usage(argv);
+    }
+    nsmearGauss = atoi(argv[i+1]);
+    i++;
+    ret = 0;
+    goto out;
+  }
+
+  if( strcmp(argv[i], "--alphaGauss") ==0){
+    if(i+1 >= argc){
+      usage(argv);
+    }
+    alphaGauss = atof(argv[i+1]);
+    i++;
+    ret = 0;
+    goto out;
+  }
+
+  if( strcmp(argv[i], "--twop_filename") == 0){
+    if (i+1 >= argc){
+      usage(argv);
+    }     
+    strcpy(twop_filename, argv[i+1]);
+    i++;
+    ret = 0;
+    goto out;
+  }
+
+  if( strcmp(argv[i], "--load-gauge-smeared") == 0){
+    if (i+1 >= argc){
+      usage(argv);
+    }     
+    strcpy(latfile_smeared, argv[i+1]);
+    i++;
+    ret = 0;
+    goto out;
+  }
+
+  if( strcmp(argv[i], "--prop_path") == 0){
+    if (i+1 >= argc){
+      usage(argv);
+    }     
+    strcpy(prop_path, argv[i+1]);
+    i++;
+    ret = 0;
+    goto out;
+  }
+
+  if( strcmp(argv[i], "--threep_filename") == 0){
+    if (i+1 >= argc){
+      usage(argv);
+    }     
+    strcpy(threep_filename, argv[i+1]);
+    i++;
+    ret = 0;
+    goto out;
+  }
+
+  if( strcmp(argv[i], "--mu") ==0){
+    if(i+1 >= argc){
+      usage(argv);
+    }
+    muValue = atof(argv[i+1]);
+    i++;
+    ret = 0;
+    goto out;
+  }
+
+  if( strcmp(argv[i], "--kappa") ==0){
+    if(i+1 >= argc){
+      usage(argv);
+    }
+    kappa = atof(argv[i+1]);
+    i++;
+    ret = 0;
+    goto out;
+  }
+
+  if( strcmp(argv[i], "--seed") ==0){
+    if(i+1 >= argc){
+      usage(argv);
+    }
+    seed =(unsigned long int) atoi(argv[i+1]);
+    i++;
+    ret = 0;
+    goto out;
+  }
+
+  if( strcmp(argv[i], "--Nstoch") ==0){
+    if(i+1 >= argc){
+      usage(argv);
+    }
+    Nstoch = atoi(argv[i+1]);
+    i++;
+    ret = 0;
+    goto out;
+  }
+
+
+  if( strcmp(argv[i], "--csw") ==0){
+    if(i+1 >= argc){
+      usage(argv);
+    }
+    csw = atof(argv[i+1]);
+    i++;
+    ret = 0;
+    goto out;
+  }
+
+  if( strcmp(argv[i], "--numSourcePositions") ==0){
+    if(i+1 >= argc){
+      usage(argv);
+    }
+    numSourcePositions = atoi(argv[i+1]);
+    i++;
+    ret = 0;
+    goto out;
+  }
+
+  if( strcmp(argv[i], "--pathListSourcePositions") == 0){
+    if (i+1 >= argc){
+      usage(argv);
+    }     
+    strcpy(pathListSourcePositions, argv[i+1]);
+    i++;
+    ret = 0;
+    goto out;
+  }
+
+  if( strcmp(argv[i], "--NeV") ==0){
+    if(i+1 >= argc){
+      usage(argv);
+    }
+    NeV = atoi(argv[i+1]);
+    i++;
+    ret = 0;
+    goto out;
+  }
+
+  if( strcmp(argv[i], "--NdumpStep") ==0){
+    if(i+1 >= argc){
+      usage(argv);
+    }
+    NdumpStep = atoi(argv[i+1]);
+    i++;
+    ret = 0;
+    goto out;
+  }
+
+  if( strcmp(argv[i], "--pathEigenVectorsUp") == 0){
+    if (i+1 >= argc){
+      usage(argv);
+    }     
+    strcpy(pathEigenVectorsUp, argv[i+1]);
+    i++;
+    ret = 0;
+    goto out;
+  }
+
+  if( strcmp(argv[i], "--pathEigenVectorsDown") == 0){
+    if (i+1 >= argc){
+      usage(argv);
+    }     
+    strcpy(pathEigenVectorsDown, argv[i+1]);
+    i++;
+    ret = 0;
+    goto out;
+  }
+
+  if( strcmp(argv[i], "--pathEigenValuesUp") == 0){
+    if (i+1 >= argc){
+      usage(argv);
+    }     
+    strcpy(pathEigenValuesUp, argv[i+1]);
+    i++;
+    ret = 0;
+    goto out;
+  }
+
+  if( strcmp(argv[i], "--pathEigenValuesDown") == 0){
+    if (i+1 >= argc){
+      usage(argv);
+    }     
+    strcpy(pathEigenValuesDown, argv[i+1]);
+    i++;
+    ret = 0;
+    goto out;
+  }
+
+  if( strcmp(argv[i], "--loop_filename") == 0){
+    if (i+1 >= argc){
+      usage(argv);
+    }     
+    strcpy(loop_filename, argv[i+1]);
+    i++;
+    ret = 0;
+    goto out;
+  }
+
+  /////////////////////////////////////////////////
+
 
   if( strcmp(argv[i], "--help")== 0){
     usage(argv);
@@ -2002,26 +2333,6 @@ int process_command_line_option(int argc, char** argv, int* idx)
     goto out;
   }
 
-  if( strcmp(argv[i], "--tol") == 0){
-    if (i+1 >= argc){
-      usage(argv);
-    }
-    tol= atof(argv[i+1]);
-    i++;
-    ret = 0;
-    goto out;
-  }
-
-  if( strcmp(argv[i], "--tolhq") == 0){
-    if (i+1 >= argc){
-      usage(argv);
-    }
-    tol_hq= atof(argv[i+1]);
-    i++;
-    ret = 0;
-    goto out;
-  }
-
   if( strcmp(argv[i], "--mass-normalization") == 0){
     if (i+1 >= argc){
       usage(argv);
@@ -2105,4 +2416,30 @@ double stopwatchReadSeconds() {
   return ds + 0.000001*dus;
 }
 
+
+///////////////////////// KX /////////////////////////////////
+
+void createMom(int *Nmom, int momElem[][3]){
+  int counter = 0;
+
+  for(int iQ = 0 ; iQ <= Q_sq ; iQ++){
+    for(int nx = iQ ; nx >= -iQ ; nx--)
+      for(int ny = iQ ; ny >= -iQ ; ny--)
+        for(int nz = iQ ; nz >= -iQ ; nz--){
+          if( nx*nx + ny*ny + nz*nz == iQ ){
+	    momElem[counter][0] = nx;
+	    momElem[counter][1] = ny;
+	    momElem[counter][2] = nz;
+	    counter++;
+          }
+        }
+  }
+
+
+  *Nmom = counter;
+
+}
+
+#include <mapping_parity.h>
+#include <read_conf.h>
 

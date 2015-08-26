@@ -41,8 +41,6 @@ extern QudaReconstructType link_recon;
 extern QudaPrecision prec;
 extern QudaReconstructType link_recon_sloppy;
 extern QudaPrecision  prec_sloppy;
-extern double tol; // tolerance for inverter
-
 
 extern char latfile[];
 
@@ -174,7 +172,7 @@ int main(int argc, char **argv)
   inv_param.pipeline = 0;
 
   inv_param.gcrNkrylov = 10;
-  inv_param.tol = tol;
+  inv_param.tol = 1e-10;
 
 //! For deflated solvers only:
   //inv_param.inv_type = QUDA_EIGCG_INVERTER;

@@ -49,10 +49,6 @@ namespace quda {
 
   cudaStream_t* getBlasStream();
     
-  void* getDeviceReduceBuffer() { return d_reduce; }
-  void* getMappedHostReduceBuffer() { return hd_reduce; }
-  void* getHostReduceBuffer() { return h_reduce; }
-
   void initReduce()
   { 
 
@@ -131,9 +127,8 @@ namespace quda {
      Return the L2 norm of x
   */
   __device__ double norm2_(const double2 &a) { return a.x*a.x + a.y*a.y; }
-  __device__ float norm2_(const float2 &a) { return (double)a.x*(double)a.x + (double)a.y*(double)a.y; }
-  __device__ float norm2_(const float4 &a) { return (double)a.x*(double)a.x + (double)a.y*(double)a.y +
-      (double)a.z*(double)a.z + (double)a.w*(double)a.w; }
+  __device__ float norm2_(const float2 &a) { return a.x*a.x + a.y*a.y; }
+  __device__ float norm2_(const float4 &a) { return a.x*a.x + a.y*a.y + a.z*a.z + a.w*a.w; }
 
   template <typename ReduceType, typename Float2, typename FloatN>
 #if (__COMPUTE_CAPABILITY__ >= 200)
@@ -156,9 +151,9 @@ namespace quda {
   /**
      Return the real dot product of x and y
   */
-    __device__ double dot_(const double2 &a, const double2 &b) { return a.x*b.x + a.y*b.y; }
-    __device__ float dot_(const float2 &a, const float2 &b) { return (double)a.x*(double)b.x + (double)a.y*(double)b.y; }
-    __device__ float dot_(const float4 &a, const float4 &b) { return (double)a.x*(double)b.x + (double)a.y*(double)b.y + (double)a.z*(double)b.z + (double)a.w*(double)b.w; }
+  __device__ double dot_(const double2 &a, const double2 &b) { return a.x*b.x + a.y*b.y; }
+  __device__ float dot_(const float2 &a, const float2 &b) { return a.x*b.x + a.y*b.y; }
+  __device__ float dot_(const float4 &a, const float4 &b) { return a.x*b.x + a.y*b.y + a.z*b.z + a.w*b.w; }
 
   template <typename ReduceType, typename Float2, typename FloatN>
 #if (__COMPUTE_CAPABILITY__ >= 200)
@@ -247,6 +242,22 @@ namespace quda {
         reduce::multiReduceCuda<16,double,QudaSumFloat,QudaSumFloat,Dot,0,0,0,0,0,false>
         (result, make_double2(0.0, 0.0), make_double2(0.0, 0.0), x, y, x, x, x);
         break;
+      case 17:
+        reduce::multiReduceCuda<17,double,QudaSumFloat,QudaSumFloat,Dot,0,0,0,0,0,false>
+        (result, make_double2(0.0, 0.0), make_double2(0.0, 0.0), x, y, x, x, x);
+        break;
+      case 18:
+        reduce::multiReduceCuda<18,double,QudaSumFloat,QudaSumFloat,Dot,0,0,0,0,0,false>
+        (result, make_double2(0.0, 0.0), make_double2(0.0, 0.0), x, y, x, x, x);
+        break;
+      case 19:
+        reduce::multiReduceCuda<19,double,QudaSumFloat,QudaSumFloat,Dot,0,0,0,0,0,false>
+        (result, make_double2(0.0, 0.0), make_double2(0.0, 0.0), x, y, x, x, x);
+        break;
+      case 20:
+        reduce::multiReduceCuda<20,double,QudaSumFloat,QudaSumFloat,Dot,0,0,0,0,0,false>
+        (result, make_double2(0.0, 0.0), make_double2(0.0, 0.0), x, y, x, x, x);
+        break;
       default:
         errorQuda("Unsupported vector size");
         break;
@@ -263,12 +274,11 @@ namespace quda {
   { return make_double2(a.x*b.x + a.y*b.y, a.x*a.x + a.y*a.y); }
  
   __device__ double2 dotNormA_(const float2 &a, const float2 &b)
-    { return make_double2((double)a.x*(double)b.x + (double)a.y*(double)b.y, (double)a.x*(double)a.x + (double)a.y*(double)a.y); }
+  { return make_double2(a.x*b.x + a.y*b.y, a.x*a.x + a.y*a.y); }
 
  
   __device__ double2 dotNormA_(const float4 &a, const float4 & b)
-    { return make_double2((double)a.x*(double)b.x + (double)a.y*(double)b.y + (double)a.z*(double)b.z + (double)a.w*(double)b.w,
-			  (double)a.x*(double)a.x + (double)a.y*(double)a.y + (double)a.z*(double)a.z + (double)a.w*(double)a.w); }
+  { return make_double2(a.x*b.x + a.y*b.y + a.z*b.z + a.w*b.w, a.x*a.x + a.y*a.y + a.z*a.z +     a.w*a.w); }
 
 
 
@@ -439,13 +449,9 @@ namespace quda {
   __device__ double2 cdot_(const double2 &a, const double2 &b) 
   { return make_double2(a.x*b.x + a.y*b.y, a.x*b.y - a.y*b.x); }
   __device__ double2 cdot_(const float2 &a, const float2 &b) 
-      { return make_double2((double)a.x*(double)b.x + (double)a.y*(double)b.y,
-			    (double)a.x*(double)b.y - (double)a.y*(double)b.x); }
+  { return make_double2(a.x*b.x + a.y*b.y, a.x*b.y - a.y*b.x); }
   __device__ double2 cdot_(const float4 &a, const float4 &b) 
-      { return make_double2((double)a.x*(double)b.x + (double)a.y*(double)b.y +
-			    (double)a.z*(double)b.z + (double)a.w*(double)b.w,
-			    (double)a.x*(double)b.y - (double)a.y*(double)b.x +
-			    (double)a.z*(double)b.w - (double)a.w*(double)b.z); }
+  { return make_double2(a.x*b.x + a.y*b.y + a.z*b.z + a.w*b.w, a.x*b.y - a.y*b.x + a.z*b.w - a.w*b.z); }
 
   template <typename ReduceType, typename Float2, typename FloatN>
 #if (__COMPUTE_CAPABILITY__ >= 200)
@@ -486,6 +492,14 @@ namespace quda {
         break;
       case 14:
         reduce::multiReduceCuda<14,double2,QudaSumFloat2,QudaSumFloat,Cdot,0,0,0,0,0,false>
+        (cdot, make_double2(0.0, 0.0), make_double2(0.0, 0.0), x, y, x, x, x);
+        break;
+      case 18:
+        reduce::multiReduceCuda<18,double2,QudaSumFloat2,QudaSumFloat,Cdot,0,0,0,0,0,false>
+        (cdot, make_double2(0.0, 0.0), make_double2(0.0, 0.0), x, y, x, x, x);
+        break;
+      case 22:
+        reduce::multiReduceCuda<22,double2,QudaSumFloat2,QudaSumFloat,Cdot,0,0,0,0,0,false>
         (cdot, make_double2(0.0, 0.0), make_double2(0.0, 0.0), x, y, x, x, x);
         break;
       default:

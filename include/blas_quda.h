@@ -11,10 +11,6 @@ namespace quda {
   void initBlas(); 
   void endBlas(void);
 
-  void* getDeviceReduceBuffer();
-  void* getMappedHostReduceBuffer();
-  void* getHostReduceBuffer();
-
   void setBlasParam(int kernel, int prec, int threads, int blocks);
 
   extern unsigned long long blas_flops;

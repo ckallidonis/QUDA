@@ -105,6 +105,12 @@ namespace quda {
     }
 
     int Nface() { return 2; } 
+
+    long long flops() const { 
+      long long flops;
+      flops = (x ? 666ll : 654ll) * in->VolumeCB();
+      return flops;
+    } 
   };
 #endif // GPU_STAGGERED_DIRAC
 
@@ -138,10 +144,6 @@ namespace quda {
     if (in->Precision() != gauge.Precision()) {
       errorQuda("Mixing precisions gauge=%d and spinor=%d not supported",
 		gauge.Precision(), in->Precision());
-    }
-
-    if (gauge.Reconstruct() == QUDA_RECONSTRUCT_9 || gauge.Reconstruct() == QUDA_RECONSTRUCT_13) {
-      errorQuda("Reconstruct %d not supported", gauge.Reconstruct());
     }
 
     DslashCuda *dslash = 0;

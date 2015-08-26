@@ -29,39 +29,25 @@ extern "C" {
   int comm_coord(int dim);
 
   /**
-     Create a persistent message handler for a relative send.  This
-     should not be called directly, and instead the helper macro
-     (without the trailing underscore) should be called instead.
+     Create a persistent message handler for a relative send
      @param buffer Buffer from which message will be sent
      @param dim Dimension in which message will be sent
      @param dir Direction in which messaged with be sent (0 - backwards, 1 forwards)
      @param nbytes Size of message in bytes
   */
-  MsgHandle *comm_declare_send_relative_(const char *func, const char *file, int line,
-					 void *buffer, int dim, int dir, size_t nbytes);
-
-#define comm_declare_send_relative(buffer, dim, dir, nbytes)		\
-  comm_declare_send_relative_(__func__, __FILE__, __LINE__, buffer, dim, dir, nbytes)
+  MsgHandle *comm_declare_send_relative(void *buffer, int dim, int dir, size_t nbytes);
 
   /**
-     Create a persistent message handler for a relative send.  This
-     should not be called directly, and instead the helper macro
-     (without the trailing underscore) should be called instead.
+     Create a persistent message handler for a relative receive
      @param buffer Buffer into which message will be received
      @param dim Dimension from message will be received
      @param dir Direction from messaged with be recived (0 - backwards, 1 forwards)
      @param nbytes Size of message in bytes
   */
-  MsgHandle *comm_declare_receive_relative_(const char *func, const char *file, int line,
-					    void *buffer, int dim, int dir, size_t nbytes);
-
-#define comm_declare_receive_relative(buffer, dim, dir, nbytes)		\
-  comm_declare_receive_relative_(__func__, __FILE__, __LINE__, buffer, dim, dir, nbytes)
+  MsgHandle *comm_declare_receive_relative(void *buffer, int dim, int dir, size_t nbytes);
 
   /**
-     Create a persistent strided message handler for a relative send.
-     This should not be called directly, and instead the helper macro
-     (without the trailing underscore) should be called instead.
+     Create a persistent strided message handler for a relative send
      @param buffer Buffer from which message will be sent
      @param dim Dimension in which message will be sent
      @param dir Direction in which messaged with be sent (0 - backwards, 1 forwards)
@@ -69,17 +55,11 @@ extern "C" {
      @param nblocks Number of blocks
      @param stride Stride between blocks in bytes
   */
-  MsgHandle *comm_declare_strided_send_relative_(const char *func, const char *file, int line,
-						 void *buffer, int dim, int dir,
-						 size_t blksize, int nblocks, size_t stride);
-
-#define comm_declare_strided_send_relative(buffer, dim, dir, blksize, nblocks, stride) \
-  comm_declare_strided_send_relative_(__func__, __FILE__, __LINE__, buffer, dim, dir, blksize, nblocks, stride)
+  MsgHandle *comm_declare_strided_send_relative(void *buffer, int dim, int dir, 
+						size_t blksize, int nblocks, size_t stride);
 
   /**
      Create a persistent strided message handler for a relative receive
-     This should not be called directly, and instead the helper macro
-     (without the trailing underscore) should be called instead.
      @param buffer Buffer into which message will be received
      @param dim Dimension from message will be received
      @param dir Direction from messaged with be recived (0 - backwards, 1 forwards)
@@ -87,12 +67,8 @@ extern "C" {
      @param nblocks Number of blocks
      @param stride Stride between blocks in bytes
   */
-  MsgHandle *comm_declare_strided_receive_relative_(const char *func, const char *file, int line,
-						    void *buffer, int dim, int dir,
-						    size_t blksize, int nblocks, size_t stride);
-
-#define comm_declare_strided_receive_relative(buffer, dim, dir, blksize, nblocks, stride) \
-  comm_declare_strided_receive_relative_(__func__, __FILE__, __LINE__, buffer, dim, dir, blksize, nblocks, stride)
+  MsgHandle *comm_declare_strided_receive_relative(void *buffer, int dim, int dir, 
+						   size_t blksize, int nblocks, size_t stride);
 
   void comm_finalize(void);
   void comm_dim_partitioned_set(int dim);

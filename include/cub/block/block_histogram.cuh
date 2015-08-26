@@ -1,6 +1,6 @@
 /******************************************************************************
  * Copyright (c) 2011, Duane Merrill.  All rights reserved.
- * Copyright (c) 2011-2015, NVIDIA CORPORATION.  All rights reserved.
+ * Copyright (c) 2011-2014, NVIDIA CORPORATION.  All rights reserved.
  * 
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -35,7 +35,6 @@
 
 #include "specializations/block_histogram_sort.cuh"
 #include "specializations/block_histogram_atomic.cuh"
-#include "../util_ptx.cuh"
 #include "../util_arch.cuh"
 #include "../util_namespace.cuh"
 
@@ -93,13 +92,10 @@ enum BlockHistogramAlgorithm
  * \ingroup BlockModule
  *
  * \tparam T                    The sample type being histogrammed (must be castable to an integer bin identifier)
- * \tparam BLOCK_DIM_X          The thread block length in threads along the X dimension
+ * \tparam BLOCK_THREADS        The thread block size in threads
  * \tparam ITEMS_PER_THREAD     The number of items per thread
  * \tparam BINS                 The number bins within the histogram
  * \tparam ALGORITHM            <b>[optional]</b> cub::BlockHistogramAlgorithm enumerator specifying the underlying algorithm to use (default: cub::BLOCK_HISTO_SORT)
- * \tparam BLOCK_DIM_Y          <b>[optional]</b> The thread block length in threads along the Y dimension (default: 1)
- * \tparam BLOCK_DIM_Z          <b>[optional]</b> The thread block length in threads along the Z dimension (default: 1)
- * \tparam PTX_ARCH             <b>[optional]</b> \ptxversion
  *
  * \par Overview
  * - A <a href="http://en.wikipedia.org/wiki/Histogram"><em>histogram</em></a>
@@ -122,7 +118,7 @@ enum BlockHistogramAlgorithm
  *
  * __global__ void ExampleKernel(...)
  * {
- *     // Specialize a 256-bin BlockHistogram type for a 1D block of 128 threads having 4 character samples each
+ *     // Specialize a 256-bin BlockHistogram type for 128 threads having 4 character samples each
  *     typedef cub::BlockHistogram<unsigned char, 128, 4, 256> BlockHistogram;
  *
  *     // Allocate shared memory for BlockHistogram
@@ -147,13 +143,10 @@ enum BlockHistogramAlgorithm
  */
 template <
     typename                T,
-    int                     BLOCK_DIM_X,
+    int                     BLOCK_THREADS,
     int                     ITEMS_PER_THREAD,
     int                     BINS,
-    BlockHistogramAlgorithm ALGORITHM           = BLOCK_HISTO_SORT,
-    int                     BLOCK_DIM_Y         = 1,
-    int                     BLOCK_DIM_Z         = 1,
-    int                     PTX_ARCH            = CUB_PTX_ARCH>
+    BlockHistogramAlgorithm ALGORITHM = BLOCK_HISTO_SORT>
 class BlockHistogram
 {
 private:
@@ -162,13 +155,6 @@ private:
      * Constants and type definitions
      ******************************************************************************/
 
-    /// Constants
-    enum
-    {
-        /// The thread block size in threads
-        BLOCK_THREADS = BLOCK_DIM_X * BLOCK_DIM_Y * BLOCK_DIM_Z,
-    };
-
     /**
      * Ensure the template parameterization meets the requirements of the
      * targeted device architecture.  BLOCK_HISTO_ATOMIC can only be used
@@ -176,14 +162,14 @@ private:
      * regardless.
      */
     static const BlockHistogramAlgorithm SAFE_ALGORITHM =
-        ((ALGORITHM == BLOCK_HISTO_ATOMIC) && (PTX_ARCH < 120)) ?
+        ((ALGORITHM == BLOCK_HISTO_ATOMIC) && (CUB_PTX_VERSION < 120)) ?
             BLOCK_HISTO_SORT :
             ALGORITHM;
 
     /// Internal specialization.
     typedef typename If<(SAFE_ALGORITHM == BLOCK_HISTO_SORT),
-        BlockHistogramSort<T, BLOCK_DIM_X, ITEMS_PER_THREAD, BINS, BLOCK_DIM_Y, BLOCK_DIM_Z, PTX_ARCH>,
-        BlockHistogramAtomic<BINS> >::Type InternalBlockHistogram;
+        BlockHistogramSort<T, BLOCK_THREADS, ITEMS_PER_THREAD, BINS>,
+        BlockHistogramAtomic<T, BLOCK_THREADS, ITEMS_PER_THREAD, BINS> >::Type InternalBlockHistogram;
 
     /// Shared memory storage layout type for BlockHistogram
     typedef typename InternalBlockHistogram::TempStorage _TempStorage;
@@ -224,23 +210,46 @@ public:
     //@{
 
     /**
-     * \brief Collective constructor using a private static allocation of shared memory as temporary storage.
+     * \brief Collective constructor for 1D thread blocks using a private static allocation of shared memory as temporary storage.  Threads are identified using <tt>threadIdx.x</tt>.
      */
     __device__ __forceinline__ BlockHistogram()
     :
         temp_storage(PrivateStorage()),
-        linear_tid(RowMajorTid(BLOCK_DIM_X, BLOCK_DIM_Y, BLOCK_DIM_Z))
+        linear_tid(threadIdx.x)
     {}
 
 
     /**
-     * \brief Collective constructor using the specified memory allocation as temporary storage.
+     * \brief Collective constructor for 1D thread blocks using the specified memory allocation as temporary storage.  Threads are identified using <tt>threadIdx.x</tt>.
      */
     __device__ __forceinline__ BlockHistogram(
         TempStorage &temp_storage)             ///< [in] Reference to memory allocation having layout type TempStorage
     :
         temp_storage(temp_storage.Alias()),
-        linear_tid(RowMajorTid(BLOCK_DIM_X, BLOCK_DIM_Y, BLOCK_DIM_Z))
+        linear_tid(threadIdx.x)
+    {}
+
+
+    /**
+     * \brief Collective constructor using a private static allocation of shared memory as temporary storage.  Each thread is identified using the supplied linear thread identifier
+     */
+    __device__ __forceinline__ BlockHistogram(
+        int linear_tid)                        ///< [in] A suitable 1D thread-identifier for the calling thread (e.g., <tt>(threadIdx.y * blockDim.x) + linear_tid</tt> for 2D thread blocks)
+    :
+        temp_storage(PrivateStorage()),
+        linear_tid(linear_tid)
+    {}
+
+
+    /**
+     * \brief Collective constructor using the specified memory allocation as temporary storage.  Each thread is identified using the supplied linear thread identifier.
+     */
+    __device__ __forceinline__ BlockHistogram(
+        TempStorage &temp_storage,             ///< [in] Reference to memory allocation having layout type TempStorage
+        int linear_tid)                        ///< [in] <b>[optional]</b> A suitable 1D thread-identifier for the calling thread (e.g., <tt>(threadIdx.y * blockDim.x) + linear_tid</tt> for 2D thread blocks)
+    :
+        temp_storage(temp_storage.Alias()),
+        linear_tid(linear_tid)
     {}
 
 
@@ -254,7 +263,7 @@ public:
     /**
      * \brief Initialize the shared histogram counters to zero.
      *
-     * \par Snippet
+     * \par
      * The code snippet below illustrates a the initialization and update of a
      * histogram of 512 integer samples that are partitioned across 128 threads
      * where each thread owns 4 samples.
@@ -264,7 +273,7 @@ public:
      *
      * __global__ void ExampleKernel(...)
      * {
-     *     // Specialize a 256-bin BlockHistogram type for a 1D block of 128 threads having 4 character samples each
+     *     // Specialize a 256-bin BlockHistogram type for 128 threads having 4 character samples each
      *     typedef cub::BlockHistogram<unsigned char, 128, 4, 256> BlockHistogram;
      *
      *     // Allocate shared memory for BlockHistogram
@@ -285,10 +294,10 @@ public:
      *
      * \endcode
      *
-     * \tparam CounterT              <b>[inferred]</b> Histogram counter type
+     * \tparam HistoCounter         <b>[inferred]</b> Histogram counter type
      */
-    template <typename CounterT     >
-    __device__ __forceinline__ void InitHistogram(CounterT      histogram[BINS])
+    template <typename HistoCounter>
+    __device__ __forceinline__ void InitHistogram(HistoCounter histogram[BINS])
     {
         // Initialize histogram bin counts to zeros
         int histo_offset = 0;
@@ -313,7 +322,7 @@ public:
      * - \granularity
      * - \smemreuse
      *
-     * \par Snippet
+     * \par
      * The code snippet below illustrates a 256-bin histogram of 512 integer samples that
      * are partitioned across 128 threads where each thread owns 4 samples.
      * \par
@@ -322,7 +331,7 @@ public:
      *
      * __global__ void ExampleKernel(...)
      * {
-     *     // Specialize a 256-bin BlockHistogram type for a 1D block of 128 threads having 4 character samples each
+     *     // Specialize a 256-bin BlockHistogram type for 128 threads having 4 character samples each
      *     typedef cub::BlockHistogram<unsigned char, 128, 4, 256> BlockHistogram;
      *
      *     // Allocate shared memory for BlockHistogram
@@ -340,13 +349,13 @@ public:
      *
      * \endcode
      *
-     * \tparam CounterT              <b>[inferred]</b> Histogram counter type
+     * \tparam HistoCounter         <b>[inferred]</b> Histogram counter type
      */
     template <
-        typename            CounterT     >
+        typename            HistoCounter>
     __device__ __forceinline__ void Histogram(
         T                   (&items)[ITEMS_PER_THREAD],     ///< [in] Calling thread's input values to histogram
-        CounterT             histogram[BINS])                ///< [out] Reference to shared/global memory histogram
+        HistoCounter        histogram[BINS])                ///< [out] Reference to shared/global memory histogram
     {
         // Initialize histogram bin counts to zeros
         InitHistogram(histogram);
@@ -354,7 +363,7 @@ public:
         __syncthreads();
 
         // Composite the histogram
-        InternalBlockHistogram(temp_storage).Composite(items, histogram);
+        InternalBlockHistogram(temp_storage, linear_tid).Composite(items, histogram);
     }
 
 
@@ -366,7 +375,7 @@ public:
      * - \granularity
      * - \smemreuse
      *
-     * \par Snippet
+     * \par
      * The code snippet below illustrates a the initialization and update of a
      * histogram of 512 integer samples that are partitioned across 128 threads
      * where each thread owns 4 samples.
@@ -376,7 +385,7 @@ public:
      *
      * __global__ void ExampleKernel(...)
      * {
-     *     // Specialize a 256-bin BlockHistogram type for a 1D block of 128 threads having 4 character samples each
+     *     // Specialize a 256-bin BlockHistogram type for 128 threads having 4 character samples each
      *     typedef cub::BlockHistogram<unsigned char, 128, 4, 256> BlockHistogram;
      *
      *     // Allocate shared memory for BlockHistogram
@@ -397,15 +406,15 @@ public:
      *
      * \endcode
      *
-     * \tparam CounterT              <b>[inferred]</b> Histogram counter type
+     * \tparam HistoCounter         <b>[inferred]</b> Histogram counter type
      */
     template <
-        typename            CounterT     >
+        typename            HistoCounter>
     __device__ __forceinline__ void Composite(
         T                   (&items)[ITEMS_PER_THREAD],     ///< [in] Calling thread's input values to histogram
-        CounterT             histogram[BINS])                 ///< [out] Reference to shared/global memory histogram
+        HistoCounter        histogram[BINS])                 ///< [out] Reference to shared/global memory histogram
     {
-        InternalBlockHistogram(temp_storage).Composite(items, histogram);
+        InternalBlockHistogram(temp_storage, linear_tid).Composite(items, histogram);
     }
 
 };

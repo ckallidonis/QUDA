@@ -67,22 +67,16 @@
 	#define DD_PARAMCLOVER const double2 *clover, const float *null2, const double2 *cloverInv, const float *null3
 	#if (defined DIRECT_ACCESS_CLOVER) || (defined FERMI_NO_DBLE_TEX)
 		#define TMCLOVERTEX clover
-		#ifndef DYNAMIC_CLOVER
-			#define TM_INV_CLOVERTEX cloverInv
-		#endif
+		#define TM_INV_CLOVERTEX cloverInv
 		#define READ_CLOVER READ_CLOVER_DOUBLE_STR
 		#define ASSN_CLOVER ASSN_CLOVER_DOUBLE_STR
 	#else
 		#ifdef USE_TEXTURE_OBJECTS
 			#define TMCLOVERTEX (param.cloverTex)
-			#ifndef DYNAMIC_CLOVER
-				#define TM_INV_CLOVERTEX (param.cloverInvTex)
-			#endif
+			#define TM_INV_CLOVERTEX (param.cloverInvTex)
 		#else
 			#define TMCLOVERTEX cloverTexDouble
-			#ifndef DYNAMIC_CLOVER
-				#define TM_INV_CLOVERTEX cloverInvTexDouble
-			#endif
+			#define TM_INV_CLOVERTEX cloverInvTexDouble
 		#endif
 		#define READ_CLOVER READ_CLOVER_DOUBLE_TEX
 		#define ASSN_CLOVER ASSN_CLOVER_DOUBLE_TEX
@@ -92,22 +86,16 @@
 	#define DD_PARAMCLOVER const float4 *clover, const float *null2, const float4 *cloverInv,  const float *null3
 	#ifdef DIRECT_ACCESS_CLOVER
 		#define TMCLOVERTEX clover
-		#ifndef DYNAMIC_CLOVER
-			#define TM_INV_CLOVERTEX cloverInv
-		#endif
+		#define TM_INV_CLOVERTEX cloverInv
 		#define READ_CLOVER READ_CLOVER_SINGLE
 		#define ASSN_CLOVER ASSN_CLOVER_SINGLE
 	#else
 		#ifdef USE_TEXTURE_OBJECTS
 			#define TMCLOVERTEX (param.cloverTex)
-			#ifndef DYNAMIC_CLOVER
-				#define TM_INV_CLOVERTEX (param.cloverInvTex)
-			#endif
+			#define TM_INV_CLOVERTEX (param.cloverInvTex)
 		#else
 			#define TMCLOVERTEX cloverTexSingle
-			#ifndef DYNAMIC_CLOVER
-				#define TM_INV_CLOVERTEX cloverInvTexSingle
-			#endif
+			#define TM_INV_CLOVERTEX cloverInvTexSingle
 		#endif
 		#define READ_CLOVER READ_CLOVER_SINGLE_TEX
 		#define ASSN_CLOVER ASSN_CLOVER_SINGLE_TEX
@@ -116,26 +104,20 @@
 	#define DD_PARAMCLOVER const short4 *clover, const float *cNorm, const short4 *cloverInv, const float *cNrm2
 	#ifdef DIRECT_ACCESS_CLOVER
 		#define TMCLOVERTEX clover
-		#ifndef DYNAMIC_CLOVER
-			#define TM_INV_CLOVERTEX cloverInv
-		#endif
+		#define TM_INV_CLOVERTEX cloverInv
 		#define READ_CLOVER READ_CLOVER_HALF
 		#define ASSN_CLOVER ASSN_CLOVER_HALF
 	#else
 		#ifdef USE_TEXTURE_OBJECTS
 			#define TMCLOVERTEX (param.cloverTex)
 			#define TMCLOVERTEXNORM (param.cloverNormTex)
-			#ifndef DYNAMIC_CLOVER
-				#define TM_INV_CLOVERTEX (param.cloverInvTex)
-				#define TM_INV_CLOVERTEXNORM (param.cloverInvNormTex)
-			#endif
+			#define TM_INV_CLOVERTEX (param.cloverInvTex)
+			#define TM_INV_CLOVERTEXNORM (param.cloverInvNormTex)
 		#else
 			#define TMCLOVERTEX cloverTexHalf
 			#define TMCLOVERTEXNORM cloverTexNorm
-			#ifndef DYNAMIC_CLOVER
-				#define TM_INV_CLOVERTEX cloverInvTexHalf
-				#define TM_INV_CLOVERTEXNORM cloverInvTexNorm
-			#endif
+			#define TM_INV_CLOVERTEX cloverInvTexHalf
+			#define TM_INV_CLOVERTEXNORM cloverInvTexNorm
 		#endif
 		#define READ_CLOVER READ_CLOVER_HALF_TEX
 		#define ASSN_CLOVER ASSN_CLOVER_HALF_TEX
@@ -500,7 +482,6 @@ __global__ void	DD_FUNC(DD_NAME_F, DD_RECON_F, DD_DAG_F, DD_XPAY_F)
 
 }
 
-#ifdef MULTI_GPU
 template <>
 __global__ void DD_FUNC(DD_NAME_F, DD_RECON_F, DD_DAG_F, DD_XPAY_F)<EXTERIOR_KERNEL_ALL>
      (DD_PARAM1, DD_PARAM2, DD_PARAMCLOVER, DD_PARAM3, DD_PARAM4) {
@@ -536,7 +517,6 @@ __global__ void DD_FUNC(DD_NAME_F, DD_RECON_F, DD_DAG_F, DD_XPAY_F)<EXTERIOR_KER
 #endif
 
 }
-#endif // MULTI_GPU
 
 
 //NEW
@@ -583,7 +563,6 @@ __global__ void	DD_FUNC(DD_NAME_F, DD_RECON_F, DD_DAG_F, DD_XPAY_F)
 
 }
 
-#ifdef MULTI_GPU
 template <>
 __global__ void DD_FUNC(DD_NAME_F, DD_RECON_F, DD_DAG_F, DD_XPAY_F)<EXTERIOR_KERNEL_ALL>
      (DD_PARAM1, DD_PARAM2, DD_PARAMCLOVER, DD_PARAM3, DD_PARAM4) {
@@ -619,7 +598,6 @@ __global__ void DD_FUNC(DD_NAME_F, DD_RECON_F, DD_DAG_F, DD_XPAY_F)<EXTERIOR_KER
 #endif
 
 }
-#endif // MULTI_GPU
 
 #undef CLOVER_TWIST_XPAY
 #endif //(DD_XPAY==0) && (DD_TWIST==1)
@@ -687,10 +665,8 @@ __global__ void	DD_FUNC(DD_NAME_F, DD_RECON_F, DD_DAG_F, DD_XPAY_F)
 #undef ASSN_CLOVER
 #undef TMCLOVERTEX
 #undef TMCLOVERTEXNORM
-#ifndef DYNAMIC_CLOVER
-	#undef TM_INV_CLOVERTEX
-	#undef TM_INV_CLOVERTEXNORM
-#endif
+#undef TM_INV_CLOVERTEX
+#undef TM_INV_CLOVERTEXNORM
 #undef CLOVER_DOUBLE
 
 #undef SPINOR_HOP

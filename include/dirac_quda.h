@@ -76,7 +76,7 @@ namespace quda {
   class DiracMdag;
 
   // Abstract base class
-  class Dirac : public Object {
+  class Dirac {
 
     friend class DiracMatrix;
     friend class DiracM;

@@ -8,6 +8,7 @@
 #ifdef USE_QDPJIT
 #include "qdp_quda.h"
 #endif
+extern float GK_deviceMemory;
 
 namespace quda {
 
@@ -143,6 +144,7 @@ namespace quda {
    * function should only be called via the device_malloc() macro,
    * defined in malloc_quda.h
    */
+
   void *device_malloc_(const char *func, const char *file, int line, size_t size)
   {
     MemAlloc a(func, file, line);
@@ -151,6 +153,9 @@ namespace quda {
     a.size = a.base_size = size;
 
     cudaError_t err = cudaMalloc(&ptr, size);
+    //    GK_deviceMemory += size/(1024.*1024.);
+    //    printfQuda("Device memory in used is %f MB A QUDA \n",GK_deviceMemory);
+
     if (err != cudaSuccess) {
       printfQuda("ERROR: Failed to allocate device memory (%s:%d in %s())\n", file, line, func);
       errorQuda("Aborting");
@@ -185,9 +190,9 @@ namespace quda {
    * should only be called via the pinned_malloc() macro, defined in
    * malloc_quda.h
    *
-   * Note that we do not rely on cudaHostAlloc(), since buffers
-   * allocated in this way have been observed to cause problems when
-   * shared with MPI via GPU Direct on some systems.
+   * Note that we do rely on cudaHostAlloc(), since buffers allocated
+   * in this way have been observed to cause problems when shared with
+   * MPI via GPU Direct on some systems.
    */
   void *pinned_malloc_(const char *func, const char *file, int line, size_t size)
   {
@@ -240,6 +245,7 @@ namespace quda {
       errorQuda("Aborting");
     }
     cudaError_t err = cudaFree(ptr);
+    //    printfQuda("Free QUDA memory\n");
     if (err != cudaSuccess) {
       printfQuda("ERROR: Failed to free device memory (%s:%d in %s())\n", file, line, func);
       errorQuda("Aborting");

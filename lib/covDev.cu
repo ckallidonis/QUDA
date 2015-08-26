@@ -121,9 +121,9 @@ namespace quda
     }
 
   #define PROFILE(f, profile, idx)		\
-    profile.TPSTART(idx);			\
+    profile.Start(idx);				\
     f;						\
-    profile.TPSTOP(idx); 
+    profile.Stop(idx); 
 
   /**
      This is a simpler version of the dslashCuda function to call the right kernels
@@ -136,7 +136,7 @@ namespace quda
     dslashParam.kernel_type = INTERIOR_KERNEL;
 
     PROFILE(dslash.apply(streams[Nstream-1]), profile, QUDA_PROFILE_DSLASH_KERNEL);
-
+    cudaDeviceSynchronize();
     checkCudaError();
 
     #ifdef MULTI_GPU
@@ -148,6 +148,7 @@ namespace quda
 			
         PROFILE(dslash.apply(streams[Nstream-1]), profile, QUDA_PROFILE_DSLASH_KERNEL);
 
+        cudaDeviceSynchronize();
         checkCudaError();
 
         dslashParam.ghostDim[dir] = 0;                           // not sure whether neccessary 
@@ -235,9 +236,13 @@ namespace quda
         /**
            Allocates ghosts for multi-GPU
         */
+
         void allocateGhosts()
         {
-          ghostBuffer = (Float*)device_malloc(ghostBytes);
+          if(cudaMalloc(&ghostBuffer, ghostBytes) != cudaSuccess) {
+            printf("Error in rank %d: Unable to allocate %d bytes for GPU ghosts\n", comm_rank(), ghostBytes);
+            exit(-1);
+          }
         }
 
         /**
@@ -250,11 +255,11 @@ namespace quda
         {
           const int rel = (mu < 4) ? 1 : -1;
 
-          // Send buffers:
-          void *send = pinned_malloc(ghostBytes);
+          void *send = 0;
+          void *recv = 0;
 
-          // Receive buffers:
-          void *recv = pinned_malloc(ghostBytes);
+          send = pinned_malloc(ghostBytes);
+          recv = pinned_malloc(ghostBytes);
 
           switch(mu) {
             default:
@@ -383,19 +388,21 @@ namespace quda
           comm_start (mh_from);
           comm_wait (mh_send);
           comm_wait (mh_from);
-          comm_free (mh_send);
-          comm_free (mh_from);
 
           // Send buffers to GPU:
+	
           cudaMemcpy(ghostBuffer, recv, ghostBytes, cudaMemcpyHostToDevice);
           cudaDeviceSynchronize();
 
-          host_free(send);
-          host_free(recv);
+          comm_free (mh_send);
+          comm_free (mh_from);
+
+	  host_free(recv);
+	  host_free(send);
         }
 
 
-        void freeGhosts() { device_free(ghostBuffer); }
+        void freeGhosts() { cudaFree(ghostBuffer); }
 
         void bindGhosts()
         {
@@ -501,7 +508,7 @@ namespace quda
                 ghostVolume = in->X(0)*in->X(1)*in->X(2);
                 offset = in->Volume() - ghostVolume;
                 break;
-            }	
+            }
 
             ghostBytes = ghostVolume*Nint*sizeof(Float);
             allocateGhosts();
@@ -512,7 +519,6 @@ namespace quda
       virtual ~CovDevCuda() {
         #ifdef MULTI_GPU
           if(comm_dim(dir) > 1) {
-            unbindGhosts();
             freeGhosts();
           }
         #endif
@@ -545,7 +551,9 @@ namespace quda
             // Maybe I should rebind the spinors for the INTERIOR kernels after this???
 
             TuneParam tp = tuneLaunch(*this, getTuning(), getVerbosity());
-            COVDEV(covDevM, mu, tp.grid, tp.block, tp.shared_bytes, stream, dslashParam, (Float2*)out->V(), (Float2*)gauge0, (Float2*)gauge1, (Float2*)in->V());
+//            COVDEV(covDevM, mu, tp.grid, tp.block, tp.shared_bytes, stream, dslashParam, (Float2*)out->V(), (Float2*)gauge0, (Float2*)gauge1, (Float2*)in->V());
+            COVDEV(covDevM, mu, tp.grid, tp.block, tp.shared_bytes, stream, dslashParam, (Float2*)out->V(), (Float2*)gauge0, (Float2*)gauge1, (Float2*)ghostBuffer);
+            unbindGhosts();
           #endif
         } else {
           dslashParam.threads = in->Volume();
@@ -578,8 +586,8 @@ namespace quda
         if(in->Precision() != gauge.Precision())
           errorQuda("Mixing gauge %d and spinor %d precision not supported", gauge.Precision(), in->Precision());
 
-        profile.TPSTART(QUDA_PROFILE_TOTAL);
-        profile.TPSTART(QUDA_PROFILE_INIT);
+        profile.Start(QUDA_PROFILE_TOTAL);
+        profile.Start(QUDA_PROFILE_INIT);
 
         if(in->Precision() == QUDA_SINGLE_PRECISION)
           covdev = new CovDevCuda<float, float4>(out, &gauge, in, parity, mu);
@@ -591,15 +599,15 @@ namespace quda
             errorQuda("Error: Double precision not supported by hardware");
           #endif
         }
-        profile.TPSTOP(QUDA_PROFILE_INIT);
+        profile.Stop(QUDA_PROFILE_INIT);
 
         covDevCuda(*covdev, regSize, mu, profile);
 
-        profile.TPSTART(QUDA_PROFILE_EPILOGUE);
+        profile.Start(QUDA_PROFILE_EPILOGUE);
         delete covdev;
         checkCudaError();
-        profile.TPSTOP(QUDA_PROFILE_EPILOGUE);
-        profile.TPSTOP(QUDA_PROFILE_TOTAL);
+        profile.Stop(QUDA_PROFILE_EPILOGUE);
+        profile.Stop(QUDA_PROFILE_TOTAL);
       #else
         errorQuda("Contraction kernels have not been built");
       #endif

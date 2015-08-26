@@ -1,6 +1,6 @@
 /******************************************************************************
  * Copyright (c) 2011, Duane Merrill.  All rights reserved.
- * Copyright (c) 2011-2015, NVIDIA CORPORATION.  All rights reserved.
+ * Copyright (c) 2011-2014, NVIDIA CORPORATION.  All rights reserved.
  * 
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -36,7 +36,6 @@
 
 #include "../util_macro.cuh"
 #include "../util_arch.cuh"
-#include "../util_type.cuh"
 #include "../util_namespace.cuh"
 
 /// Optional outer namespace(s)
@@ -46,7 +45,7 @@ CUB_NS_PREFIX
 namespace cub {
 
 /**
- * \brief BlockRakingLayout provides a conflict-free shared memory layout abstraction for 1D raking across thread block data.    ![](raking.png)
+ * \brief BlockRakingLayout provides a conflict-free shared memory layout abstraction for raking across thread block data.    ![](raking.png)
  * \ingroup BlockModule
  *
  * \par Overview
@@ -56,14 +55,14 @@ namespace cub {
  * sequences of shared items.  Padding is inserted to eliminate bank conflicts
  * (for most data types).
  *
- * \tparam T                        The data type to be exchanged.
- * \tparam BLOCK_THREADS            The thread block size in threads.
- * \tparam PTX_ARCH                 <b>[optional]</b> \ptxversion
+ * \tparam T                    The data type to be exchanged.
+ * \tparam BLOCK_THREADS        The thread block size in threads.
+ * \tparam BLOCK_STRIPS         When strip-mining, the number of threadblock-strips per tile
  */
 template <
     typename    T,
     int         BLOCK_THREADS,
-    int         PTX_ARCH = CUB_PTX_ARCH>
+    int         BLOCK_STRIPS = 1>
 struct BlockRakingLayout
 {
     //---------------------------------------------------------------------
@@ -73,10 +72,10 @@ struct BlockRakingLayout
     enum
     {
         /// The total number of elements that need to be cooperatively reduced
-        SHARED_ELEMENTS = BLOCK_THREADS,
+        SHARED_ELEMENTS = BLOCK_THREADS * BLOCK_STRIPS,
 
         /// Maximum number of warp-synchronous raking threads
-        MAX_RAKING_THREADS = CUB_MIN(BLOCK_THREADS, CUB_WARP_THREADS(PTX_ARCH)),
+        MAX_RAKING_THREADS = CUB_MIN(BLOCK_THREADS, CUB_PTX_WARP_THREADS),
 
         /// Number of raking elements per warp-synchronous raking thread (rounded up)
         SEGMENT_LENGTH = (SHARED_ELEMENTS + MAX_RAKING_THREADS - 1) / MAX_RAKING_THREADS,
@@ -84,22 +83,22 @@ struct BlockRakingLayout
         /// Never use a raking thread that will have no valid data (e.g., when BLOCK_THREADS is 62 and SEGMENT_LENGTH is 2, we should only use 31 raking threads)
         RAKING_THREADS = (SHARED_ELEMENTS + SEGMENT_LENGTH - 1) / SEGMENT_LENGTH,
 
-        /// Whether we will have bank conflicts (technically we should find out if the GCD is > 1)
-        HAS_CONFLICTS = (CUB_SMEM_BANKS(PTX_ARCH) % SEGMENT_LENGTH == 0),
+        /// Whether we will have bank conflicts
+        HAS_CONFLICTS = (CUB_PTX_SMEM_BANKS % SEGMENT_LENGTH == 0),
 
         /// Degree of bank conflicts (e.g., 4-way)
         CONFLICT_DEGREE = (HAS_CONFLICTS) ?
-            (MAX_RAKING_THREADS * SEGMENT_LENGTH) / CUB_SMEM_BANKS(PTX_ARCH) :
-            1,
+            (MAX_RAKING_THREADS / (CUB_PTX_SMEM_BANKS / SEGMENT_LENGTH)) :
+            0,
 
         /// Pad each segment length with one element if degree of bank conflicts is greater than 4-way (heuristic)
-        SEGMENT_PADDING = (CONFLICT_DEGREE > CUB_PREFER_CONFLICT_OVER_PADDING(PTX_ARCH)) ? 1 : 0,
+        SEGMENT_PADDING = (CONFLICT_DEGREE <= CUB_PTX_PREFER_CONFLICT_OVER_PADDING) ? 0 : 1,
 //        SEGMENT_PADDING = (HAS_CONFLICTS) ? 1 : 0,
 
         /// Total number of elements in the raking grid
         GRID_ELEMENTS = RAKING_THREADS * (SEGMENT_LENGTH + SEGMENT_PADDING),
 
-        /// Whether or not we need bounds checking during raking (the number of reduction elements is not a multiple of the number of raking threads)
+        /// Whether or not we need bounds checking during raking (the number of reduction elements is not a multiple of the warp size)
         UNGUARDED = (SHARED_ELEMENTS % RAKING_THREADS == 0),
     };
 
@@ -107,10 +106,7 @@ struct BlockRakingLayout
     /**
      * \brief Shared memory storage type
      */
-    typedef T _TempStorage[BlockRakingLayout::GRID_ELEMENTS];
-
-    /// Alias wrapper allowing storage to be unioned
-    struct TempStorage : Uninitialized<_TempStorage> {};
+    typedef T TempStorage[BlockRakingLayout::GRID_ELEMENTS];
 
 
     /**
@@ -118,10 +114,11 @@ struct BlockRakingLayout
      */
     static __device__ __forceinline__ T* PlacementPtr(
         TempStorage &temp_storage,
-        int linear_tid)
+        int linear_tid,
+        int block_strip = 0)
     {
         // Offset for partial
-        unsigned int offset = linear_tid;
+        unsigned int offset = (block_strip * BLOCK_THREADS) + linear_tid;
 
         // Add in one padding element for every segment
         if (SEGMENT_PADDING > 0)
@@ -130,7 +127,7 @@ struct BlockRakingLayout
         }
 
         // Incorporating a block of padding partials every shared memory segment
-        return temp_storage.Alias() + offset;
+        return temp_storage + offset;
     }
 
 
@@ -141,7 +138,7 @@ struct BlockRakingLayout
         TempStorage &temp_storage,
         int linear_tid)
     {
-        return temp_storage.Alias() + (linear_tid * (SEGMENT_LENGTH + SEGMENT_PADDING));
+        return temp_storage + (linear_tid * (SEGMENT_LENGTH + SEGMENT_PADDING));
     }
 };
 

@@ -1,6 +1,6 @@
 /******************************************************************************
  * Copyright (c) 2011, Duane Merrill.  All rights reserved.
- * Copyright (c) 2011-2015, NVIDIA CORPORATION.  All rights reserved.
+ * Copyright (c) 2011-2014, NVIDIA CORPORATION.  All rights reserved.
  * 
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -64,7 +64,7 @@ __global__ void EmptyKernel(void) { }
  * Alias temporaries to externally-allocated device storage (or simply return the amount of storage needed).
  */
 template <int ALLOCATIONS>
-CUB_RUNTIME_FUNCTION __forceinline__
+__host__ __device__ __forceinline__
 cudaError_t AliasTemporaries(
     void    *d_temp_storage,                    ///< [in] %Device allocation of temporary storage.  When NULL, the required allocation size is written to \p temp_storage_bytes and no work is done.
     size_t  &temp_storage_bytes,                ///< [in,out] Size in bytes of \t d_temp_storage allocation
@@ -115,7 +115,7 @@ cudaError_t AliasTemporaries(
 /**
  * \brief Retrieves the PTX version that will be used on the current device (major * 100 + minor * 10)
  */
-CUB_RUNTIME_FUNCTION __forceinline__ cudaError_t PtxVersion(int &ptx_version)
+__host__ __device__ __forceinline__ cudaError_t PtxVersion(int &ptx_version)
 {
     struct Dummy
     {
@@ -123,7 +123,7 @@ CUB_RUNTIME_FUNCTION __forceinline__ cudaError_t PtxVersion(int &ptx_version)
         typedef void (*EmptyKernelPtr)();
 
         /// Force EmptyKernel<void> to be generated if this class is used
-        CUB_RUNTIME_FUNCTION __forceinline__
+        __host__ __device__ __forceinline__
         EmptyKernelPtr Empty()
         {
             return EmptyKernel<void>;
@@ -136,9 +136,9 @@ CUB_RUNTIME_FUNCTION __forceinline__ cudaError_t PtxVersion(int &ptx_version)
     // CUDA API calls not supported from this device
     return cudaErrorInvalidConfiguration;
 
-#elif (CUB_PTX_ARCH > 0)
+#elif (CUB_PTX_VERSION > 0)
 
-    ptx_version = CUB_PTX_ARCH;
+    ptx_version = CUB_PTX_VERSION;
     return cudaSuccess;
 
 #else
@@ -161,7 +161,7 @@ CUB_RUNTIME_FUNCTION __forceinline__ cudaError_t PtxVersion(int &ptx_version)
 /**
  * \brief Retrieves the SM version (major * 100 + minor * 10)
  */
-CUB_RUNTIME_FUNCTION __forceinline__ cudaError_t SmVersion(int &sm_version, int device_ordinal)
+__host__ __device__ __forceinline__ cudaError_t SmVersion(int &sm_version, int device_ordinal)
 {
 #ifndef CUB_RUNTIME_ENABLED
 
@@ -192,10 +192,10 @@ CUB_RUNTIME_FUNCTION __forceinline__ cudaError_t SmVersion(int &sm_version, int 
 /**
  * Synchronize the stream if specified
  */
-CUB_RUNTIME_FUNCTION __forceinline__
+__host__ __device__ __forceinline__
 static cudaError_t SyncStream(cudaStream_t stream)
 {
-#if (CUB_PTX_ARCH == 0)
+#if (CUB_PTX_VERSION == 0)
     return cudaStreamSynchronize(stream);
 #else
     // Device can't yet sync on a specific stream
@@ -208,7 +208,7 @@ static cudaError_t SyncStream(cudaStream_t stream)
  * \brief Computes maximum SM occupancy in thread blocks for the given kernel function pointer \p kernel_ptr.
  */
 template <typename KernelPtr>
-CUB_RUNTIME_FUNCTION __forceinline__
+__host__ __device__ __forceinline__
 cudaError_t MaxSmOccupancy(
     int                 &max_sm_occupancy,          ///< [out] maximum number of thread blocks that can reside on a single SM
     int                 sm_version,                 ///< [in] The SM architecture to run on
@@ -222,12 +222,6 @@ cudaError_t MaxSmOccupancy(
 
 #else
 
-    return cudaOccupancyMaxActiveBlocksPerMultiprocessor (
-        &max_sm_occupancy,
-        kernel_ptr,
-        block_threads,
-        0);
-/*
     cudaError_t error = cudaSuccess;
     do
     {
@@ -279,7 +273,7 @@ cudaError_t MaxSmOccupancy(
 
         // Shared memory per threadblock
         int block_allocated_smem = CUB_ROUND_UP_NEAREST(
-            (int) kernel_attrs.sharedSizeBytes,
+            kernel_attrs.sharedSizeBytes,
             smem_alloc_unit);
 
         // Max shared memory occupancy
@@ -297,7 +291,7 @@ cudaError_t MaxSmOccupancy(
     } while (0);
 
     return error;
-*/
+
 #endif  // CUB_RUNTIME_ENABLED
 }
 
@@ -307,7 +301,7 @@ cudaError_t MaxSmOccupancy(
 /**
  * \brief Computes maximum SM occupancy in thread blocks for executing the given kernel function pointer \p kernel_ptr on the current device with \p block_threads per thread block.
  *
- * \par Snippet
+ * \par
  * The code snippet below illustrates the use of the MaxSmOccupancy function.
  * \par
  * \code
@@ -336,7 +330,7 @@ cudaError_t MaxSmOccupancy(
  *
  */
 template <typename KernelPtr>
-CUB_RUNTIME_FUNCTION __forceinline__
+__host__ __device__ __forceinline__
 cudaError_t MaxSmOccupancy(
     int                 &max_sm_occupancy,          ///< [out] maximum number of thread blocks that can reside on a single SM
     KernelPtr           kernel_ptr,                 ///< [in] Kernel pointer for which to compute SM occupancy

@@ -294,9 +294,16 @@ namespace quda {
       void* GhostNorm(const int i);
       const void* GhostNorm(const int i) const;
 
+      /////////////// KX //////////////////////////
+      void changeTwist(QudaTwistFlavorType twist){
+	twistFlavor = twist;
+      }
+      ///////////////////////////////////////////
+
       friend std::ostream& operator<<(std::ostream &out, const ColorSpinorField &);
       friend class ColorSpinorParam;
   };
+
 
   // CUDA implementation
   class cudaColorSpinorField : public ColorSpinorField {
@@ -473,7 +480,6 @@ namespace quda {
     void sendStart(int nFace, int dir, int dagger=0);
     void commsStart(int nFace, int dir, int dagger=0);
     int commsQuery(int nFace, int dir, int dagger=0); 
-    void commsWait(int nFace, int dir, int dagger=0); 
     void scatter(int nFace, int dagger, int dir, cudaStream_t *stream_p);
     void scatter(int nFace, int dagger, int dir);
 

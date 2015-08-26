@@ -28,12 +28,12 @@ namespace quda {
 
   void CG::operator()(cudaColorSpinorField &x, cudaColorSpinorField &b) 
   {
-    profile.TPSTART(QUDA_PROFILE_INIT);
+    profile.Start(QUDA_PROFILE_INIT);
 
     // Check to see that we're not trying to invert on a zero-field source    
     const double b2 = norm2(b);
     if(b2 == 0){
-      profile.TPSTOP(QUDA_PROFILE_INIT);
+      profile.Stop(QUDA_PROFILE_INIT);
       printfQuda("Warning: inverting on zero-field source\n");
       x=b;
       param.true_res = 0.0;
@@ -100,8 +100,8 @@ namespace quda {
       (param.residual_type & QUDA_HEAVY_QUARK_RESIDUAL) ? true : false;
     bool heavy_quark_restart = false;
     
-    profile.TPSTOP(QUDA_PROFILE_INIT);
-    profile.TPSTART(QUDA_PROFILE_PREAMBLE);
+    profile.Stop(QUDA_PROFILE_INIT);
+    profile.Start(QUDA_PROFILE_PREAMBLE);
 
     double r2_old;
 
@@ -114,7 +114,7 @@ namespace quda {
       heavy_quark_res = sqrt(HeavyQuarkResidualNormCuda(x, r).z);
       heavy_quark_res_old = heavy_quark_res; // heavy quark residual
     }
-    const int heavy_quark_check = param.heavy_quark_check; // how often to check the heavy quark residual
+    const int heavy_quark_check = 1; // how often to check the heavy quark residual
 
     double alpha=0.0, beta=0.0;
     double pAp;
@@ -143,8 +143,8 @@ namespace quda {
     // only used if we use the heavy_quark_res
     bool L2breakdown =false;
 
-    profile.TPSTOP(QUDA_PROFILE_PREAMBLE);
-    profile.TPSTART(QUDA_PROFILE_COMPUTE);
+    profile.Stop(QUDA_PROFILE_PREAMBLE);
+    profile.Start(QUDA_PROFILE_COMPUTE);
     blas_flops = 0;
 
     int k=0;
@@ -307,8 +307,8 @@ namespace quda {
     copyCuda(x, xSloppy); // nop when these pointers alias
     xpyCuda(y, x);
 
-    profile.TPSTOP(QUDA_PROFILE_COMPUTE);
-    profile.TPSTART(QUDA_PROFILE_EPILOGUE);
+    profile.Stop(QUDA_PROFILE_COMPUTE);
+    profile.Start(QUDA_PROFILE_EPILOGUE);
 
     param.secs = profile.Last(QUDA_PROFILE_COMPUTE);
     double gflops = (quda::blas_flops + mat.flops() + matSloppy.flops())*1e-9;
@@ -338,8 +338,8 @@ namespace quda {
     mat.flops();
     matSloppy.flops();
 
-    profile.TPSTOP(QUDA_PROFILE_EPILOGUE);
-    profile.TPSTART(QUDA_PROFILE_FREE);
+    profile.Stop(QUDA_PROFILE_EPILOGUE);
+    profile.Start(QUDA_PROFILE_FREE);
 
     if (&tmp3 != &tmp) delete tmp3_p;
     if (&tmp2 != &tmp) delete tmp2_p;
@@ -347,7 +347,7 @@ namespace quda {
     if (rSloppy.Precision() != r.Precision()) delete r_sloppy;
     if (xSloppy.Precision() != x.Precision()) delete x_sloppy;
 
-    profile.TPSTOP(QUDA_PROFILE_FREE);
+    profile.Stop(QUDA_PROFILE_FREE);
 
     return;
   }

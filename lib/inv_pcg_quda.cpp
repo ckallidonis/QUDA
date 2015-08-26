@@ -55,22 +55,22 @@ namespace quda {
   }
 
   PreconCG::~PreconCG(){
-    profile.TPSTART(QUDA_PROFILE_FREE);
+    profile.Start(QUDA_PROFILE_FREE);
 
     if(K) delete K;
 
-    profile.TPSTOP(QUDA_PROFILE_FREE);
+    profile.Stop(QUDA_PROFILE_FREE);
   }
 
 
   void PreconCG::operator()(cudaColorSpinorField &x, cudaColorSpinorField &b)
   {
 
-    profile.TPSTART(QUDA_PROFILE_INIT);
+    profile.Start(QUDA_PROFILE_INIT);
     // Check to see that we're not trying to invert on a zero-field source
     const double b2 = norm2(b);
     if(b2 == 0){
-      profile.TPSTOP(QUDA_PROFILE_INIT);
+      profile.Stop(QUDA_PROFILE_INIT);
       printfQuda("Warning: inverting on zero-field source\n");
       x=b;
       param.true_res = 0.0;
@@ -151,10 +151,10 @@ namespace quda {
     }
 
   
-    profile.TPSTOP(QUDA_PROFILE_INIT);
+    profile.Stop(QUDA_PROFILE_INIT);
 
 
-    profile.TPSTART(QUDA_PROFILE_PREAMBLE);
+    profile.Start(QUDA_PROFILE_PREAMBLE);
 
 
 
@@ -179,8 +179,8 @@ namespace quda {
 
     if(K) rMinvr = reDotProductCuda(rSloppy,*minvrSloppy);
 
-    profile.TPSTOP(QUDA_PROFILE_PREAMBLE);
-    profile.TPSTART(QUDA_PROFILE_COMPUTE);
+    profile.Stop(QUDA_PROFILE_PREAMBLE);
+    profile.Start(QUDA_PROFILE_COMPUTE);
 
 
     quda::blas_flops = 0;
@@ -299,9 +299,9 @@ namespace quda {
     }
 
 
-    profile.TPSTOP(QUDA_PROFILE_COMPUTE);
+    profile.Stop(QUDA_PROFILE_COMPUTE);
 
-    profile.TPSTART(QUDA_PROFILE_EPILOGUE);
+    profile.Start(QUDA_PROFILE_EPILOGUE);
 
     if(x.Precision() != param.precision_sloppy) copyCuda(x, xSloppy);
     xpyCuda(y, x); // x += y
@@ -334,8 +334,8 @@ namespace quda {
     matSloppy.flops();
     matPrecon.flops();
 
-    profile.TPSTOP(QUDA_PROFILE_EPILOGUE);
-    profile.TPSTART(QUDA_PROFILE_FREE);
+    profile.Stop(QUDA_PROFILE_EPILOGUE);
+    profile.Start(QUDA_PROFILE_FREE);
 
     if(K){ // These are only needed if preconditioning is used
       delete minvrPre;
@@ -350,7 +350,7 @@ namespace quda {
       delete r_sloppy;
     }
 
-    profile.TPSTOP(QUDA_PROFILE_FREE);
+    profile.Stop(QUDA_PROFILE_FREE);
     return;
   }
 

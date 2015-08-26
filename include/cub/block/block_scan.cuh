@@ -1,6 +1,6 @@
 /******************************************************************************
  * Copyright (c) 2011, Duane Merrill.  All rights reserved.
- * Copyright (c) 2011-2015, NVIDIA CORPORATION.  All rights reserved.
+ * Copyright (c) 2011-2014, NVIDIA CORPORATION.  All rights reserved.
  * 
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -37,7 +37,6 @@
 #include "specializations/block_scan_warp_scans.cuh"
 #include "../util_arch.cuh"
 #include "../util_type.cuh"
-#include "../util_ptx.cuh"
 #include "../util_namespace.cuh"
 
 /// Optional outer namespace(s)
@@ -45,6 +44,78 @@ CUB_NS_PREFIX
 
 /// CUB namespace
 namespace cub {
+
+
+
+/******************************************************************************
+ * Scan utility types
+ ******************************************************************************/
+
+#ifndef DOXYGEN_SHOULD_SKIP_THIS    // Do not document
+
+/**
+ * Reduce-value-by-ID scan operator
+ */
+template <typename ReductionOp>     ///< Wrapped reduction operator type
+struct ReduceByKeyOp
+{
+    ReductionOp op;                 ///< Wrapped reduction operator
+
+    /// Constructor
+    __device__ __forceinline__ ReduceByKeyOp(ReductionOp op) : op(op) {}
+
+    /// Scan operator
+    template <typename KeyValuePair>
+    __device__ __forceinline__ KeyValuePair operator()(
+        const KeyValuePair &first,
+        const KeyValuePair &second)
+    {
+        KeyValuePair retval;
+
+        retval.value = (second.key != first.key) ?
+                second.value :                      // The second value is for a different ID, return only that value
+                op(first.value, second.value);      // The values are for the same ID so reduce them
+
+        retval.key = second.key;
+        return retval;
+    }
+};
+
+
+
+/**
+ * Segmented scan operator
+ */
+template <typename ReductionOp>     ///< Wrapped reduction operator type
+struct SegmentedOp
+{
+    ReductionOp op;                 ///< Wrapped reduction operator
+
+    /// Constructor
+    __device__ __forceinline__ SegmentedOp(ReductionOp op) : op(op) {}
+
+    /// Scan operator
+    template <typename KeyValuePair>
+    __device__ __forceinline__ KeyValuePair operator()(
+        const KeyValuePair &first,
+        const KeyValuePair &second)
+    {
+        if (second.key) {
+            KeyValuePair retval;
+            retval.value = second.value;
+            retval.key = first.key + second.key;
+            return retval;
+        } else {
+            KeyValuePair retval;
+            retval.value = op(first.value, second.value);
+            retval.key = first.key + second.key;
+            return ;
+        }
+    }
+};
+
+#endif // DOXYGEN_SHOULD_SKIP_THIS
+
 
 
 /******************************************************************************
@@ -118,11 +189,8 @@ enum BlockScanAlgorithm
  * \ingroup BlockModule
  *
  * \tparam T                Data type being scanned
- * \tparam BLOCK_DIM_X      The thread block length in threads along the X dimension
+ * \tparam BLOCK_THREADS    The thread block size in threads
  * \tparam ALGORITHM        <b>[optional]</b> cub::BlockScanAlgorithm enumerator specifying the underlying algorithm to use (default: cub::BLOCK_SCAN_RAKING)
- * \tparam BLOCK_DIM_Y      <b>[optional]</b> The thread block length in threads along the Y dimension (default: 1)
- * \tparam BLOCK_DIM_Z      <b>[optional]</b> The thread block length in threads along the Z dimension (default: 1)
- * \tparam PTX_ARCH         <b>[optional]</b> \ptxversion
  *
  * \par Overview
  * - Given a list of input elements and a binary reduction operator, a [<em>prefix scan</em>](http://en.wikipedia.org/wiki/Prefix_sum)
@@ -132,7 +200,6 @@ enum BlockScanAlgorithm
  *   that the <em>i</em><sup>th</sup> output reduction incorporates the <em>i</em><sup>th</sup> input.
  *   The term \em exclusive indicates the <em>i</em><sup>th</sup> input is not incorporated into
  *   the <em>i</em><sup>th</sup> output reduction.
- * - \rowmajor
  * - BlockScan can be optionally specialized by algorithm to accommodate different workload profiles:
  *   -# <b>cub::BLOCK_SCAN_RAKING</b>.  An efficient (high throughput) "raking reduce-then-scan" prefix scan algorithm. [More...](\ref cub::BlockScanAlgorithm)
  *   -# <b>cub::BLOCK_SCAN_RAKING_MEMOIZE</b>.  Similar to cub::BLOCK_SCAN_RAKING, but having higher throughput at the expense of additional register pressure for intermediate storage. [More...](\ref cub::BlockScanAlgorithm)
@@ -142,12 +209,13 @@ enum BlockScanAlgorithm
  * - \granularity
  * - Uses special instructions when applicable (e.g., warp \p SHFL)
  * - Uses synchronization-free communication between warp lanes when applicable
- * - Invokes a minimal number of minimal block-wide synchronization barriers (only
- *   one or two depending on algorithm selection)
+ * - Uses only one or two block-wide synchronization barriers (depending on
+ *   algorithm selection)
  * - Incurs zero bank conflicts for most types
  * - Computation is slightly more efficient (i.e., having lower instruction overhead) for:
  *   - Prefix sum variants (<b><em>vs.</em></b> generic scan)
- *   - \blocksize
+ *   - Exclusive variants (<b><em>vs.</em></b> inclusive)
+ *   - \p BLOCK_THREADS is a multiple of the architecture's warp size
  * - See cub::BlockScanAlgorithm for performance details regarding algorithmic alternatives
  *
  * \par A Simple Example
@@ -162,7 +230,7 @@ enum BlockScanAlgorithm
  *
  * __global__ void ExampleKernel(...)
  * {
- *     // Specialize BlockScan for a 1D block of 128 threads on type int
+ *     // Specialize BlockScan for 128 threads on type int
  *     typedef cub::BlockScan<int, 128> BlockScan;
  *
  *     // Allocate shared memory for BlockScan
@@ -185,11 +253,8 @@ enum BlockScanAlgorithm
  */
 template <
     typename            T,
-    int                 BLOCK_DIM_X,
-    BlockScanAlgorithm  ALGORITHM       = BLOCK_SCAN_RAKING,
-    int                 BLOCK_DIM_Y     = 1,
-    int                 BLOCK_DIM_Z     = 1,
-    int                 PTX_ARCH        = CUB_PTX_ARCH>
+    int                 BLOCK_THREADS,
+    BlockScanAlgorithm  ALGORITHM = BLOCK_SCAN_RAKING>
 class BlockScan
 {
 private:
@@ -198,13 +263,6 @@ private:
      * Constants and type definitions
      ******************************************************************************/
 
-    /// Constants
-    enum
-    {
-        /// The thread block size in threads
-        BLOCK_THREADS = BLOCK_DIM_X * BLOCK_DIM_Y * BLOCK_DIM_Z,
-    };
-
     /**
      * Ensure the template parameterization meets the requirements of the
      * specified algorithm. Currently, the BLOCK_SCAN_WARP_SCANS policy
@@ -212,17 +270,15 @@ private:
      * architectural warp size.
      */
     static const BlockScanAlgorithm SAFE_ALGORITHM =
-        ((ALGORITHM == BLOCK_SCAN_WARP_SCANS) && (BLOCK_THREADS % CUB_WARP_THREADS(PTX_ARCH) != 0)) ?
+        ((ALGORITHM == BLOCK_SCAN_WARP_SCANS) && (BLOCK_THREADS % CUB_PTX_WARP_THREADS != 0)) ?
             BLOCK_SCAN_RAKING :
             ALGORITHM;
 
-    typedef BlockScanWarpScans<T, BLOCK_DIM_X, BLOCK_DIM_Y, BLOCK_DIM_Z, PTX_ARCH> WarpScans;
-    typedef BlockScanRaking<T, BLOCK_DIM_X, BLOCK_DIM_Y, BLOCK_DIM_Z, (SAFE_ALGORITHM == BLOCK_SCAN_RAKING_MEMOIZE), PTX_ARCH> Raking;
-
-    /// Define the delegate type for the desired algorithm
+    /// Internal specialization.
     typedef typename If<(SAFE_ALGORITHM == BLOCK_SCAN_WARP_SCANS),
-        WarpScans,
-        Raking>::Type InternalBlockScan;
+        BlockScanWarpScans<T, BLOCK_THREADS>,
+        BlockScanRaking<T, BLOCK_THREADS, (SAFE_ALGORITHM == BLOCK_SCAN_RAKING_MEMOIZE)> >::Type InternalBlockScan;
+
 
     /// Shared memory storage layout type for BlockScan
     typedef typename InternalBlockScan::TempStorage _TempStorage;
@@ -251,9 +307,6 @@ private:
     }
 
 
-    /******************************************************************************
-     * Public types
-     ******************************************************************************/
 public:
 
     /// \smemstorage{BlockScan}
@@ -266,27 +319,47 @@ public:
     //@{
 
     /**
-     * \brief Collective constructor using a private static allocation of shared memory as temporary storage.
+     * \brief Collective constructor for 1D thread blocks using a private static allocation of shared memory as temporary storage.  Threads are identified using <tt>threadIdx.x</tt>.
      */
     __device__ __forceinline__ BlockScan()
     :
         temp_storage(PrivateStorage()),
-        linear_tid(RowMajorTid(BLOCK_DIM_X, BLOCK_DIM_Y, BLOCK_DIM_Z))
+        linear_tid(threadIdx.x)
     {}
 
 
     /**
-     * \brief Collective constructor using the specified memory allocation as temporary storage.
+     * \brief Collective constructor for 1D thread blocks using the specified memory allocation as temporary storage.  Threads are identified using <tt>threadIdx.x</tt>.
      */
     __device__ __forceinline__ BlockScan(
         TempStorage &temp_storage)             ///< [in] Reference to memory allocation having layout type TempStorage
     :
         temp_storage(temp_storage.Alias()),
-        linear_tid(RowMajorTid(BLOCK_DIM_X, BLOCK_DIM_Y, BLOCK_DIM_Z))
+        linear_tid(threadIdx.x)
     {}
 
 
+    /**
+     * \brief Collective constructor using a private static allocation of shared memory as temporary storage.  Each thread is identified using the supplied linear thread identifier
+     */
+    __device__ __forceinline__ BlockScan(
+        int linear_tid)                        ///< [in] A suitable 1D thread-identifier for the calling thread (e.g., <tt>(threadIdx.y * blockDim.x) + linear_tid</tt> for 2D thread blocks)
+    :
+        temp_storage(PrivateStorage()),
+        linear_tid(linear_tid)
+    {}
 
+
+    /**
+     * \brief Collective constructor using the specified memory allocation as temporary storage.  Each thread is identified using the supplied linear thread identifier.
+     */
+    __device__ __forceinline__ BlockScan(
+        TempStorage &temp_storage,             ///< [in] Reference to memory allocation having layout type TempStorage
+        int linear_tid)                        ///< [in] <b>[optional]</b> A suitable 1D thread-identifier for the calling thread (e.g., <tt>(threadIdx.y * blockDim.x) + linear_tid</tt> for 2D thread blocks)
+    :
+        temp_storage(temp_storage.Alias()),
+        linear_tid(linear_tid)
+    {}
 
 
 
@@ -301,11 +374,10 @@ public:
      * \brief Computes an exclusive block-wide prefix scan using addition (+) as the scan operator.  Each thread contributes one input element.
      *
      * \par
-     * - \identityzero
-     * - \rowmajor
+     * - \blocked
      * - \smemreuse
      *
-     * \par Snippet
+     * \par
      * The code snippet below illustrates an exclusive prefix sum of 128 integer items that
      * are partitioned across 128 threads.
      * \par
@@ -314,7 +386,7 @@ public:
      *
      * __global__ void ExampleKernel(...)
      * {
-     *     // Specialize BlockScan for a 1D block of 128 threads on type int
+     *     // Specialize BlockScan for 128 threads on type int
      *     typedef cub::BlockScan<int, 128> BlockScan;
      *
      *     // Allocate shared memory for BlockScan
@@ -337,7 +409,8 @@ public:
         T               input,                          ///< [in] Calling thread's input item
         T               &output)                        ///< [out] Calling thread's output item (may be aliased to \p input)
     {
-        ExclusiveScan(input, output, ZeroInitialize<T>(), cub::Sum());
+        T block_aggregate;
+        InternalBlockScan(temp_storage, linear_tid).ExclusiveSum(input, output, block_aggregate);
     }
 
 
@@ -345,11 +418,10 @@ public:
      * \brief Computes an exclusive block-wide prefix scan using addition (+) as the scan operator.  Each thread contributes one input element.  Also provides every thread with the block-wide \p block_aggregate of all inputs.
      *
      * \par
-     * - \identityzero
-     * - \rowmajor
+     * - \blocked
      * - \smemreuse
      *
-     * \par Snippet
+     * \par
      * The code snippet below illustrates an exclusive prefix sum of 128 integer items that
      * are partitioned across 128 threads.
      * \par
@@ -358,7 +430,7 @@ public:
      *
      * __global__ void ExampleKernel(...)
      * {
-     *     // Specialize BlockScan for a 1D block of 128 threads on type int
+     *     // Specialize BlockScan for 128 threads on type int
      *     typedef cub::BlockScan<int, 128> BlockScan;
      *
      *     // Allocate shared memory for BlockScan
@@ -384,7 +456,7 @@ public:
         T               &output,                        ///< [out] Calling thread's output item (may be aliased to \p input)
         T               &block_aggregate)               ///< [out] block-wide aggregate reduction of input items
     {
-        ExclusiveScan(input, output, ZeroInitialize<T>(), cub::Sum(), block_aggregate);
+        InternalBlockScan(temp_storage, linear_tid).ExclusiveSum(input, output, block_aggregate);
     }
 
 
@@ -392,15 +464,14 @@ public:
      * \brief Computes an exclusive block-wide prefix scan using addition (+) as the scan operator.  Each thread contributes one input element.  Instead of using 0 as the block-wide prefix, the call-back functor \p block_prefix_callback_op is invoked by the first warp in the block, and the value returned by <em>lane</em><sub>0</sub> in that warp is used as the "seed" value that logically prefixes the threadblock's scan inputs.  Also provides every thread with the block-wide \p block_aggregate of all inputs.
      *
      * \par
-     * - \identityzero
      * - The \p block_prefix_callback_op functor must implement a member function <tt>T operator()(T block_aggregate)</tt>.
      *   The functor's input parameter \p block_aggregate is the same value also returned by the scan operation.
      *   The functor will be invoked by the first warp of threads in the block, however only the return value from
      *   <em>lane</em><sub>0</sub> is applied as the block-wide prefix.  Can be stateful.
-     * - \rowmajor
+     * - \blocked
      * - \smemreuse
      *
-     * \par Snippet
+     * \par
      * The code snippet below illustrates a single thread block that progressively
      * computes an exclusive prefix sum over multiple "tiles" of input using a
      * prefix functor to maintain a running total between block-wide scans.  Each tile consists
@@ -431,7 +502,7 @@ public:
      *
      * __global__ void ExampleKernel(int *d_data, int num_items, ...)
      * {
-     *     // Specialize BlockScan for a 1D block of 128 threads
+     *     // Specialize BlockScan for 128 threads
      *     typedef cub::BlockScan<int, 128> BlockScan;
      *
      *     // Allocate shared memory for BlockScan
@@ -471,7 +542,7 @@ public:
         T                       &block_aggregate,               ///< [out] block-wide aggregate reduction of input items (exclusive of the \p block_prefix_callback_op value)
         BlockPrefixCallbackOp   &block_prefix_callback_op)      ///< [in-out] <b>[<em>warp</em><sub>0</sub> only]</b> Call-back functor for specifying a block-wide prefix to be applied to all inputs.
     {
-        ExclusiveScan(input, output, ZeroInitialize<T>(), cub::Sum(), block_aggregate, block_prefix_callback_op);
+        InternalBlockScan(temp_storage, linear_tid).ExclusiveSum(input, output, block_aggregate, block_prefix_callback_op);
     }
 
 
@@ -486,12 +557,11 @@ public:
      * \brief Computes an exclusive block-wide prefix scan using addition (+) as the scan operator.  Each thread contributes an array of consecutive input elements.
      *
      * \par
-     * - \identityzero
      * - \blocked
      * - \granularity
      * - \smemreuse
      *
-     * \par Snippet
+     * \par
      * The code snippet below illustrates an exclusive prefix sum of 512 integer items that
      * are partitioned in a [<em>blocked arrangement</em>](index.html#sec5sec3) across 128 threads
      * where each thread owns 4 consecutive items.
@@ -501,7 +571,7 @@ public:
      *
      * __global__ void ExampleKernel(...)
      * {
-     *     // Specialize BlockScan for a 1D block of 128 threads on type int
+     *     // Specialize BlockScan for 128 threads on type int
      *     typedef cub::BlockScan<int, 128> BlockScan;
      *
      *     // Allocate shared memory for BlockScan
@@ -542,12 +612,11 @@ public:
      * \brief Computes an exclusive block-wide prefix scan using addition (+) as the scan operator.  Each thread contributes an array of consecutive input elements.  Also provides every thread with the block-wide \p block_aggregate of all inputs.
      *
      * \par
-     * - \identityzero
      * - \blocked
      * - \granularity
      * - \smemreuse
      *
-     * \par Snippet
+     * \par
      * The code snippet below illustrates an exclusive prefix sum of 512 integer items that
      * are partitioned in a [<em>blocked arrangement</em>](index.html#sec5sec3) across 128 threads
      * where each thread owns 4 consecutive items.
@@ -557,7 +626,7 @@ public:
      *
      * __global__ void ExampleKernel(...)
      * {
-     *     // Specialize BlockScan for a 1D block of 128 threads on type int
+     *     // Specialize BlockScan for 128 threads on type int
      *     typedef cub::BlockScan<int, 128> BlockScan;
      *
      *     // Allocate shared memory for BlockScan
@@ -601,7 +670,6 @@ public:
      * \brief Computes an exclusive block-wide prefix scan using addition (+) as the scan operator.  Each thread contributes an array of consecutive input elements.  Instead of using 0 as the block-wide prefix, the call-back functor \p block_prefix_callback_op is invoked by the first warp in the block, and the value returned by <em>lane</em><sub>0</sub> in that warp is used as the "seed" value that logically prefixes the threadblock's scan inputs.  Also provides every thread with the block-wide \p block_aggregate of all inputs.
      *
      * \par
-     * - \identityzero
      * - The \p block_prefix_callback_op functor must implement a member function <tt>T operator()(T block_aggregate)</tt>.
      *   The functor's input parameter \p block_aggregate is the same value also returned by the scan operation.
      *   The functor will be invoked by the first warp of threads in the block, however only the return value from
@@ -610,7 +678,7 @@ public:
      * - \granularity
      * - \smemreuse
      *
-     * \par Snippet
+     * \par
      * The code snippet below illustrates a single thread block that progressively
      * computes an exclusive prefix sum over multiple "tiles" of input using a
      * prefix functor to maintain a running total between block-wide scans.  Each tile consists
@@ -642,7 +710,7 @@ public:
      *
      * __global__ void ExampleKernel(int *d_data, int num_items, ...)
      * {
-     *     // Specialize BlockLoad, BlockStore, and BlockScan for a 1D block of 128 threads, 4 ints per thread
+     *     // Specialize BlockLoad, BlockStore, and BlockScan for 128 threads, 4 ints per thread
      *     typedef cub::BlockLoad<int*, 128, 4, BLOCK_LOAD_TRANSPOSE>   BlockLoad;
      *     typedef cub::BlockStore<int*, 128, 4, BLOCK_STORE_TRANSPOSE> BlockStore;
      *     typedef cub::BlockScan<int, 128>                             BlockScan;
@@ -719,10 +787,10 @@ public:
      *
      * \par
      * - Supports non-commutative scan operators.
-     * - \rowmajor
+     * - \blocked
      * - \smemreuse
      *
-     * \par Snippet
+     * \par
      * The code snippet below illustrates an exclusive prefix max scan of 128 integer items that
      * are partitioned across 128 threads.
      * \par
@@ -731,7 +799,7 @@ public:
      *
      * __global__ void ExampleKernel(...)
      * {
-     *     // Specialize BlockScan for a 1D block of 128 threads on type int
+     *     // Specialize BlockScan for 128 threads on type int
      *     typedef cub::BlockScan<int, 128> BlockScan;
      *
      *     // Allocate shared memory for BlockScan
@@ -758,7 +826,8 @@ public:
         T               identity,                       ///< [in] Identity value
         ScanOp          scan_op)                        ///< [in] Binary scan functor (e.g., an instance of cub::Sum, cub::Min, cub::Max, etc.)
     {
-        InternalBlockScan(temp_storage).ExclusiveScan(input, output, identity, scan_op);
+        T block_aggregate;
+        InternalBlockScan(temp_storage, linear_tid).ExclusiveScan(input, output, identity, scan_op, block_aggregate);
     }
 
 
@@ -767,10 +836,10 @@ public:
      *
      * \par
      * - Supports non-commutative scan operators.
-     * - \rowmajor
+     * - \blocked
      * - \smemreuse
      *
-     * \par Snippet
+     * \par
      * The code snippet below illustrates an exclusive prefix max scan of 128 integer items that
      * are partitioned across 128 threads.
      * \par
@@ -779,7 +848,7 @@ public:
      *
      * __global__ void ExampleKernel(...)
      * {
-     *     // Specialize BlockScan for a 1D block of 128 threads on type int
+     *     // Specialize BlockScan for 128 threads on type int
      *     typedef cub::BlockScan<int, 128> BlockScan;
      *
      *     // Allocate shared memory for BlockScan
@@ -809,7 +878,7 @@ public:
         ScanOp          scan_op,            ///< [in] Binary scan functor (e.g., an instance of cub::Sum, cub::Min, cub::Max, etc.)
         T               &block_aggregate)   ///< [out] block-wide aggregate reduction of input items
     {
-        InternalBlockScan(temp_storage).ExclusiveScan(input, output, identity, scan_op, block_aggregate);
+        InternalBlockScan(temp_storage, linear_tid).ExclusiveScan(input, output, identity, scan_op, block_aggregate);
     }
 
 
@@ -822,10 +891,10 @@ public:
      *   The functor will be invoked by the first warp of threads in the block, however only the return value from
      *   <em>lane</em><sub>0</sub> is applied as the block-wide prefix.  Can be stateful.
      * - Supports non-commutative scan operators.
-     * - \rowmajor
+     * - \blocked
      * - \smemreuse
      *
-     * \par Snippet
+     * \par
      * The code snippet below illustrates a single thread block that progressively
      * computes an exclusive prefix max scan over multiple "tiles" of input using a
      * prefix functor to maintain a running total between block-wide scans.  Each tile consists
@@ -856,7 +925,7 @@ public:
      *
      * __global__ void ExampleKernel(int *d_data, int num_items, ...)
      * {
-     *     // Specialize BlockScan for a 1D block of 128 threads
+     *     // Specialize BlockScan for 128 threads
      *     typedef cub::BlockScan<int, 128> BlockScan;
      *
      *     // Allocate shared memory for BlockScan
@@ -902,7 +971,7 @@ public:
         T                       &block_aggregate,               ///< [out] block-wide aggregate reduction of input items (exclusive of the \p block_prefix_callback_op value)
         BlockPrefixCallbackOp   &block_prefix_callback_op)      ///< [in-out] <b>[<em>warp</em><sub>0</sub> only]</b> Call-back functor for specifying a block-wide prefix to be applied to all inputs.
     {
-        InternalBlockScan(temp_storage).ExclusiveScan(input, output, identity, scan_op, block_aggregate, block_prefix_callback_op);
+        InternalBlockScan(temp_storage, linear_tid).ExclusiveScan(input, output, identity, scan_op, block_aggregate, block_prefix_callback_op);
     }
 
 
@@ -922,7 +991,7 @@ public:
      * - \granularity
      * - \smemreuse
      *
-     * \par Snippet
+     * \par
      * The code snippet below illustrates an exclusive prefix max scan of 512 integer items that
      * are partitioned in a [<em>blocked arrangement</em>](index.html#sec5sec3) across 128 threads
      * where each thread owns 4 consecutive items.
@@ -932,7 +1001,7 @@ public:
      *
      * __global__ void ExampleKernel(...)
      * {
-     *     // Specialize BlockScan for a 1D block of 128 threads on type int
+     *     // Specialize BlockScan for 128 threads on type int
      *     typedef cub::BlockScan<int, 128> BlockScan;
      *
      *     // Allocate shared memory for BlockScan
@@ -984,7 +1053,7 @@ public:
      * - \granularity
      * - \smemreuse
      *
-     * \par Snippet
+     * \par
      * The code snippet below illustrates an exclusive prefix max scan of 512 integer items that
      * are partitioned in a [<em>blocked arrangement</em>](index.html#sec5sec3) across 128 threads
      * where each thread owns 4 consecutive items.
@@ -994,7 +1063,7 @@ public:
      *
      * __global__ void ExampleKernel(...)
      * {
-     *     // Specialize BlockScan for a 1D block of 128 threads on type int
+     *     // Specialize BlockScan for 128 threads on type int
      *     typedef cub::BlockScan<int, 128> BlockScan;
      *
      *     // Allocate shared memory for BlockScan
@@ -1051,7 +1120,7 @@ public:
      * - \granularity
      * - \smemreuse
      *
-     * \par Snippet
+     * \par
      * The code snippet below illustrates a single thread block that progressively
      * computes an exclusive prefix max scan over multiple "tiles" of input using a
      * prefix functor to maintain a running total between block-wide scans.  Each tile consists
@@ -1082,7 +1151,7 @@ public:
      *
      * __global__ void ExampleKernel(int *d_data, int num_items, ...)
      * {
-     *     // Specialize BlockLoad, BlockStore, and BlockScan for a 1D block of 128 threads, 4 ints per thread
+     *     // Specialize BlockLoad, BlockStore, and BlockScan for 128 threads, 4 ints per thread
      *     typedef cub::BlockLoad<int*, 128, 4, BLOCK_LOAD_TRANSPOSE>   BlockLoad;
      *     typedef cub::BlockStore<int*, 128, 4, BLOCK_STORE_TRANSPOSE> BlockStore;
      *     typedef cub::BlockScan<int, 128>                             BlockScan;
@@ -1123,9 +1192,9 @@ public:
      * \p block_aggregate will be assigned \p 510 in all threads after the first scan, assigned \p 1022 after the second
      * scan, etc.
      *
-     * \tparam ITEMS_PER_THREAD         <b>[inferred]</b> The number of consecutive items partitioned onto each thread.
-     * \tparam ScanOp                   <b>[inferred]</b> Binary scan functor (e.g., an instance of cub::Sum, cub::Min, cub::Max, etc.) type having member <tt>T operator()(const T &a, const T &b)</tt>
-     * \tparam BlockPrefixCallbackOp    <b>[inferred]</b> Call-back functor type having member <tt>T operator()(T block_aggregate)</tt>
+     * \tparam ITEMS_PER_THREAD     <b>[inferred]</b> The number of consecutive items partitioned onto each thread.
+     * \tparam ScanOp               <b>[inferred]</b> Binary scan functor (e.g., an instance of cub::Sum, cub::Min, cub::Max, etc.) type having member <tt>T operator()(const T &a, const T &b)</tt>
+     * \tparam BlockPrefixCallbackOp        <b>[inferred]</b> Call-back functor type having member <tt>T operator()(T block_aggregate)</tt>
      */
     template <
         int             ITEMS_PER_THREAD,
@@ -1165,7 +1234,7 @@ public:
      *
      * \par
      * - Supports non-commutative scan operators.
-     * - \rowmajor
+     * - \blocked
      * - \smemreuse
      *
      * \tparam ScanOp               <b>[inferred]</b> Binary scan functor (e.g., an instance of cub::Sum, cub::Min, cub::Max, etc.) type having member <tt>T operator()(const T &a, const T &b)</tt>
@@ -1176,7 +1245,8 @@ public:
         T               &output,                        ///< [out] Calling thread's output item (may be aliased to \p input)
         ScanOp          scan_op)                        ///< [in] Binary scan functor (e.g., an instance of cub::Sum, cub::Min, cub::Max, etc.)
     {
-        InternalBlockScan(temp_storage).ExclusiveScan(input, output, scan_op);
+        T block_aggregate;
+        InternalBlockScan(temp_storage, linear_tid).ExclusiveScan(input, output, scan_op, block_aggregate);
     }
 
 
@@ -1185,7 +1255,7 @@ public:
      *
      * \par
      * - Supports non-commutative scan operators.
-     * - \rowmajor
+     * - \blocked
      * - \smemreuse
      *
      * \tparam ScanOp   <b>[inferred]</b> Binary scan functor (e.g., an instance of cub::Sum, cub::Min, cub::Max, etc.) type having member <tt>T operator()(const T &a, const T &b)</tt>
@@ -1197,7 +1267,7 @@ public:
         ScanOp          scan_op,                        ///< [in] Binary scan functor (e.g., an instance of cub::Sum, cub::Min, cub::Max, etc.)
         T               &block_aggregate)               ///< [out] block-wide aggregate reduction of input items
     {
-        InternalBlockScan(temp_storage).ExclusiveScan(input, output, scan_op, block_aggregate);
+        InternalBlockScan(temp_storage, linear_tid).ExclusiveScan(input, output, scan_op, block_aggregate);
     }
 
 
@@ -1211,7 +1281,7 @@ public:
      *
      * \par
      * - Supports non-commutative scan operators.
-     * - \rowmajor
+     * - \blocked
      * - \smemreuse
      *
      * \tparam ScanOp               <b>[inferred]</b> Binary scan functor (e.g., an instance of cub::Sum, cub::Min, cub::Max, etc.) type having member <tt>T operator()(const T &a, const T &b)</tt>
@@ -1227,12 +1297,11 @@ public:
         T                       &block_aggregate,               ///< [out] block-wide aggregate reduction of input items (exclusive of the \p block_prefix_callback_op value)
         BlockPrefixCallbackOp   &block_prefix_callback_op)      ///< [in-out] <b>[<em>warp</em><sub>0</sub> only]</b> Call-back functor for specifying a block-wide prefix to be applied to all inputs.
     {
-        InternalBlockScan(temp_storage).ExclusiveScan(input, output, scan_op, block_aggregate, block_prefix_callback_op);
+        InternalBlockScan(temp_storage, linear_tid).ExclusiveScan(input, output, scan_op, block_aggregate, block_prefix_callback_op);
     }
 
 
     //@}  end member group
-
     /******************************************************************//**
      * \name Exclusive prefix scan operations (identityless, multiple data per thread)
      *********************************************************************/
@@ -1356,10 +1425,10 @@ public:
      * \brief Computes an inclusive block-wide prefix scan using addition (+) as the scan operator.  Each thread contributes one input element.
      *
      * \par
-     * - \rowmajor
+     * - \blocked
      * - \smemreuse
      *
-     * \par Snippet
+     * \par
      * The code snippet below illustrates an inclusive prefix sum of 128 integer items that
      * are partitioned across 128 threads.
      * \par
@@ -1368,7 +1437,7 @@ public:
      *
      * __global__ void ExampleKernel(...)
      * {
-     *     // Specialize BlockScan for a 1D block of 128 threads on type int
+     *     // Specialize BlockScan for 128 threads on type int
      *     typedef cub::BlockScan<int, 128> BlockScan;
      *
      *     // Allocate shared memory for BlockScan
@@ -1391,7 +1460,8 @@ public:
         T               input,                          ///< [in] Calling thread's input item
         T               &output)                        ///< [out] Calling thread's output item (may be aliased to \p input)
     {
-        InclusiveScan(input, output, cub::Sum());
+        T block_aggregate;
+        InternalBlockScan(temp_storage, linear_tid).InclusiveSum(input, output, block_aggregate);
     }
 
 
@@ -1399,10 +1469,10 @@ public:
      * \brief Computes an inclusive block-wide prefix scan using addition (+) as the scan operator.  Each thread contributes one input element.  Also provides every thread with the block-wide \p block_aggregate of all inputs.
      *
      * \par
-     * - \rowmajor
+     * - \blocked
      * - \smemreuse
      *
-     * \par Snippet
+     * \par
      * The code snippet below illustrates an inclusive prefix sum of 128 integer items that
      * are partitioned across 128 threads.
      * \par
@@ -1411,7 +1481,7 @@ public:
      *
      * __global__ void ExampleKernel(...)
      * {
-     *     // Specialize BlockScan for a 1D block of 128 threads on type int
+     *     // Specialize BlockScan for 128 threads on type int
      *     typedef cub::BlockScan<int, 128> BlockScan;
      *
      *     // Allocate shared memory for BlockScan
@@ -1437,7 +1507,7 @@ public:
         T               &output,                        ///< [out] Calling thread's output item (may be aliased to \p input)
         T               &block_aggregate)               ///< [out] block-wide aggregate reduction of input items
     {
-        InclusiveScan(input, output, cub::Sum(), block_aggregate);
+        InternalBlockScan(temp_storage, linear_tid).InclusiveSum(input, output, block_aggregate);
     }
 
 
@@ -1450,10 +1520,10 @@ public:
      *   The functor's input parameter \p block_aggregate is the same value also returned by the scan operation.
      *   The functor will be invoked by the first warp of threads in the block, however only the return value from
      *   <em>lane</em><sub>0</sub> is applied as the block-wide prefix.  Can be stateful.
-     * - \rowmajor
+     * - \blocked
      * - \smemreuse
      *
-     * \par Snippet
+     * \par
      * The code snippet below illustrates a single thread block that progressively
      * computes an inclusive prefix sum over multiple "tiles" of input using a
      * prefix functor to maintain a running total between block-wide scans.  Each tile consists
@@ -1484,7 +1554,7 @@ public:
      *
      * __global__ void ExampleKernel(int *d_data, int num_items, ...)
      * {
-     *     // Specialize BlockScan for a 1D block of 128 threads
+     *     // Specialize BlockScan for 128 threads
      *     typedef cub::BlockScan<int, 128> BlockScan;
      *
      *     // Allocate shared memory for BlockScan
@@ -1524,7 +1594,7 @@ public:
         T                       &block_aggregate,               ///< [out] block-wide aggregate reduction of input items (exclusive of the \p block_prefix_callback_op value)
         BlockPrefixCallbackOp   &block_prefix_callback_op)      ///< [in-out] <b>[<em>warp</em><sub>0</sub> only]</b> Call-back functor for specifying a block-wide prefix to be applied to all inputs.
     {
-        InclusiveScan(input, output, cub::Sum(), block_aggregate, block_prefix_callback_op);
+        InternalBlockScan(temp_storage, linear_tid).InclusiveSum(input, output, block_aggregate, block_prefix_callback_op);
     }
 
 
@@ -1543,7 +1613,7 @@ public:
      * - \granularity
      * - \smemreuse
      *
-     * \par Snippet
+     * \par
      * The code snippet below illustrates an inclusive prefix sum of 512 integer items that
      * are partitioned in a [<em>blocked arrangement</em>](index.html#sec5sec3) across 128 threads
      * where each thread owns 4 consecutive items.
@@ -1553,7 +1623,7 @@ public:
      *
      * __global__ void ExampleKernel(...)
      * {
-     *     // Specialize BlockScan for a 1D block of 128 threads on type int
+     *     // Specialize BlockScan for 128 threads on type int
      *     typedef cub::BlockScan<int, 128> BlockScan;
      *
      *     // Allocate shared memory for BlockScan
@@ -1605,7 +1675,7 @@ public:
      * - \granularity
      * - \smemreuse
      *
-     * \par Snippet
+     * \par
      * The code snippet below illustrates an inclusive prefix sum of 512 integer items that
      * are partitioned in a [<em>blocked arrangement</em>](index.html#sec5sec3) across 128 threads
      * where each thread owns 4 consecutive items.
@@ -1615,7 +1685,7 @@ public:
      *
      * __global__ void ExampleKernel(...)
      * {
-     *     // Specialize BlockScan for a 1D block of 128 threads on type int
+     *     // Specialize BlockScan for 128 threads on type int
      *     typedef cub::BlockScan<int, 128> BlockScan;
      *
      *     // Allocate shared memory for BlockScan
@@ -1677,7 +1747,7 @@ public:
      * - \granularity
      * - \smemreuse
      *
-     * \par Snippet
+     * \par
      * The code snippet below illustrates a single thread block that progressively
      * computes an inclusive prefix sum over multiple "tiles" of input using a
      * prefix functor to maintain a running total between block-wide scans.  Each tile consists
@@ -1709,7 +1779,7 @@ public:
      *
      * __global__ void ExampleKernel(int *d_data, int num_items, ...)
      * {
-     *     // Specialize BlockLoad, BlockStore, and BlockScan for a 1D block of 128 threads, 4 ints per thread
+     *     // Specialize BlockLoad, BlockStore, and BlockScan for 128 threads, 4 ints per thread
      *     typedef cub::BlockLoad<int*, 128, 4, BLOCK_LOAD_TRANSPOSE>   BlockLoad;
      *     typedef cub::BlockStore<int*, 128, 4, BLOCK_STORE_TRANSPOSE> BlockStore;
      *     typedef cub::BlockScan<int, 128>                             BlockScan;
@@ -1792,10 +1862,10 @@ public:
      *
      * \par
      * - Supports non-commutative scan operators.
-     * - \rowmajor
+     * - \blocked
      * - \smemreuse
      *
-     * \par Snippet
+     * \par
      * The code snippet below illustrates an inclusive prefix max scan of 128 integer items that
      * are partitioned across 128 threads.
      * \par
@@ -1804,7 +1874,7 @@ public:
      *
      * __global__ void ExampleKernel(...)
      * {
-     *     // Specialize BlockScan for a 1D block of 128 threads on type int
+     *     // Specialize BlockScan for 128 threads on type int
      *     typedef cub::BlockScan<int, 128> BlockScan;
      *
      *     // Allocate shared memory for BlockScan
@@ -1830,7 +1900,8 @@ public:
         T               &output,                        ///< [out] Calling thread's output item (may be aliased to \p input)
         ScanOp          scan_op)                        ///< [in] Binary scan functor (e.g., an instance of cub::Sum, cub::Min, cub::Max, etc.)
     {
-        InternalBlockScan(temp_storage).InclusiveScan(input, output, scan_op);
+        T block_aggregate;
+        InclusiveScan(input, output, scan_op, block_aggregate);
     }
 
 
@@ -1839,10 +1910,10 @@ public:
      *
      * \par
      * - Supports non-commutative scan operators.
-     * - \rowmajor
+     * - \blocked
      * - \smemreuse
      *
-     * \par Snippet
+     * \par
      * The code snippet below illustrates an inclusive prefix max scan of 128 integer items that
      * are partitioned across 128 threads.
      * \par
@@ -1851,7 +1922,7 @@ public:
      *
      * __global__ void ExampleKernel(...)
      * {
-     *     // Specialize BlockScan for a 1D block of 128 threads on type int
+     *     // Specialize BlockScan for 128 threads on type int
      *     typedef cub::BlockScan<int, 128> BlockScan;
      *
      *     // Allocate shared memory for BlockScan
@@ -1880,7 +1951,7 @@ public:
         ScanOp          scan_op,                        ///< [in] Binary scan functor (e.g., an instance of cub::Sum, cub::Min, cub::Max, etc.)
         T               &block_aggregate)               ///< [out] block-wide aggregate reduction of input items
     {
-        InternalBlockScan(temp_storage).InclusiveScan(input, output, scan_op, block_aggregate);
+        InternalBlockScan(temp_storage, linear_tid).InclusiveScan(input, output, scan_op, block_aggregate);
     }
 
 
@@ -1893,10 +1964,10 @@ public:
      *   The functor will be invoked by the first warp of threads in the block, however only the return value from
      *   <em>lane</em><sub>0</sub> is applied as the block-wide prefix.  Can be stateful.
      * - Supports non-commutative scan operators.
-     * - \rowmajor
+     * - \blocked
      * - \smemreuse
      *
-     * \par Snippet
+     * \par
      * The code snippet below illustrates a single thread block that progressively
      * computes an inclusive prefix max scan over multiple "tiles" of input using a
      * prefix functor to maintain a running total between block-wide scans.  Each tile consists
@@ -1927,7 +1998,7 @@ public:
      *
      * __global__ void ExampleKernel(int *d_data, int num_items, ...)
      * {
-     *     // Specialize BlockScan for a 1D block of 128 threads
+     *     // Specialize BlockScan for 128 threads
      *     typedef cub::BlockScan<int, 128> BlockScan;
      *
      *     // Allocate shared memory for BlockScan
@@ -1972,7 +2043,7 @@ public:
         T                       &block_aggregate,               ///< [out] block-wide aggregate reduction of input items (exclusive of the \p block_prefix_callback_op value)
         BlockPrefixCallbackOp   &block_prefix_callback_op)      ///< [in-out] <b>[<em>warp</em><sub>0</sub> only]</b> Call-back functor for specifying a block-wide prefix to be applied to all inputs.
     {
-        InternalBlockScan(temp_storage).InclusiveScan(input, output, scan_op, block_aggregate, block_prefix_callback_op);
+        InternalBlockScan(temp_storage, linear_tid).InclusiveScan(input, output, scan_op, block_aggregate, block_prefix_callback_op);
     }
 
 
@@ -1992,7 +2063,7 @@ public:
      * - \granularity
      * - \smemreuse
      *
-     * \par Snippet
+     * \par
      * The code snippet below illustrates an inclusive prefix max scan of 512 integer items that
      * are partitioned in a [<em>blocked arrangement</em>](index.html#sec5sec3) across 128 threads
      * where each thread owns 4 consecutive items.
@@ -2002,7 +2073,7 @@ public:
      *
      * __global__ void ExampleKernel(...)
      * {
-     *     // Specialize BlockScan for a 1D block of 128 threads on type int
+     *     // Specialize BlockScan for 128 threads on type int
      *     typedef cub::BlockScan<int, 128> BlockScan;
      *
      *     // Allocate shared memory for BlockScan
@@ -2058,7 +2129,7 @@ public:
      * - \granularity
      * - \smemreuse
      *
-     * \par Snippet
+     * \par
      * The code snippet below illustrates an inclusive prefix max scan of 512 integer items that
      * are partitioned in a [<em>blocked arrangement</em>](index.html#sec5sec3) across 128 threads
      * where each thread owns 4 consecutive items.
@@ -2068,7 +2139,7 @@ public:
      *
      * __global__ void ExampleKernel(...)
      * {
-     *     // Specialize BlockScan for a 1D block of 128 threads on type int
+     *     // Specialize BlockScan for 128 threads on type int
      *     typedef cub::BlockScan<int, 128> BlockScan;
      *
      *     // Allocate shared memory for BlockScan
@@ -2133,7 +2204,7 @@ public:
      * - \granularity
      * - \smemreuse
      *
-     * \par Snippet
+     * \par
      * The code snippet below illustrates a single thread block that progressively
      * computes an inclusive prefix max scan over multiple "tiles" of input using a
      * prefix functor to maintain a running total between block-wide scans.  Each tile consists
@@ -2164,7 +2235,7 @@ public:
      *
      * __global__ void ExampleKernel(int *d_data, int num_items, ...)
      * {
-     *     // Specialize BlockLoad, BlockStore, and BlockScan for a 1D block of 128 threads, 4 ints per thread
+     *     // Specialize BlockLoad, BlockStore, and BlockScan for 128 threads, 4 ints per thread
      *     typedef cub::BlockLoad<int*, 128, 4, BLOCK_LOAD_TRANSPOSE>   BlockLoad;
      *     typedef cub::BlockStore<int*, 128, 4, BLOCK_STORE_TRANSPOSE> BlockStore;
      *     typedef cub::BlockScan<int, 128>                             BlockScan;

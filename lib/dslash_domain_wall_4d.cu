@@ -194,48 +194,26 @@ namespace quda {
       }
     }
 
-    long long flops() const {
+    long long flops() const { // FIXME for multi-GPU
       long long Ls = in->X(4);
       long long vol4d = in->VolumeCB() / Ls;
       long long bulk = (Ls-2)*vol4d;
       long long wall = 2*vol4d;
-      long long flops; 
+      long long flops_Tmp; 
       switch(DS_type){
         case 0:
-          flops = DslashCuda::flops();
+          flops_Tmp = (x ? 1368ll : 1320ll)*in->VolumeCB();
           break;
         case 1:
-          flops = (x ? 48ll : 0 ) * in->VolumeCB() + 96ll*bulk + 120ll*wall;
+          flops_Tmp = (x ? 48ll : 0 ) * in->VolumeCB() + 96ll*bulk + 120ll*wall;
           break;
         case 2:
-          flops = 144ll*in->VolumeCB()*Ls + 3ll*Ls*(Ls-1ll);
+          flops_Tmp = 144ll*in->VolumeCB()*Ls + 3ll*Ls*(Ls-1ll);
           break;
         default:
           errorQuda("invalid Dslash type");
       }
-      return flops;
-    }
-
-    long long bytes() const {
-      bool isHalf = in->Precision() == sizeof(short) ? true : false;
-      int spinor_bytes = 2 * in->Ncolor() * in->Nspin() * in->Precision() + (isHalf ? sizeof(float) : 0);
-      long long Ls = in->X(4);
-      long long bytes;
-
-      switch(DS_type){
-      case 0:
-	bytes = DslashCuda::bytes();
-	break;
-      case 1:
-	bytes = (x ? 5ll : 4ll ) * spinor_bytes * in->VolumeCB();
-	break;
-      case 2:
-	bytes = (x ? Ls + 2 : Ls + 1) * spinor_bytes * in->VolumeCB();
-	break;
-      default:
-	errorQuda("invalid Dslash type");
-      }
-      return bytes;
+      return flops_Tmp;
     }
   };
 #endif // GPU_DOMAIN_WALL_DIRAC
