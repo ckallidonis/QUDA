@@ -2,7 +2,7 @@ include ../make.inc
 
 QUDA = ../lib/libquda.a
 
-INC += -I../include -I. -I/users/krikitos/lime-1.3.2/include
+INC += -I../include -I. -I/users/kallidoc/install/include
 
 HDRS = blas_reference.h wilson_dslash_reference.h staggered_dslash_reference.h    \
 	domain_wall_dslash_reference.h test_util.h dslash_util.h
