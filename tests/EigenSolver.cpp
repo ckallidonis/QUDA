@@ -53,7 +53,7 @@ extern char latfile_smeared[];
 extern void usage(char** );
 
 extern int src[];
-extern int t_sinkSource;
+//extern int t_sinkSource;
 extern int Q_sq;
 extern int nsmearAPE;
 extern int nsmearGauss;
@@ -363,7 +363,7 @@ int main(int argc, char **argv)
   info.lL[3] = tdim;
   info.Nsources = numSourcePositions;
   info.Q_sq = Q_sq;
-  info.tsinkSource=t_sinkSource;
+  //  info.tsinkSource=t_sinkSource;
 
   //  FILE *ptr_sources;
   // ptr_sources = fopen(pathListSourcePositions,"r");
@@ -378,7 +378,7 @@ int main(int argc, char **argv)
 
   initQuda(device);
   init_qudaQKXTM_Kepler(&info);
-  printfQuda("The source sink time separation is %d\n",t_sinkSource);
+  //  printfQuda("The source sink time separation is %d\n",t_sinkSource);
   printf_qudaQKXTM_Kepler();
 
 

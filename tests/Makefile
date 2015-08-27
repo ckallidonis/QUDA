@@ -7,6 +7,8 @@ INC += -I../include -I. -I/users/kallidoc/install/include
 HDRS = blas_reference.h wilson_dslash_reference.h staggered_dslash_reference.h    \
 	domain_wall_dslash_reference.h test_util.h dslash_util.h
 
+LDFLAGS += -L/users/kallidoc/install/lib -larpack -lparpack
+
 #TESTS = invert_test
 #	deflation_test						\
 	$(DIRAC_TEST) $(STAGGERED_DIRAC_TEST) $(FATLINK_TEST)	\
