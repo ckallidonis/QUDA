@@ -25,7 +25,7 @@ namespace quda {
     const DiracMatrix &dirac_mat; 
     int N_Poly;  // Chebychev polynomial order
     double shift;   // eigen shift offset 
-    double *cheby_param;  // Chebychev polynomial coefficients values
+    double cheby_param[2];  // Chebychev polynomial coefficients values
 
     mutable cudaColorSpinorField *tmp1; // temporary hack
     mutable cudaColorSpinorField *tmp2; // temporary hack
@@ -35,17 +35,21 @@ namespace quda {
 
     public:
     RitzMat(DiracMatrix &d, const QudaEigParam &param) 
-      : dirac_mat(d), N_Poly(param.NPoly), shift(param.eigen_shift), 
-        cheby_param(param.MatPoly_param), tmp1(NULL), tmp2(NULL)
-    {;}
+      : dirac_mat(d), N_Poly(param.NPoly), shift(param.eigen_shift) , tmp1(NULL), tmp2(NULL)
+    {
+      //      cheby_param[0] = param.MatPoly_param[0];
+      // cheby_param[1] = param.MatPoly_param[1];
+    }
     RitzMat(DiracMatrix *d, const QudaEigParam &param)
-      : dirac_mat(*d), N_Poly(param.NPoly), shift(param.eigen_shift),
-        cheby_param(param.MatPoly_param), tmp1(NULL), tmp2(NULL)
-    {;}
+      : dirac_mat(*d), N_Poly(param.NPoly), shift(param.eigen_shift), tmp1(NULL), tmp2(NULL)
+    {
+      //cheby_param[0] = param.MatPoly_param[0];
+      //cheby_param[1] = param.MatPoly_param[1];
+    }
     virtual ~RitzMat();
 
     void operator()(cudaColorSpinorField &out, const cudaColorSpinorField &in) const;
-
+    void operator()(cudaColorSpinorField &out, const cudaColorSpinorField &in, double amin, double amax) const;
     //    unsigned long long flops() const { return (dirac_mat->dirac)->Flops(); }
 
     //    std::string Type() const { return typeid(*(dirac_mat->dirac)).name(); }

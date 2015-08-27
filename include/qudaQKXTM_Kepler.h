@@ -276,4 +276,8 @@ void DeflateAndInvert_loop(void **gaugeToPlaquette, QudaInvertParam *param ,Quda
 void DeflateAndInvert_loop_w_One_Der(void **gaugeToPlaquette, QudaInvertParam *param ,QudaGaugeParam *gauge_param, char *filename_eigenValues_down, char *filename_eigenVectors_down,char *filename_out , int NeV , int Nstoch, int seed , int NdumpStep, quda::qudaQKXTMinfo_Kepler info);
 void DeflateAndInvert_loop_w_One_Der_volumeSource(void **gaugeToPlaquette, QudaInvertParam *param ,QudaGaugeParam *gauge_param,char *filename_eigenValues_up, char *filename_eigenVectors_up, char *filename_eigenValues_down, char *filename_eigenVectors_down,char *filename_out , int NeV , int Nstoch, int seed , int NdumpStep, quda::qudaQKXTMinfo_Kepler info);
 void DeflateAndInvert_threepTwop(void **gaugeSmeared, void **gauge, QudaInvertParam *param ,QudaGaugeParam *gauge_param, char *filename_eigenValues_up, char *filename_eigenVectors_up, char *filename_eigenValues_down, char *filename_eigenVectors_down, char *filename_twop, char *filename_threep,int NeV, quda::qudaQKXTMinfo_Kepler info, quda::WHICHPARTICLE NUCLEON, quda::WHICHPROJECTOR PID );
+
+void EigenSolver_arpack( int nev,  int ncv, int which, int use_acc, double __complex__  *evals, double __complex__  *v,
+			 double tol, int maxiter, char *arpack_logfile, QudaEigParam *eig_param, double amin, double amax);
+
 #endif
