@@ -6,3 +6,9 @@
 tests/*_test
 make.inc
 milc_interface/*
+tests/deflationInverter
+tests/deflationLoops
+tests/deflationLoops_w_oneD
+tests/deflationLoops_w_oneD_volumeSource
+tests/deflationTwopThreep
+*orig*

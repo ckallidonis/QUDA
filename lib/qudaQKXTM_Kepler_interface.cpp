@@ -2115,107 +2115,135 @@ void DeflateAndInvert_threepTwop(void **gaugeSmeared, void **gauge, QudaInvertPa
   char filename_mesons[257];
   char filename_baryons[257];
 
+
   for(int isource = 0 ; isource < info.Nsources ; isource++){
 
-    sprintf(filename_mesons,"%s.mesons.SS.%02d.%02d.%02d.%02d.dat",filename_twop,info.sourcePosition[isource][0],info.sourcePosition[isource][1],info.sourcePosition[isource][2],info.sourcePosition[isource][3]);
-    sprintf(filename_baryons,"%s.baryons.SS.%02d.%02d.%02d.%02d.dat",filename_twop,info.sourcePosition[isource][0],info.sourcePosition[isource][1],info.sourcePosition[isource][2],info.sourcePosition[isource][3]);
-    bool checkMesons, checkBaryons;
-    checkMesons = exists_file(filename_mesons);
-    checkBaryons = exists_file(filename_baryons);
-    if( (checkMesons == true) && (checkBaryons == true) ) continue; // because threep are written before twop if I checked twop I know that threep are fine
+    if(info.run2pt_src[isource] && info.run3pt_src[isource]){
+      for(int isc = 0 ; isc < 12 ; isc++){
+	///////////////////////////////////////////////////////////////////////////////// forward prop for up quark ///////////////////////////
+	t1 = MPI_Wtime();
+	memset(input_vector,0,X[0]*X[1]*X[2]*X[3]*spinorSiteSize*sizeof(double));
+	b->changeTwist(QUDA_TWIST_PLUS);
+	x->changeTwist(QUDA_TWIST_PLUS);
+	b->Even().changeTwist(QUDA_TWIST_PLUS);
+	b->Odd().changeTwist(QUDA_TWIST_PLUS);
+	x->Even().changeTwist(QUDA_TWIST_PLUS);
+	x->Odd().changeTwist(QUDA_TWIST_PLUS);
+	for(int i = 0 ; i < 4 ; i++)
+	  my_src[i] = info.sourcePosition[isource][i] - comm_coords(default_topo)[i] * X[i];
+	
+	if( (my_src[0]>=0) && (my_src[0]<X[0]) && (my_src[1]>=0) && (my_src[1]<X[1]) && (my_src[2]>=0) && (my_src[2]<X[2]) && (my_src[3]>=0) && (my_src[3]<X[3]))
+	  *( (double*)input_vector + my_src[3]*X[2]*X[1]*X[0]*24 + my_src[2]*X[1]*X[0]*24 + my_src[1]*X[0]*24 + my_src[0]*24 + isc*2 ) = 1.;
+	
+	K_vector->packVector((double*) input_vector);
+	K_vector->loadVector();
+	K_guess->gaussianSmearing(*K_vector,*K_gaugeSmeared);
+	K_guess->uploadToCuda(b,flag_eo);
+	dirac.prepare(in,out,*x,*b,param->solution_type);
+	// in is reference to the b but for a parity sinlet
+	// out is reference to the x but for a parity sinlet
+	cudaColorSpinorField *tmp_up = new cudaColorSpinorField(*in);
+	dirac.Mdag(*in, *tmp_up);
+	delete tmp_up;
+	// now the the source vector b is ready to perform deflation and find the initial guess
+	K_vector->downloadFromCuda(in,flag_eo);
+	K_vector->download();
+	deflation_up->deflateGuessVector(*K_guess,*K_vector);
+	K_guess->uploadToCuda(out,flag_eo); // initial guess is ready
+	//  zeroCuda(*out); // remove it later , just for test
+	(*solve)(*out,*in);
+	dirac.reconstruct(*x,*b,param->solution_type);
+	K_vector->downloadFromCuda(x,flag_eo);
+	if (param->mass_normalization == QUDA_MASS_NORMALIZATION || param->mass_normalization == QUDA_ASYMMETRIC_MASS_NORMALIZATION) {
+	  K_vector->scaleVector(2*param->kappa);
+	}
+	
+	K_temp->castDoubleToFloat(*K_vector);
+	K_prop_up->absorbVectorToDevice(*K_temp,isc/3,isc%3);
+	t2 = MPI_Wtime();
+	printfQuda("Inversion up = %d,  for source = %d finished in time %f sec\n",isc,isource,t2-t1);
+	//////////////////////////////////////////////////////////
+	////////////////////////////////////////////////////////////////////////////// Forward prop for down quark ///////////////////////////////////
+	/////////////////////////////////////////////////////////
+	t1 = MPI_Wtime();
+	memset(input_vector,0,X[0]*X[1]*X[2]*X[3]*spinorSiteSize*sizeof(double));
+	b->changeTwist(QUDA_TWIST_MINUS);
+	x->changeTwist(QUDA_TWIST_MINUS);
+	b->Even().changeTwist(QUDA_TWIST_MINUS);
+	b->Odd().changeTwist(QUDA_TWIST_MINUS);
+	x->Even().changeTwist(QUDA_TWIST_MINUS);
+	x->Odd().changeTwist(QUDA_TWIST_MINUS);
+	for(int i = 0 ; i < 4 ; i++)
+	  my_src[i] = info.sourcePosition[isource][i] - comm_coords(default_topo)[i] * X[i];
+	
+	if( (my_src[0]>=0) && (my_src[0]<X[0]) && (my_src[1]>=0) && (my_src[1]<X[1]) && (my_src[2]>=0) && (my_src[2]<X[2]) && (my_src[3]>=0) && (my_src[3]<X[3]))
+	  *( (double*)input_vector + my_src[3]*X[2]*X[1]*X[0]*24 + my_src[2]*X[1]*X[0]*24 + my_src[1]*X[0]*24 + my_src[0]*24 + isc*2 ) = 1.;
+	
+	K_vector->packVector((double*) input_vector);
+	K_vector->loadVector();
+	K_guess->gaussianSmearing(*K_vector,*K_gaugeSmeared);
+	K_guess->uploadToCuda(b,flag_eo);
+	dirac.prepare(in,out,*x,*b,param->solution_type);
+	// in is reference to the b but for a parity sinlet
+	// out is reference to the x but for a parity sinlet
+	cudaColorSpinorField *tmp_down = new cudaColorSpinorField(*in);
+	dirac.Mdag(*in, *tmp_down);
+	delete tmp_down;
+	// now the the source vector b is ready to perform deflation and find the initial guess
+	K_vector->downloadFromCuda(in,flag_eo);
+	K_vector->download();
+	deflation_down->deflateGuessVector(*K_guess,*K_vector);
+	K_guess->uploadToCuda(out,flag_eo); // initial guess is ready
+	//  zeroCuda(*out); // remove it later , just for test
+	(*solve)(*out,*in);
+	dirac.reconstruct(*x,*b,param->solution_type);
+	K_vector->downloadFromCuda(x,flag_eo);
+	if (param->mass_normalization == QUDA_MASS_NORMALIZATION || param->mass_normalization == QUDA_ASYMMETRIC_MASS_NORMALIZATION) {
+	  K_vector->scaleVector(2*param->kappa);
+	}
 
-    for(int isc = 0 ; isc < 12 ; isc++){
-      ///////////////////////////////////////////////////////////////////////////////// forward prop for up quark ///////////////////////////
-      t1 = MPI_Wtime();
-      memset(input_vector,0,X[0]*X[1]*X[2]*X[3]*spinorSiteSize*sizeof(double));
-      b->changeTwist(QUDA_TWIST_PLUS);
-      x->changeTwist(QUDA_TWIST_PLUS);
-      b->Even().changeTwist(QUDA_TWIST_PLUS);
-      b->Odd().changeTwist(QUDA_TWIST_PLUS);
-      x->Even().changeTwist(QUDA_TWIST_PLUS);
-      x->Odd().changeTwist(QUDA_TWIST_PLUS);
-      for(int i = 0 ; i < 4 ; i++)
-	my_src[i] = info.sourcePosition[isource][i] - comm_coords(default_topo)[i] * X[i];
+	K_temp->castDoubleToFloat(*K_vector);
+	K_prop_down->absorbVectorToDevice(*K_temp,isc/3,isc%3);
+	t2 = MPI_Wtime();
+	printfQuda("Inversion down = %d,  for source = %d finished in time %f sec\n",isc,isource,t2-t1);
+      } // close loop over 12 spin-color
 
-      if( (my_src[0]>=0) && (my_src[0]<X[0]) && (my_src[1]>=0) && (my_src[1]<X[1]) && (my_src[2]>=0) && (my_src[2]<X[2]) && (my_src[3]>=0) && (my_src[3]<X[3]))
-	*( (double*)input_vector + my_src[3]*X[2]*X[1]*X[0]*24 + my_src[2]*X[1]*X[0]*24 + my_src[1]*X[0]*24 + my_src[0]*24 + isc*2 ) = 1.;
+    }//-check if running for 2pt and/or 3pt
 
-      K_vector->packVector((double*) input_vector);
-      K_vector->loadVector();
-      K_guess->gaussianSmearing(*K_vector,*K_gaugeSmeared);
-      K_guess->uploadToCuda(b,flag_eo);
-      dirac.prepare(in,out,*x,*b,param->solution_type);
-      // in is reference to the b but for a parity sinlet
-      // out is reference to the x but for a parity sinlet
-      cudaColorSpinorField *tmp_up = new cudaColorSpinorField(*in);
-      dirac.Mdag(*in, *tmp_up);
-      delete tmp_up;
-      // now the the source vector b is ready to perform deflation and find the initial guess
-      K_vector->downloadFromCuda(in,flag_eo);
-      K_vector->download();
-      deflation_up->deflateGuessVector(*K_guess,*K_vector);
-      K_guess->uploadToCuda(out,flag_eo); // initial guess is ready
-      //  zeroCuda(*out); // remove it later , just for test
-      (*solve)(*out,*in);
-      dirac.reconstruct(*x,*b,param->solution_type);
-      K_vector->downloadFromCuda(x,flag_eo);
-      if (param->mass_normalization == QUDA_MASS_NORMALIZATION || param->mass_normalization == QUDA_ASYMMETRIC_MASS_NORMALIZATION) {
-	K_vector->scaleVector(2*param->kappa);
+    if(info.run2pt_src[isource]){
+      sprintf(filename_mesons,"%s.mesons.SS.%02d.%02d.%02d.%02d.dat",filename_twop,info.sourcePosition[isource][0],info.sourcePosition[isource][1],info.sourcePosition[isource][2],info.sourcePosition[isource][3]);
+      sprintf(filename_baryons,"%s.baryons.SS.%02d.%02d.%02d.%02d.dat",filename_twop,info.sourcePosition[isource][0],info.sourcePosition[isource][1],info.sourcePosition[isource][2],info.sourcePosition[isource][3]);
+      bool checkMesons, checkBaryons;
+      checkMesons = exists_file(filename_mesons);
+      checkBaryons = exists_file(filename_baryons);
+      if( (checkMesons != true) && (checkBaryons != true) ){ // continue; // because threep are written before twop if I checked twop I know that threep are fine
+	// smear the forward propagators and perform the 2pt-correlation function
+	for(int nu = 0 ; nu < 4 ; nu++)
+	  for(int c2 = 0 ; c2 < 3 ; c2++){
+	    K_temp->copyPropagator(*K_prop_up,nu,c2);
+	    K_vector->castFloatToDouble(*K_temp);
+	    K_guess->gaussianSmearing(*K_vector,*K_gaugeSmeared);
+	    K_temp->castDoubleToFloat(*K_guess);
+	    K_prop_up->absorbVectorToDevice(*K_temp,nu,c2);
+	    
+	    K_temp->copyPropagator(*K_prop_down,nu,c2);
+	    K_vector->castFloatToDouble(*K_temp);
+	    K_guess->gaussianSmearing(*K_vector,*K_gaugeSmeared);
+	    K_temp->castDoubleToFloat(*K_guess);
+	    K_prop_down->absorbVectorToDevice(*K_temp,nu,c2);
+	  }
+	/////
+	K_prop_up->rotateToPhysicalBase_device(+1);
+	K_prop_down->rotateToPhysicalBase_device(-1);
+	t1 = MPI_Wtime();
+	K_contract->contractMesons(*K_prop_up,*K_prop_down,filename_mesons,isource);
+	K_contract->contractBaryons(*K_prop_up,*K_prop_down,filename_baryons,isource);
+	t2 = MPI_Wtime();
+	printfQuda("2pt contractions for source = %d finished in time %f sec\n",isource,t2-t1);
       }
+    }
 
-      K_temp->castDoubleToFloat(*K_vector);
-      K_prop_up->absorbVectorToDevice(*K_temp,isc/3,isc%3);
-      t2 = MPI_Wtime();
-      printfQuda("Inversion up = %d,  for source = %d finished in time %f sec\n",isc,isource,t2-t1);
-      //////////////////////////////////////////////////////////
-      ////////////////////////////////////////////////////////////////////////////// Forward prop for down quark ///////////////////////////////////
-      /////////////////////////////////////////////////////////
-      t1 = MPI_Wtime();
-      memset(input_vector,0,X[0]*X[1]*X[2]*X[3]*spinorSiteSize*sizeof(double));
-      b->changeTwist(QUDA_TWIST_MINUS);
-      x->changeTwist(QUDA_TWIST_MINUS);
-      b->Even().changeTwist(QUDA_TWIST_MINUS);
-      b->Odd().changeTwist(QUDA_TWIST_MINUS);
-      x->Even().changeTwist(QUDA_TWIST_MINUS);
-      x->Odd().changeTwist(QUDA_TWIST_MINUS);
-      for(int i = 0 ; i < 4 ; i++)
-	my_src[i] = info.sourcePosition[isource][i] - comm_coords(default_topo)[i] * X[i];
-
-      if( (my_src[0]>=0) && (my_src[0]<X[0]) && (my_src[1]>=0) && (my_src[1]<X[1]) && (my_src[2]>=0) && (my_src[2]<X[2]) && (my_src[3]>=0) && (my_src[3]<X[3]))
-	*( (double*)input_vector + my_src[3]*X[2]*X[1]*X[0]*24 + my_src[2]*X[1]*X[0]*24 + my_src[1]*X[0]*24 + my_src[0]*24 + isc*2 ) = 1.;
-
-      K_vector->packVector((double*) input_vector);
-      K_vector->loadVector();
-      K_guess->gaussianSmearing(*K_vector,*K_gaugeSmeared);
-      K_guess->uploadToCuda(b,flag_eo);
-      dirac.prepare(in,out,*x,*b,param->solution_type);
-      // in is reference to the b but for a parity sinlet
-      // out is reference to the x but for a parity sinlet
-      cudaColorSpinorField *tmp_down = new cudaColorSpinorField(*in);
-      dirac.Mdag(*in, *tmp_down);
-      delete tmp_down;
-      // now the the source vector b is ready to perform deflation and find the initial guess
-      K_vector->downloadFromCuda(in,flag_eo);
-      K_vector->download();
-      deflation_down->deflateGuessVector(*K_guess,*K_vector);
-      K_guess->uploadToCuda(out,flag_eo); // initial guess is ready
-      //  zeroCuda(*out); // remove it later , just for test
-      (*solve)(*out,*in);
-      dirac.reconstruct(*x,*b,param->solution_type);
-      K_vector->downloadFromCuda(x,flag_eo);
-      if (param->mass_normalization == QUDA_MASS_NORMALIZATION || param->mass_normalization == QUDA_ASYMMETRIC_MASS_NORMALIZATION) {
-	K_vector->scaleVector(2*param->kappa);
-      }
-
-      K_temp->castDoubleToFloat(*K_vector);
-      K_prop_down->absorbVectorToDevice(*K_temp,isc/3,isc%3);
-      t2 = MPI_Wtime();
-      printfQuda("Inversion down = %d,  for source = %d finished in time %f sec\n",isc,isource,t2-t1);
-    } // close loop over 12 spin-color
-
-
-    /////////////////////////////////// Smearing on the 3D propagators
-
+    // Perform the sequential inversion and 3pt-correlation function
     //-C.Kallidonis: Loop over the number of sink-source separations
     int my_fixSinkTime;
     char filename_threep_tsink[257];
@@ -2224,6 +2252,8 @@ void DeflateAndInvert_threepTwop(void **gaugeSmeared, void **gauge, QudaInvertPa
       sprintf(filename_threep_tsink,"%s_tsink%d",filename_threep,info.tsinkSource[its]);
       printfQuda("The three-point function base name is: %s\n",filename_threep_tsink);
       
+
+      /////////////////////////////////// Smearing on the 3D propagators
       t1 = MPI_Wtime();
       K_temp->zero_device();
       checkCudaError();
@@ -2258,6 +2288,7 @@ void DeflateAndInvert_threepTwop(void **gaugeSmeared, void **gauge, QudaInvertPa
 	}
       t2 = MPI_Wtime();
       printfQuda("Time needed to prepare the 3D props for sink-source[%d]=%d is %f sec\n",its,info.tsinkSource[its],t2-t1);
+
 
       /////////////////////////////////////////sequential propagator for the part 1
       for(int nu = 0 ; nu < 4 ; nu++)
@@ -2387,32 +2418,8 @@ void DeflateAndInvert_threepTwop(void **gaugeSmeared, void **gauge, QudaInvertPa
 
     }//-loop over sink-source separations      
 
-    ////////// At the very end ///////////////////////
 
 
-    // smear the forward propagators
-    for(int nu = 0 ; nu < 4 ; nu++)
-      for(int c2 = 0 ; c2 < 3 ; c2++){
-	K_temp->copyPropagator(*K_prop_up,nu,c2);
-	K_vector->castFloatToDouble(*K_temp);
-	K_guess->gaussianSmearing(*K_vector,*K_gaugeSmeared);
-	K_temp->castDoubleToFloat(*K_guess);
-	K_prop_up->absorbVectorToDevice(*K_temp,nu,c2);
-	
-	K_temp->copyPropagator(*K_prop_down,nu,c2);
-	K_vector->castFloatToDouble(*K_temp);
-	K_guess->gaussianSmearing(*K_vector,*K_gaugeSmeared);
-	K_temp->castDoubleToFloat(*K_guess);
-	K_prop_down->absorbVectorToDevice(*K_temp,nu,c2);
-      }
-    /////
-    K_prop_up->rotateToPhysicalBase_device(+1);
-    K_prop_down->rotateToPhysicalBase_device(-1);
-    t1 = MPI_Wtime();
-    K_contract->contractMesons(*K_prop_up,*K_prop_down,filename_mesons,isource);
-    K_contract->contractBaryons(*K_prop_up,*K_prop_down,filename_baryons,isource);
-    t2 = MPI_Wtime();
-    printfQuda("Contractions for source = %d finished in time %f sec\n",isource,t2-t1);
   } // close loop over source positions
 
 

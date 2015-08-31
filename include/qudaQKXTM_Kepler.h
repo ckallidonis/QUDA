@@ -41,6 +41,8 @@ namespace quda {
     int Q_sq;
     int Ntsink;
     int tsinkSource[MAX_TSINK];
+    int run2pt_src[MAX_NSOURCES];
+    int run3pt_src[MAX_NSOURCES];
   } qudaQKXTMinfo_Kepler;
 
   // forward declaration
