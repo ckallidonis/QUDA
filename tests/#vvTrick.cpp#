@@ -1,0 +1,232 @@
+#include <stdlib.h>
+#include <stdio.h>
+#include <time.h>
+#include <math.h>
+#include <string.h>
+
+#include <util_quda.h>
+#include <test_util.h>
+#include <dslash_util.h>
+#include <blas_reference.h>
+#include <wilson_dslash_reference.h>
+#include "misc.h"
+
+#include "face_quda.h"
+
+#ifdef QMP_COMMS
+#include <qmp.h>
+#elif defined(MPI_COMMS)
+#include <mpi.h>
+#endif
+
+#include <gauge_qio.h>
+#include <gsl/gsl_rng.h>
+
+#define MAX(a,b) ((a)>(b)?(a):(b))
+
+
+//#defineTESTPOINT
+//#defineRANDOM_CONF
+#defineCROSSCHECK
+
+// In a typical application, quda.h is the only QUDA header required.
+#include <quda.h>
+#include <contractQuda.h>
+#include <cufft.h>
+
+//#include <randCuda.h>
+
+extern booltune;
+extern intdevice;
+extern QudaDslashTypedslash_type;
+extern intxdim;
+extern intydim;
+extern intzdim;
+extern inttdim;
+extern intLsdim;
+extern intnumberHP;
+extern intnConf;
+extern intnumberLP;
+extern intMaxP;
+extern intgridsize_from_cmdline[];
+extern QudaReconstructTypelink_recon;
+extern QudaPrecisionprec;
+extern QudaReconstructTypelink_recon_sloppy;
+extern QudaPrecisionprec_sloppy;
+extern QudaInverterTypeinv_type;
+extern intmultishift;// whether to test multi-shift or standard solver
+
+extern charlatfile[];
+
+extern voidusage(char**);
+
+intgenDataArray(const int nSources, int *dataLP, int &flag)
+{
+  intcount = 0, power = 128, accum = nSources;
+
+  if(nSources < power)
+    {
+      dataLP[count]= nSources;
+      count= 1;
+      flag= 0;
+
+      returncount;
+    }
+
+  do
+    {
+      dataLP[count]= power;
+
+      accum-= power;
+      power*= 2;
+      count++;
+    }while(accum > 0);
+
+  if(accum == 0)
+    {
+      flag = 0;
+      returncount;
+    }
+  else
+    {
+      flag = 1;
+      accum+= power/2;
+
+      dataLP[count-1] = accum;
+
+      returncount;
+    }
+}
+
+void
+display_test_info()
+{
+  printfQuda("running the following test:\n");
+    
+  printfQuda("prec    sloppy_prec    link_recon  sloppy_link_recon S_dimension T_dimension Ls_dimension\n");
+  printfQuda("%s   %s             %s            %s            %d/%d/%d          %d         %d\n",
+	     get_prec_str(prec),get_prec_str(prec_sloppy),
+	     get_recon_str(link_recon), 
+	     get_recon_str(link_recon_sloppy),  xdim, ydim, zdim, tdim, Lsdim);     
+
+  printfQuda("Grid partition info:     X  Y  Z  T\n"); 
+  printfQuda("                         %d  %d  %d  %d\n", 
+	     dimPartitioned(0),
+	     dimPartitioned(1),
+	     dimPartitioned(2),
+	     dimPartitioned(3)); 
+  
+  return ;
+  
+}
+
+voidgenRandomSource(void *spinorIn, QudaInvertParam *inv_param, gsl_rng *rNum)
+{
+#ifdefTESTPOINT
+  if(inv_param->cpu_prec == QUDA_SINGLE_PRECISION)
+    {
+      for(int i = 0; i<V*24; i++)
+	((float*) spinorIn)[i] = 0.;
+
+      if(comm_rank() == 0)
+	((float*) spinorIn)[18] = 1.;//t-Component
+    }
+  else if(inv_param->cpu_prec == QUDA_DOUBLE_PRECISION)
+    {
+      for(int i = 0; i<V*24; i++)
+	((double*) spinorIn)[i] = 0.;
+
+      if(comm_rank() == 0)
+	((double*) spinorIn)[18] = 1.;
+    }
+#else
+  if (inv_param->cpu_prec == QUDA_SINGLE_PRECISION) 
+    {
+      for(int i = 0; i<V*24; i++)
+	((float*) spinorIn)[i] = 0.;
+
+      for(int i = 0; i<V*12; i++)
+	{
+	  intrandomNumber=gsl_rng_uniform_int(rNum, 4);
+	  
+	  switch(randomNumber)
+	    {
+	    case 0:
+	      
+	      ((float*) spinorIn)[i*2]= 1.;
+	      break;
+
+	    case 1:
+	      
+	      ((float*) spinorIn)[i*2]= -1.;
+	      break;
+	      
+	    case 2:
+	      
+	      ((float*) spinorIn)[i*2+1]= 1.;
+	      break;
+	      
+	    case 3:
+	      
+	      ((float*) spinorIn)[i*2+1]= -1.;
+	      break;
+	    }
+	}
+    }
+  else
+    {
+      for(int i = 0; i<V*24; i++)
+	((double*) spinorIn)[i] = 0.;
+
+      for(int i = 0; i<V*12; i++)
+	{
+	  intrandomNumber=gsl_rng_uniform_int(rNum, 4);
+	  
+	  switch(randomNumber)
+	    {
+	    case 0:
+	      
+	      ((double*) spinorIn)[i*2]= 1.;
+	      break;
+	      
+	    case 1:
+	      
+	      ((double*) spinorIn)[i*2]= -1.;
+	      break;
+	      
+	    case 2:
+	      
+	      ((double*) spinorIn)[i*2+1]= 1.;
+	      break;
+	      
+	    case 3:
+	      
+	      ((double*) spinorIn)[i*2+1]= -1.;
+	      break;
+	    }
+	}
+    }
+#endif
+}
+
+voidreOrder(double *array1, double *array2, const int arrayOffset)
+{
+  if(array1 != array2)
+    {
+      for(int i = 0; i<V*arrayOffset; i++)
+	array2[i]= 0.;
+    }
+
+  for(int i = 0; i<V*arrayOffset; i++)
+    {
+    }
+  
+  cudaMemcpy(cnC_gv[mu], ctrnS, sizeof(double)*32*Vol*tdim, cudaMgauge_param.type = QUDA_WILSON_LINKS;
+	     gauge_param.gauge_order = QUDA_QDP_GAUGE_ORDER;
+	     gauge_param.t_boundary = QUDA_ANTI_PERIODIC_T;
+
+	     gauge_param.cpu_prec = cpu_prec;
+	     gauge_param.cuda_prec = cuda_prec;
+	     gauge_param.reconstruct = link_recon;
+	     gauge_param.cuda_prec_sloppy = cuda_prec_sloppy;
+	     gauge_param.reconstruct_sloppy = link_recon_

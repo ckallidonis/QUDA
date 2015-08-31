@@ -15,8 +15,6 @@
 #define QUDAQKXTM_DIM 4
 #define MAX_NSOURCES 1000
 #define MAX_NMOMENTA 1000
-#define MAX_TSINK 10
-
 
 #define LEXIC(it,iz,iy,ix,L) ( (it)*L[0]*L[1]*L[2] + (iz)*L[0]*L[1] + (iy)*L[0] + (ix) )
 #define LEXIC_TZY(it,iz,iy,L) ( (it)*L[1]*L[2] + (iz)*L[1] + (iy) )
@@ -39,11 +37,25 @@ namespace quda {
     int sourcePosition[MAX_NSOURCES][QUDAQKXTM_DIM];
     QudaPrecision Precision;
     int Q_sq;
-    int Ntsink;
-    int tsinkSource[MAX_TSINK];
-    int run2pt_src[MAX_NSOURCES];
-    int run3pt_src[MAX_NSOURCES];
+    int tsinkSource;
   } qudaQKXTMinfo_Kepler;
+
+  enum WHICHSPECTRUM{SR,LR,SM,LM,SI,LI};
+
+  typedef struct{
+    int PolyDeg;  // degree of the polynomial
+    int N_EigenVectors;      // Number of the eigenvectors we want
+    int NkV;      // total size of Krylov space
+    WHICHSPECTRUM spectrumPart; // for which part of the spectrum we want to solve
+    bool isACC;
+    double tolArpack;
+    int maxIterArpack;
+    char *arpack_logfile;
+    double amin;
+    double amax;
+    bool isEven;
+    bool isFullOp;
+  }qudaQKXTM_arpackInfo;
 
   // forward declaration
 template<typename Float>  class QKXTM_Field_Kepler;
@@ -278,4 +290,6 @@ void DeflateAndInvert_loop(void **gaugeToPlaquette, QudaInvertParam *param ,Quda
 void DeflateAndInvert_loop_w_One_Der(void **gaugeToPlaquette, QudaInvertParam *param ,QudaGaugeParam *gauge_param, char *filename_eigenValues_down, char *filename_eigenVectors_down,char *filename_out , int NeV , int Nstoch, int seed , int NdumpStep, quda::qudaQKXTMinfo_Kepler info);
 void DeflateAndInvert_loop_w_One_Der_volumeSource(void **gaugeToPlaquette, QudaInvertParam *param ,QudaGaugeParam *gauge_param,char *filename_eigenValues_up, char *filename_eigenVectors_up, char *filename_eigenValues_down, char *filename_eigenVectors_down,char *filename_out , int NeV , int Nstoch, int seed , int NdumpStep, quda::qudaQKXTMinfo_Kepler info);
 void DeflateAndInvert_threepTwop(void **gaugeSmeared, void **gauge, QudaInvertParam *param ,QudaGaugeParam *gauge_param, char *filename_eigenValues_up, char *filename_eigenVectors_up, char *filename_eigenValues_down, char *filename_eigenVectors_down, char *filename_twop, char *filename_threep,int NeV, quda::qudaQKXTMinfo_Kepler info, quda::WHICHPARTICLE NUCLEON, quda::WHICHPROJECTOR PID );
+
+void calcEigenVectorsAndInvert_threepTwop(void **gaugeSmeared, void **gauge, QudaInvertParam *param ,QudaGaugeParam *gauge_param, char *filename_twop, char *filename_threep, int NeV, qudaQKXTMinfo_Kepler info, qudaQKXTM_arpackInfo arpackInfo, WHICHPARTICLE NUCLEON, WHICHPROJECTOR PID );
 #endif
