@@ -367,14 +367,14 @@ int main(int argc, char **argv)
 
 
   if(strcmp(run2pt3pt,"all")==0 || strcmp(run2pt3pt,"ALL")==0){
-    printQuda("Will run for all %d source-positions for 2pt- and 3pt- functions\n",numSourcePositions);
+    printfQuda("Will run for all %d source-positions for 2pt- and 3pt- functions\n",numSourcePositions);
     for(int is = 0; is < numSourcePositions; is++){
       info.run2pt_src[is] = 1;
       info.run3pt_src[is] = 1;
     }
   }
   else if(strcmp(run2pt3pt,"file")==0 || strcmp(run2pt3pt,"FILE")==0){
-    printQuda("Will read from file %s for which source-positions for 2pt- and 3pt- functions to run\n",pathListRun2pt3pt);  
+    printfQuda("Will read from file %s for which source-positions for 2pt- and 3pt- functions to run\n",pathListRun2pt3pt);  
     FILE *ptr_run23;
     ptr_run23 = fopen(pathListRun2pt3pt,"r");
     if(ptr_run23 == NULL){
@@ -389,13 +389,13 @@ int main(int argc, char **argv)
       nRun2pt += info.run2pt_src[is];
       nRun3pt += info.run3pt_src[is];
     }
-    printQuda("Will run for %d source-positions for 2pt-functions to run\n",nRun2pt);  
-    printQuda("Will run for %d source-positions for 3pt-functions to run\n",nRun3pt);  
+    printfQuda("Will run for %d source-positions for 2pt-functions to run\n",nRun2pt);  
+    printfQuda("Will run for %d source-positions for 3pt-functions to run\n",nRun3pt);  
 
     fclose(ptr_run23);
   }
   else{
-    printQuda("Option --run2pt3pt only accepts all/ALL and file/FILE parameters, or, if running for all source-positions, just disregard it.\n");
+    printfQuda("Option --run2pt3pt only accepts all/ALL and file/FILE parameters, or, if running for all source-positions, just disregard it.\n");
     exit(-1);
   }
 

@@ -2161,7 +2161,7 @@ void DeflateAndInvert_threepTwop(void **gaugeSmeared, void **gauge, QudaInvertPa
 	K_temp->castDoubleToFloat(*K_vector);
 	K_prop_up->absorbVectorToDevice(*K_temp,isc/3,isc%3);
 	t2 = MPI_Wtime();
-	printfQuda("Inversion up = %d,  for source = %d finished in time %f sec\n",isc,isource,t2-t1);
+	printfQuda("Inversion u = %02d,  for source = %02d finished in time %f sec\n",isc,isource,t2-t1);
 	//////////////////////////////////////////////////////////
 	////////////////////////////////////////////////////////////////////////////// Forward prop for down quark ///////////////////////////////////
 	/////////////////////////////////////////////////////////
@@ -2205,7 +2205,7 @@ void DeflateAndInvert_threepTwop(void **gaugeSmeared, void **gauge, QudaInvertPa
 	K_temp->castDoubleToFloat(*K_vector);
 	K_prop_down->absorbVectorToDevice(*K_temp,isc/3,isc%3);
 	t2 = MPI_Wtime();
-	printfQuda("Inversion down = %d,  for source = %d finished in time %f sec\n",isc,isource,t2-t1);
+	printfQuda("Inversion d = %02d,  for source = %02d finished in time %f sec\n",isc,isource,t2-t1);
       } // close loop over 12 spin-color
 
     }//-check if running for 2pt and/or 3pt
@@ -2213,34 +2213,34 @@ void DeflateAndInvert_threepTwop(void **gaugeSmeared, void **gauge, QudaInvertPa
     if(info.run2pt_src[isource]){
       sprintf(filename_mesons,"%s.mesons.SS.%02d.%02d.%02d.%02d.dat",filename_twop,info.sourcePosition[isource][0],info.sourcePosition[isource][1],info.sourcePosition[isource][2],info.sourcePosition[isource][3]);
       sprintf(filename_baryons,"%s.baryons.SS.%02d.%02d.%02d.%02d.dat",filename_twop,info.sourcePosition[isource][0],info.sourcePosition[isource][1],info.sourcePosition[isource][2],info.sourcePosition[isource][3]);
-      bool checkMesons, checkBaryons;
-      checkMesons = exists_file(filename_mesons);
-      checkBaryons = exists_file(filename_baryons);
-      if( (checkMesons != true) && (checkBaryons != true) ){ // continue; // because threep are written before twop if I checked twop I know that threep are fine
+      //bool checkMesons, checkBaryons;
+      //checkMesons = exists_file(filename_mesons);
+      //checkBaryons = exists_file(filename_baryons);
+      //if( (checkMesons != true) && (checkBaryons != true) ){ // continue; // because threep are written before twop if I checked twop I know that threep are fine
 	// smear the forward propagators and perform the 2pt-correlation function
-	for(int nu = 0 ; nu < 4 ; nu++)
-	  for(int c2 = 0 ; c2 < 3 ; c2++){
-	    K_temp->copyPropagator(*K_prop_up,nu,c2);
-	    K_vector->castFloatToDouble(*K_temp);
-	    K_guess->gaussianSmearing(*K_vector,*K_gaugeSmeared);
-	    K_temp->castDoubleToFloat(*K_guess);
-	    K_prop_up->absorbVectorToDevice(*K_temp,nu,c2);
-	    
-	    K_temp->copyPropagator(*K_prop_down,nu,c2);
-	    K_vector->castFloatToDouble(*K_temp);
-	    K_guess->gaussianSmearing(*K_vector,*K_gaugeSmeared);
-	    K_temp->castDoubleToFloat(*K_guess);
-	    K_prop_down->absorbVectorToDevice(*K_temp,nu,c2);
-	  }
-	/////
-	K_prop_up->rotateToPhysicalBase_device(+1);
-	K_prop_down->rotateToPhysicalBase_device(-1);
-	t1 = MPI_Wtime();
-	K_contract->contractMesons(*K_prop_up,*K_prop_down,filename_mesons,isource);
-	K_contract->contractBaryons(*K_prop_up,*K_prop_down,filename_baryons,isource);
-	t2 = MPI_Wtime();
-	printfQuda("2pt contractions for source = %d finished in time %f sec\n",isource,t2-t1);
-      }
+      for(int nu = 0 ; nu < 4 ; nu++)
+	for(int c2 = 0 ; c2 < 3 ; c2++){
+	  K_temp->copyPropagator(*K_prop_up,nu,c2);
+	  K_vector->castFloatToDouble(*K_temp);
+	  K_guess->gaussianSmearing(*K_vector,*K_gaugeSmeared);
+	  K_temp->castDoubleToFloat(*K_guess);
+	  K_prop_up->absorbVectorToDevice(*K_temp,nu,c2);
+	  
+	  K_temp->copyPropagator(*K_prop_down,nu,c2);
+	  K_vector->castFloatToDouble(*K_temp);
+	  K_guess->gaussianSmearing(*K_vector,*K_gaugeSmeared);
+	  K_temp->castDoubleToFloat(*K_guess);
+	  K_prop_down->absorbVectorToDevice(*K_temp,nu,c2);
+	}
+      /////
+      K_prop_up->rotateToPhysicalBase_device(+1);
+      K_prop_down->rotateToPhysicalBase_device(-1);
+      t1 = MPI_Wtime();
+      K_contract->contractMesons(*K_prop_up,*K_prop_down,filename_mesons,isource);
+      K_contract->contractBaryons(*K_prop_up,*K_prop_down,filename_baryons,isource);
+      t2 = MPI_Wtime();
+      printfQuda("2pt contractions for source = %03d finished in time %f sec\n",isource,t2-t1);
+      //}
     }
 
 
@@ -2343,7 +2343,7 @@ void DeflateAndInvert_threepTwop(void **gaugeSmeared, void **gauge, QudaInvertPa
 	    K_temp->castDoubleToFloat(*K_vector);
 	    K_seqProp->absorbVectorToDevice(*K_temp,nu,c2);
 	    t2 = MPI_Wtime();
-	    printfQuda("Inversion for seq prop part 1 = %d,  for source = %d and sink-source = %d finished in time %f sec\n",nu*3+c2,isource,info.tsinkSource[its],t2-t1);
+	    printfQuda("Inversion for seq prop part 1 = %02d,  for source = %03d and sink-source = %02d finished in time %f sec\n",nu*3+c2,isource,info.tsinkSource[its],t2-t1);
 	  }
 
 	////////////////// Contractions for part 1 ////////////////
@@ -2355,7 +2355,7 @@ void DeflateAndInvert_threepTwop(void **gaugeSmeared, void **gauge, QudaInvertPa
 	  K_contract->contractFixSink(*K_seqProp, *K_prop_down, *K_gaugeContractions, PID, NUCLEON, 1, filename_threep_tsink, isource, info.tsinkSource[its]);
 	}                
 	t2 = MPI_Wtime();
-	printfQuda("Time for fix sink contractions for part 1 at sink-source = %d is %f sec\n",info.tsinkSource[its],t2-t1);
+	printfQuda("Time for fix sink contractions for part 1 for source = %03d at sink-source = %02d is %f sec\n",isource,info.tsinkSource[its],t2-t1);
 	/////////////////////////////////////////sequential propagator for the part 2
 	for(int nu = 0 ; nu < 4 ; nu++)
 	  for(int c2 = 0 ; c2 < 3 ; c2++){
@@ -2406,7 +2406,7 @@ void DeflateAndInvert_threepTwop(void **gaugeSmeared, void **gauge, QudaInvertPa
 	    K_temp->castDoubleToFloat(*K_vector);
 	    K_seqProp->absorbVectorToDevice(*K_temp,nu,c2);
 	    t2 = MPI_Wtime();
-	    printfQuda("Inversion for seq prop part 2 = %d,  for source = %d and sink-source = %d finished in time %f sec\n",nu*3+c2,isource,info.tsinkSource[its],t2-t1);
+	    printfQuda("Inversion for seq prop part 2 = %02d,  for source = %03d and sink-source = %02d finished in time %f sec\n",nu*3+c2,isource,info.tsinkSource[its],t2-t1);
 	  }
 
 	////////////////// Contractions for part 2 ////////////////
@@ -2416,9 +2416,7 @@ void DeflateAndInvert_threepTwop(void **gaugeSmeared, void **gauge, QudaInvertPa
 	if(NUCLEON == NEUTRON)
 	  K_contract->contractFixSink(*K_seqProp, *K_prop_up, *K_gaugeContractions, PID, NUCLEON, 2, filename_threep_tsink, isource, info.tsinkSource[its]);
 	t2 = MPI_Wtime();
-
-	printfQuda("Time for fix sink contractions for part 2 at sink-source = %d is %f sec\n",info.tsinkSource[its],t2-t1);
-
+	printfQuda("Time for fix sink contractions for part 2 for source = %03d at sink-source = %02d is %f sec\n",isource,info.tsinkSource[its],t2-t1);
       }//-loop over sink-source separations      
 
     }//-if running for source-position
