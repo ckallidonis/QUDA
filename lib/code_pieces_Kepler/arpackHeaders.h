@@ -42,6 +42,6 @@ extern int _AFT(pzneupd) (int *comm, int *comp_evecs, char *howmany, int *select
 
 extern int _AFT(pmcinitdebug)(int*,int*,int*,int*,int*,int*,int*,int*);
 
-
+#endif
 }
 

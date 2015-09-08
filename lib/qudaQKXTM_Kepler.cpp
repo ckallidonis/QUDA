@@ -1465,7 +1465,7 @@ void QKXTM_Contraction_Kepler<Float>::contractBaryons(QKXTM_Propagator_Kepler<Fl
 	  for(int gamma = 0 ; gamma < 4 ; gamma++)
 	    for(int gammap = 0 ; gammap < 4 ; gammap++){
 	      int it_shift = (it+GK_sourcePosition[isource][3])%GK_totalL[3];
-	      int sign = (it+GK_sourcePosition[isource][3]) > GK_totalL[3] ? -1 : +1;
+	      int sign = (it+GK_sourcePosition[isource][3]) >= GK_totalL[3] ? -1 : +1;
 	      fprintf(ptr_out,"%d \t %d \t %+d %+d %+d \t %d %d \t %+e %+e \t %+e %+e\n",ip,it,GK_moms[imom][0],GK_moms[imom][1],GK_moms[imom][2],gamma,gammap,
 		      sign*corr_mom[it_shift*GK_Nmoms*2+imom*2+0][0][ip][gamma][gammap], sign*corr_mom[it_shift*GK_Nmoms*2+imom*2+1][0][ip][gamma][gammap], sign*corr_mom[it_shift*GK_Nmoms*2+imom*2+0][1][ip][gamma][gammap], sign*corr_mom[it_shift*GK_Nmoms*2+imom*2+1][1][ip][gamma][gammap]);
 	    }
@@ -1631,7 +1631,7 @@ void QKXTM_Contraction_Kepler<Float>::contractFixSink(QKXTM_Propagator_Kepler<Fl
       for(int it = 0 ; it < GK_totalL[3] ; it++)
 	for(int imom = 0 ; imom < GK_Nmoms ; imom++){
 	  int it_shift = (it+GK_sourcePosition[isource][3])%GK_totalL[3];
-	  int sign = (tsinkMtsource+GK_sourcePosition[isource][3]) > GK_totalL[3] ? -1 : +1;
+	  int sign = (tsinkMtsource+GK_sourcePosition[isource][3]) >= GK_totalL[3] ? -1 : +1;
 	  fprintf(ptr_local,"%d \t %d \t %+d %+d %+d \t %+e %+e\n", iop, it, GK_moms[imom][0],GK_moms[imom][1],GK_moms[imom][2],
 		  sign*corrThp_local[it_shift*GK_Nmoms*16*2 + imom*16*2 + iop*2 + 0], sign*corrThp_local[it_shift*GK_Nmoms*16*2 + imom*16*2 + iop*2 + 1]);
 	}
@@ -1640,7 +1640,7 @@ void QKXTM_Contraction_Kepler<Float>::contractFixSink(QKXTM_Propagator_Kepler<Fl
       for(int it = 0 ; it < GK_totalL[3] ; it++)
 	for(int imom = 0 ; imom < GK_Nmoms ; imom++){
 	  int it_shift = (it+GK_sourcePosition[isource][3])%GK_totalL[3];
-	  int sign = (tsinkMtsource+GK_sourcePosition[isource][3]) > GK_totalL[3] ? -1 : +1;
+	  int sign = (tsinkMtsource+GK_sourcePosition[isource][3]) >= GK_totalL[3] ? -1 : +1;
 	  fprintf(ptr_noether,"%d \t %d \t %+d %+d %+d \t %+e %+e\n", iop, it, GK_moms[imom][0],GK_moms[imom][1],GK_moms[imom][2],
 		  sign*corrThp_noether[it_shift*GK_Nmoms*4*2 + imom*4*2 + iop*2 + 0], sign*corrThp_noether[it_shift*GK_Nmoms*4*2 + imom*4*2 + iop*2 + 1]);
 	}
@@ -1650,7 +1650,7 @@ void QKXTM_Contraction_Kepler<Float>::contractFixSink(QKXTM_Propagator_Kepler<Fl
 	for(int it = 0 ; it < GK_totalL[3] ; it++)
 	  for(int imom = 0 ; imom < GK_Nmoms ; imom++){
 	    int it_shift = (it+GK_sourcePosition[isource][3])%GK_totalL[3];
-	    int sign = (tsinkMtsource+GK_sourcePosition[isource][3]) > GK_totalL[3] ? -1 : +1;
+	    int sign = (tsinkMtsource+GK_sourcePosition[isource][3]) >= GK_totalL[3] ? -1 : +1;
 	    fprintf(ptr_oneD,"%d \t %d \t %d \t %+d %+d %+d \t %+e %+e\n", iop, dir, it, GK_moms[imom][0],GK_moms[imom][1],GK_moms[imom][2],
 		    sign*corrThp_oneD[it_shift*GK_Nmoms*4*16*2 + imom*4*16*2 + dir*16*2 + iop*2 + 0], sign*corrThp_oneD[it_shift*GK_Nmoms*4*16*2 + imom*4*16*2 + dir*16*2 + iop*2 + 1]);
 	  }
@@ -1752,6 +1752,9 @@ void QKXTM_Propagator3D_Kepler<Float>::broadcast(int tsink){
   checkCudaError();
 }
 
+
+
+
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////// Class for deflation
@@ -1789,9 +1792,12 @@ private:
 
   DiracMdagM *matDiracOp;
 
+  QudaInvertParam *invert_param;
+
 public:
-  //  QKXTM_Deflation_Kepler(int,bool);
-  QKXTM_Deflation_Kepler(qudaQKXTM_arpackInfo,QudaInvertParam);
+  QKXTM_Deflation_Kepler(int,bool);
+  QKXTM_Deflation_Kepler(qudaQKXTM_arpackInfo,QudaInvertParam*);
+
   ~QKXTM_Deflation_Kepler();
 
   void zero();
@@ -1803,31 +1809,35 @@ public:
   void printInfo();
 
   // for tmLQCD conventions
-  //  void readEigenVectors(char *filename);
-  // void writeEigenVectors_ASCI(char *filename);
-  // void readEigenValues(char *filename);
-  void deflateGuessVector(QKXTM_Vector_Kepler<Float> &vec_guess, QKXTM_Vector_Kepler<Float> &vec_source);
+  void readEigenVectors(char *filename);
+  void writeEigenVectors_ASCII(char *filename);
+  void readEigenValues(char *filename);
+  void deflateVector(QKXTM_Vector_Kepler<Float> &vec_defl, QKXTM_Vector_Kepler<Float> &vec_in);
+  //  void deflateGuessVector(QKXTM_Vector_Kepler<Float> &vec_guess, QKXTM_Vector_Kepler<Float> &vec_source);
   void copyEigenVectorToQKXTM_Vector_Kepler(int eigenVector_id, Float *vec);
   void copyEigenVectorFromQKXTM_Vector_Kepler(int eigenVector_id,Float *vec);
-  // void rotateFromChiralToUKQCD();
-  // void multiply_by_phase();
+  void rotateFromChiralToUKQCD();
+  void multiply_by_phase();
   // for QUDA conventions
   void polynomialOperator(cudaColorSpinorField &out, const cudaColorSpinorField &in);
   void eigenSolver();
 };
 
 
-/*
-// !!!!!!!!!!!!!!!!!!!!!!!!!! remove it later
+
+//-C.K. Constructor for the even-odd operator functions
 template<typename Float>
 QKXTM_Deflation_Kepler<Float>::QKXTM_Deflation_Kepler(int N_EigenVectors,bool isEven): h_elem(NULL), eigenValues(NULL){
   if(GK_init_qudaQKXTM_Kepler_flag == false)errorQuda("You must initialize QKXTM library first\n");
   NeV=N_EigenVectors;
   if(NeV == 0){
-    warningQuda("Warning you choose zero eigenVectors\n");
+    warningQuda("Warning: you chose zero eigenVectors\n");
     return;
   }
+
   isEv=isEven;
+  isFullOp = false;
+
   field_length = 4*3;
 
   total_length_per_NeV = (GK_localVolume/2)*field_length;
@@ -1835,20 +1845,18 @@ QKXTM_Deflation_Kepler<Float>::QKXTM_Deflation_Kepler(int N_EigenVectors,bool is
   total_length = NeV*(GK_localVolume/2)*field_length;
   bytes_total_length = total_length*2*sizeof(Float);
 
-  h_elem = (Float**)malloc(NeV*sizeof(Float*));
-  for(int i = 0 ; i < NeV ; i++){
-    h_elem[i] = (Float*)malloc(bytes_total_length_per_NeV);
-    if(h_elem[i] == NULL)errorQuda("Error with allocation host memory for deflation class for eigenVector %d\n",i);    
-  }
+  h_elem = (Float*)malloc(NeV*bytes_total_length_per_NeV);
+  if(h_elem != NULL) errorQuda("Error: Out of memory for eigenVectors.\n");
+  memset(h_elem,0,NeV*bytes_total_length_per_NeV);
 
   eigenValues = (Float*)malloc(NeV*sizeof(Float));
   if(eigenValues == NULL)errorQuda("Error with allocation host memory for deflation class\n");
-
 }
-*/
 
+
+//-C.K. Constructor for the full Operator functions
 template<typename Float>
-QKXTM_Deflation_Kepler<Float>::QKXTM_Deflation_Kepler(qudaQKXTM_arpackInfo arpackInfo, QudaInvertParam param): h_elem(NULL), eigenValues(NULL), matDiracOp(NULL){
+QKXTM_Deflation_Kepler<Float>::QKXTM_Deflation_Kepler(qudaQKXTM_arpackInfo arpackInfo, QudaInvertParam *param): h_elem(NULL), eigenValues(NULL), matDiracOp(NULL){
   if(GK_init_qudaQKXTM_Kepler_flag == false)errorQuda("You must initialize QKXTM library first\n");
 
   if(NeV == 0){
@@ -1857,8 +1865,8 @@ QKXTM_Deflation_Kepler<Float>::QKXTM_Deflation_Kepler(qudaQKXTM_arpackInfo arpac
   }
 
   PolyDeg = arpackInfo.PolyDeg;
-  NeV = arpackInfo.N_EigenVectors;
-  NkV = arpackInfo.NkV;
+  NeV = arpackInfo.nEv;
+  NkV = arpackInfo.nKv;
   spectrumPart = arpackInfo.spectrumPart; // for which part of the spectrum we want to solve
   isACC = arpackInfo.isACC;
   tolArpack = arpackInfo.tolArpack;
@@ -1869,32 +1877,26 @@ QKXTM_Deflation_Kepler<Float>::QKXTM_Deflation_Kepler(qudaQKXTM_arpackInfo arpac
   isEv = arpackInfo.isEven;
   isFullOp = arpackInfo.isFullOp;
 
-  field_length = 4*3;
+  invert_param = param;
 
+  field_length = 4*3;
 
   fullorHalf = (isFullOp) ? 1 : 2;
 
-  total_length_per_NeV = (GK_localVolume/fullorHalf)*field_length;
-  bytes_total_length_per_NeV = total_length_per_NeV*2*sizeof(Float);
-  total_length =  NeV*(GK_localVolume/fullorHalf)*field_length;
-  bytes_total_length = total_length*2*sizeof(Float);
+  total_length_per_NeV = (GK_localVolume/fullorHalf)*field_length*2;
+  bytes_total_length_per_NeV = total_length_per_NeV*sizeof(Float);
+  total_length =  NeV*total_length_per_NeV;    //NeV*(GK_localVolume/fullorHalf)*field_length;
+  bytes_total_length = NeV*bytes_total_length_per_NeV;  //total_length*2*sizeof(Float);
 
+  h_elem = (Float*)malloc(NkV*bytes_total_length_per_NeV);
+  if(h_elem != NULL) errorQuda("Error: Out of memory for eigenVectors.\n");
+  memset(h_elem,0,NkV*bytes_total_length_per_NeV);
 
-  //!!!!! for arpack this need to be changed
-  //  h_elem = (Float**)malloc(NeV*sizeof(Float*));
-  // for(int i = 0 ; i < NeV ; i++){
-  //  h_elem[i] = (Float*)malloc(bytes_total_length_per_NeV);
-  //  if(h_elem[i] == NULL)errorQuda("Error with allocation host memory for deflation class for eigenVector %d\n",i);    
-  // }
-
-  h_elem = (Float*)malloc(NeV*bytes_total_length_per_NeV);
-  if(h_elem != NULL) errorQuda("Error out of memory for eigenVectors");
-  memset(h_elem,0,NeV*bytes_total_length_per_NeV);
-
-  eigenValues = (Float*)malloc(NeV*sizeof(Float));
-  if(eigenValues == NULL)errorQuda("Error with allocation host memory for deflation class\n");
+  eigenValues = (Float*)malloc(2*NkV*sizeof(Float));
+  if(eigenValues == NULL)errorQuda("Error: Out of memoery of eigenValues.\n");
   
-  if(NeV == 0)return;
+  if(NeV == 0) return;
+
   DiracParam diracParam;
   setDiracParam(diracParam,&param,!isFullOp);
   Dirac *diracMat = Dirac::create(diracParam);
@@ -1905,7 +1907,7 @@ QKXTM_Deflation_Kepler<Float>::QKXTM_Deflation_Kepler(qudaQKXTM_arpackInfo arpac
 template<typename Float>
 QKXTM_Deflation_Kepler<Float>::~QKXTM_Deflation_Kepler(){
   if(NeV == 0)return;
-  //  for(int i = 0 ; i < NeV ; i++) free(h_elem[i]);
+
   free(h_elem);
   free(eigenValues);
   eigenValues=NULL;
@@ -1916,354 +1918,20 @@ QKXTM_Deflation_Kepler<Float>::~QKXTM_Deflation_Kepler(){
 template<typename Float>
 void QKXTM_Deflation_Kepler<Float>::printInfo(){
   printfQuda("Number of EigenVectors is %d in precision %d\n",NeV,(int) sizeof(Float));
-  if(isEv == true) printfQuda("The EigenVectors are for the even-even operator\n");
-  if(isEv == false) printfQuda("The EigenVectors are for the odd-odd operator\n");
+  if(isFullOp){
+    printfQuda("The EigenVectors are for the Full operator\n");
+  }
+  else{
+    if(isEv == true) printfQuda("The EigenVectors are for the even-even operator\n");
+    if(isEv == false) printfQuda("The EigenVectors are for the odd-odd operator\n");
+  }
+
   printfQuda("Allocated Gb for the eigenVectors space for each node are %lf and the pointer is %p\n",NeV * ( (double)bytes_total_length_per_NeV/((double) 1024.*1024.*1024.) ),h_elem);
 }
 
-/*
-template<typename Float>
-void QKXTM_Deflation_Kepler<Float>::rotateFromChiralToUKQCD(){
-  if(NeV == 0) return;
-  std::complex<Float> transMatrix[4][4];
-  for(int mu = 0 ; mu < 4 ; mu++)
-    for(int nu = 0 ; nu < 4 ; nu++){
-      transMatrix[mu][nu].real();
-      transMatrix[mu][nu].imag();
-    }
-  Float value = 1./sqrt(2.);
-
-  transMatrix[0][0].real() = -value; // g4*g5*U
-  transMatrix[1][1].real() = -value;
-  transMatrix[2][2].real() = +value;
-  transMatrix[3][3].real() = +value;
-
-  transMatrix[0][2].real() = +value;
-  transMatrix[1][3].real() = +value;
-  transMatrix[2][0].real() = +value;
-  transMatrix[3][1].real() = +value;
-
-  std::complex<Float> tmp[4];
-  std::complex<Float> *vec_cmlx = NULL;
-
-  for(int i = 0 ; i < NeV ; i++){
-    vec_cmlx = (std::complex<Float>*) h_elem[i];
-    for(int iv = 0 ; iv < (GK_localVolume)/2 ; iv++)
-      for(int ic = 0 ; ic < 3 ; ic++){
-        memset(tmp,0,4*2*sizeof(Float));
-        for(int mu = 0 ; mu < 4 ; mu++)
-          for(int nu = 0 ; nu < 4 ; nu++)
-            tmp[mu] = tmp[mu] + transMatrix[mu][nu] * vec_cmlx[iv*4*3+nu*3+ic];
-        for(int mu = 0 ; mu < 4 ; mu++)
-          vec_cmlx[iv*4*3+mu*3+ic] = tmp[mu];
-      }
-  }
-
-}
-*/
-
-/*
-template<typename Float>
-void QKXTM_Deflation_Kepler<Float>::multiply_by_phase(){
-  if(NeV == 0)return;
-  Float phaseRe, phaseIm;
-  Float tmp0,tmp1;
-  for(int ivec = 0 ; ivec < NeV ; ivec++)
-    for(int t=0; t<GK_localL[3];t++)
-      for(int z=0; z<GK_localL[2];z++)
-        for(int y=0; y<GK_localL[1];y++)
-          for(int x=0; x<GK_localL[0];x++)
-            for(int mu=0; mu<4; mu++)
-              for(int c1=0; c1<3; c1++)
-                {
-                  int oddBit     = (x+y+z+t) & 1;
-                  if(oddBit){
-                    continue;
-                  }
-                  else{
-                    phaseRe = cos(PI*(t+comm_coords(default_topo)[3]*GK_localL[3])/((Float) GK_totalL[3]));
-                    phaseIm = sin(PI*(t+comm_coords(default_topo)[3]*GK_localL[3])/((Float) GK_totalL[3]));
-                    int pos = ((t*GK_localL[2]*GK_localL[1]*GK_localL[0]+z*GK_localL[1]*GK_localL[0]+y*GK_localL[0]+x)/2)*4*3*2 + mu*3*2 + c1*2 ;
-                    tmp0 = h_elem[ivec][ pos + 0] * phaseRe - h_elem[ivec][ pos + 1] * phaseIm;
-                    tmp1 = h_elem[ivec][ pos + 0] * phaseIm + h_elem[ivec][ pos + 1] * phaseRe;
-		    h_elem[ivec][ pos + 0] = tmp0;
-		    h_elem[ivec][ pos + 1] = tmp1;
-                  }
-                }
-}
-*/
-
-// template<typename Float>
-// void QKXTM_Deflation_Kepler<Float>::readEigenVectors(char *prefix_path){
-//   if(NeV == 0)return;
-//    LimeReader *limereader;
-//    FILE *fid;
-//    char *lime_type,*lime_data;
-//    unsigned long int lime_data_size;
-//    char dummy;
-//    MPI_Offset offset;
-//    MPI_Datatype subblock;  //MPI-type, 5d subarray
-//    MPI_File mpifid;
-//    MPI_Status status;
-//    int sizes[5], lsizes[5], starts[5];
-//    unsigned int i,j;
-//    unsigned short int chunksize,mu,c1;
-//    char *buffer;
-//    unsigned int x,y,z,t;
-//    int  isDouble; // default precision
-//    int error_occured=0;
-//    int next_rec_is_prop = 0;
-//    char filename[257];
-   
-//    for(int nev = 0 ; nev < NeV ; nev++){
-//      sprintf(filename,"%s.%05d",prefix_path,nev);
-//      if(comm_rank() == 0)
-//        {
-// 	 /* read lime header */
-// 	 fid=fopen(filename,"r");
-// 	 if(fid==NULL)
-// 	   {
-// 	     fprintf(stderr,"process 0: Error in %s Could not open %s for reading\n",__func__, filename);
-// 	     error_occured=1;
-// 	   }
-// 	 if ((limereader = limeCreateReader(fid))==NULL)
-// 	   {
-// 	     fprintf(stderr,"process 0: Error in %s! Could not create limeReader\n", __func__);
-// 	     error_occured=1;
-// 	   }
-// 	 if(!error_occured)
-// 	   {
-// 	     while(limeReaderNextRecord(limereader) != LIME_EOF )
-// 	       {
-// 		 lime_type = limeReaderType(limereader);
-// 		 if(strcmp(lime_type,"propagator-type")==0)
-// 		   {
-// 		     lime_data_size = limeReaderBytes(limereader);
-// 		     lime_data = (char * )malloc(lime_data_size);
-// 		     limeReaderReadData((void *)lime_data,&lime_data_size, limereader);
-		     
-// 		     if (strncmp ("DiracFermion_Source_Sink_Pairs", lime_data, strlen ("DiracFermion_Source_Sink_Pairs"))!=0 &&
-// 			 strncmp ("DiracFermion_Sink", lime_data, strlen ("DiracFermion_Sink"))!=0 )
-// 		       {
-// 			 fprintf (stderr, " process 0: Error in %s! Got %s for \"propagator-type\", expecting %s or %s\n", __func__, lime_data, 
-// 				  "DiracFermion_Source_Sink_Pairs", 
-// 				  "DiracFermion_Sink");
-// 			 error_occured = 1;
-// 			 break;
-// 		       }
-// 		     free(lime_data);
-// 		   }
-// 		 //lime_type="scidac-binary-data";
-// 		 if((strcmp(lime_type,"etmc-propagator-format")==0) || (strcmp(lime_type,"etmc-source-format")==0)
-// 		    || (strcmp(lime_type,"etmc-eigenvectors-format")==0) || (strcmp(lime_type,"eigenvector-info")==0))
-// 		   {
-// 		     lime_data_size = limeReaderBytes(limereader);
-// 		     lime_data = (char * )malloc(lime_data_size);
-// 		     limeReaderReadData((void *)lime_data,&lime_data_size, limereader);
-// 		     sscanf(qcd_getParam("<precision>",lime_data, lime_data_size),"%i",&isDouble);    
-// 		     //		     printf("got precision: %i\n",isDouble);
-// 		     free(lime_data);
-		     
-// 		     next_rec_is_prop = 1;
-// 		   }
-// 		 if(strcmp(lime_type,"scidac-binary-data")==0 && next_rec_is_prop)
-// 		   {	      
-// 		     break;
-// 		   }
-// 	       }
-// 	     /* read 1 byte to set file-pointer to start of binary data */
-// 	     lime_data_size=1;
-// 	     limeReaderReadData(&dummy,&lime_data_size,limereader);
-// 	     offset = ftell(fid)-1;
-// 	     limeDestroyReader(limereader);      
-// 	     fclose(fid);
-// 	   }     
-//        }//end myid==0 condition
-     
-//      MPI_Bcast(&error_occured,1,MPI_INT,0,MPI_COMM_WORLD);
-//      if(error_occured) errorQuda("Error with reading eigenVectors\n");
-//      //     if(isDouble != 32 && isDouble != 64 )isDouble = 32;     
-//      MPI_Bcast(&isDouble,1,MPI_INT,0,MPI_COMM_WORLD);
-//      MPI_Bcast(&offset,sizeof(MPI_Offset),MPI_BYTE,0,MPI_COMM_WORLD);
-
-//      //     printfQuda("I have precision %d\n",isDouble);
-
-//      if( typeid(Float) == typeid(double) ){
-//        if( isDouble != 64 ) errorQuda("Your precisions does not agree");
-//      }
-//      else if(typeid(Float) == typeid(float) ){
-//        if( isDouble != 32 ) errorQuda("Your precisions does not agree");
-//      }
-//      else
-//        errorQuda("Problem with the precision\n");
-
-//      if(isDouble==64)
-//        isDouble=1;      
-//      else if(isDouble==32)
-//        isDouble=0; 
-//      else
-//        {
-// 	 fprintf(stderr,"process %i: Error in %s! Unsupported precision\n",comm_rank(), __func__);
-//        }  
-     
-//      if(isDouble)
-//        {
-
-// 	 sizes[0] = GK_totalL[3];
-// 	 sizes[1] = GK_totalL[2];
-// 	 sizes[2] = GK_totalL[1];
-// 	 sizes[3] = GK_totalL[0];
-// 	 sizes[4] = (4*3*2);
-	 
-// 	 lsizes[0] = GK_localL[3];
-// 	 lsizes[1] = GK_localL[2];
-// 	 lsizes[2] = GK_localL[1];
-// 	 lsizes[3] = GK_localL[0];
-// 	 lsizes[4] = sizes[4];
-	 
-// 	 starts[0]      = comm_coords(default_topo)[3]*GK_localL[3];
-// 	 starts[1]      = comm_coords(default_topo)[2]*GK_localL[2];
-// 	 starts[2]      = comm_coords(default_topo)[1]*GK_localL[1];
-// 	 starts[3]      = comm_coords(default_topo)[0]*GK_localL[0];
-// 	 starts[4]      = 0;
 
 
-	 
-// 	 MPI_Type_create_subarray(5,sizes,lsizes,starts,MPI_ORDER_C,MPI_DOUBLE,&subblock);
-// 	 MPI_Type_commit(&subblock);
-      
-// 	 MPI_File_open(MPI_COMM_WORLD, filename, MPI_MODE_RDONLY, MPI_INFO_NULL, &mpifid);
-// 	 MPI_File_set_view(mpifid, offset, MPI_DOUBLE, subblock, "native", MPI_INFO_NULL);
-	 
-// 	 //load time-slice by time-slice:
-// 	 chunksize=4*3*2*sizeof(double);
-// 	 buffer = (char*) malloc(chunksize*GK_localVolume);
-// 	 if(buffer==NULL)
-// 	   {
-// 	     fprintf(stderr,"process %i: Error in %s! Out of memory\n",comm_rank(), __func__);
-// 	     return;
-// 	   }
-// 	 MPI_File_read_all(mpifid, buffer, 4*3*2*GK_localVolume, MPI_DOUBLE, &status);
-// 	 if(!qcd_isBigEndian())      
-// 	   qcd_swap_8((double*) buffer,(size_t)(2*4*3)*(size_t)GK_localVolume);
-// 	 i=0;
-// 	 for(t=0; t<GK_localL[3];t++)
-// 	   for(z=0; z<GK_localL[2];z++)
-// 	     for(y=0; y<GK_localL[1];y++)
-// 	       for(x=0; x<GK_localL[0];x++)
-// 		 for(mu=0; mu<4; mu++)
-// 		   for(c1=0; c1<3; c1++)
-// 		     {
 
-// 		       int oddBit     = (x+y+z+t) & 1;
-// 		       if(oddBit){
-// 			 h_elem[nev][ ( (t*GK_localL[2]*GK_localL[1]*GK_localL[0]+z*GK_localL[1]*GK_localL[0]+y*GK_localL[0]+x)/2)*4*3*2 + mu*3*2 + c1*2 + 0 ] = ((double*)buffer)[i];
-// 			 h_elem[nev][ ( (t*GK_localL[2]*GK_localL[1]*GK_localL[0]+z*GK_localL[1]*GK_localL[0]+y*GK_localL[0]+x)/2)*4*3*2 + mu*3*2 + c1*2 + 1 ] = ((double*)buffer)[i+1];
-// 			 i+=2;
-// 		       }
-// 		       else{
-// 			 i+=2;
-// 		       }
-			 
-// 		     }
-// 	 free(buffer);
-// 	 MPI_File_close(&mpifid);
-// 	 MPI_Type_free(&subblock);
-	 
-// 	 continue;
-//        }//end isDouble condition
-//      else
-//        {
-// 	 sizes[0] = GK_totalL[3];
-// 	 sizes[1] = GK_totalL[2];
-// 	 sizes[2] = GK_totalL[1];
-// 	 sizes[3] = GK_totalL[0];
-// 	 sizes[4] = (4*3*2);
-	 
-// 	 lsizes[0] = GK_localL[3];
-// 	 lsizes[1] = GK_localL[2];
-// 	 lsizes[2] = GK_localL[1];
-// 	 lsizes[3] = GK_localL[0];
-// 	 lsizes[4] = sizes[4];
-	 
-// 	 starts[0]      = comm_coords(default_topo)[3]*GK_localL[3];
-// 	 starts[1]      = comm_coords(default_topo)[2]*GK_localL[2];
-// 	 starts[2]      = comm_coords(default_topo)[1]*GK_localL[1];
-// 	 starts[3]      = comm_coords(default_topo)[0]*GK_localL[0];
-// 	 starts[4]      = 0;
-
-// 	 //	 for(int ii = 0 ; ii < 5 ; ii++)
-// 	 //  printf("%d %d %d %d\n",comm_rank(),sizes[ii],lsizes[ii],starts[ii]);
-
-//       MPI_Type_create_subarray(5,sizes,lsizes,starts,MPI_ORDER_C,MPI_FLOAT,&subblock);
-//       MPI_Type_commit(&subblock);
-      
-//       MPI_File_open(MPI_COMM_WORLD, filename, MPI_MODE_RDONLY, MPI_INFO_NULL, &mpifid);
-//       MPI_File_set_view(mpifid, offset, MPI_FLOAT, subblock, "native", MPI_INFO_NULL);
-      
-//       //load time-slice by time-slice:
-//       chunksize=4*3*2*sizeof(float);
-//       buffer = (char*) malloc(chunksize*GK_localVolume);
-//       if(buffer==NULL)
-//       {
-// 	fprintf(stderr,"process %i: Error in %s! Out of memory\n",comm_rank(), __func__);
-//          return;
-//       }
-//       MPI_File_read_all(mpifid, buffer, 4*3*2*GK_localVolume, MPI_FLOAT, &status);
-
-//       if(!qcd_isBigEndian())
-// 	qcd_swap_4((float*) buffer,(size_t)(2*4*3)*(size_t)GK_localVolume);
-      
-//       i=0;
-//       for(t=0; t<GK_localL[3];t++)
-// 	for(z=0; z<GK_localL[2];z++)
-// 	  for(y=0; y<GK_localL[1];y++)
-// 	    for(x=0; x<GK_localL[0];x++)
-// 	      for(mu=0; mu<4; mu++)
-// 		for(c1=0; c1<3; c1++)
-// 		  {
-// 		       int oddBit     = (x+y+z+t) & 1;
-// 		       if(oddBit){
-// 			 h_elem[nev][ ( (t*GK_localL[2]*GK_localL[1]*GK_localL[0]+z*GK_localL[1]*GK_localL[0]+y*GK_localL[0]+x)/2)*4*3*2 + mu*3*2 + c1*2 + 0  ] = *((float*)(buffer + i)); i+=4 ;
-// 			 h_elem[nev][ ( (t*GK_localL[2]*GK_localL[1]*GK_localL[0]+z*GK_localL[1]*GK_localL[0]+y*GK_localL[0]+x)/2)*4*3*2 + mu*3*2 + c1*2 + 1 ] = *((float*)(buffer + i)); i+=4 ;
-// 		       }
-// 		       else{
-// 			 i+=8;
-// 		       }
-// 		  }      
-      
-//       free(buffer);
-//       MPI_File_close(&mpifid);
-//       MPI_Type_free(&subblock);            
-      
-//       continue;
-//        }//end isDouble condition
-//    }
-//    printfQuda("Eigenvectors loaded successfully\n");
-// }//end qcd_getVectorLime 
-
-/*
-template<typename Float>
-void QKXTM_Deflation_Kepler<Float>::readEigenValues(char *filename){
-  if(NeV == 0)return;
-  FILE *ptr;
-  Float dummy;
-  ptr = fopen(filename,"r");
-  if(ptr == NULL)errorQuda("Error cannot open file to read eigenvalues\n");
-  char stringFormat[257];
-  if(typeid(Float) == typeid(double))
-    strcpy(stringFormat,"%lf");
-  else if(typeid(Float) == typeid(float))
-    strcpy(stringFormat,"%f");
-
-  for(int i = 0 ; i < NeV ; i++)
-    fscanf(ptr,stringFormat,&(EigenValues()[i]),&dummy);
-       
-
-  printfQuda("Eigenvalues loaded successfully\n");
-  fclose(ptr);
-}
-*/
 
 template<typename Float>
 void QKXTM_Deflation_Kepler<Float>::copyEigenVectorToQKXTM_Vector_Kepler(int eigenVector_id, Float *vec){
@@ -2299,10 +1967,9 @@ void QKXTM_Deflation_Kepler<Float>::copyEigenVectorToQKXTM_Vector_Kepler(int eig
 		    }
 		  }
 		}
-  }
-
-  if(isFullOp){
-    memcpy(vec,&(h_elem[eigenVector_id*total_length_per_NeV]),total_length_per_NeV);
+  }//-isFullOp check
+  else if(isFullOp){
+    memcpy(vec,&(h_elem[eigenVector_id*total_length_per_NeV]),bytes_total_length_per_NeV);
   }
 
 }
@@ -2310,6 +1977,7 @@ void QKXTM_Deflation_Kepler<Float>::copyEigenVectorToQKXTM_Vector_Kepler(int eig
 template<typename Float>
 void QKXTM_Deflation_Kepler<Float>::copyEigenVectorFromQKXTM_Vector_Kepler(int eigenVector_id,Float *vec){
   if(NeV == 0)return;
+
   if(!isFullOp){
     for(int t=0; t<GK_localL[3];t++)
       for(int z=0; z<GK_localL[2];z++)
@@ -2332,31 +2000,32 @@ void QKXTM_Deflation_Kepler<Float>::copyEigenVectorFromQKXTM_Vector_Kepler(int e
 		    }
 		  }
 		}
-  }
-
-  if(isFullOp){
-    memcpy(&(h_elem[eigenVector_id*total_length_per_NeV]),vec,total_length_per_NeV);
+  }//-isFullOp check
+  else if(isFullOp){
+    memcpy(&(h_elem[eigenVector_id*total_length_per_NeV]),vec,bytes_total_length_per_NeV);
   }
 
 }
 
+
+//-C.K: This member function performs the operation vec_defl = U (\Lambda)^(-1) U^dag vec_in
 template <typename Float>
-void QKXTM_Deflation_Kepler<Float>::deflateGuessVector(QKXTM_Vector_Kepler<Float> &vec_guess, QKXTM_Vector_Kepler<Float> &vec_source){
+void QKXTM_Deflation_Kepler<Float>::deflateVector(QKXTM_Vector_Kepler<Float> &vec_defl, QKXTM_Vector_Kepler<Float> &vec_in){
   if(NeV == 0){
-    vec_guess.zero_device();
+    vec_defl.zero_device();
     return;
   }
-
+  
   Float *tmp_vec = (Float*) calloc((GK_localVolume)*4*3*2,sizeof(Float)) ;
   Float *tmp_vec_lex = (Float*) calloc((GK_localVolume)*4*3*2,sizeof(Float)) ;
   Float *out_vec = (Float*) calloc(NeV*2,sizeof(Float)) ;
   Float *out_vec_reduce = (Float*) calloc(NeV*2,sizeof(Float)) ;
-
+  
   if(tmp_vec == NULL || tmp_vec_lex == NULL || out_vec == NULL || out_vec_reduce == NULL)errorQuda("Error with memory allocation in deflation method\n");
   
   Float *tmp_vec_even = tmp_vec;
   Float *tmp_vec_odd = tmp_vec + (GK_localVolume/2)*4*3*2;
-
+  
   if(!isFullOp){
     for(int t=0; t<GK_localL[3];t++)
       for(int z=0; z<GK_localL[2];z++)
@@ -2368,16 +2037,16 @@ void QKXTM_Deflation_Kepler<Float>::deflateGuessVector(QKXTM_Vector_Kepler<Float
 		  int oddBit     = (x+y+z+t) & 1;
 		  if(oddBit){
 		    for(int ipart = 0 ; ipart < 2 ; ipart++)
-		      tmp_vec_odd[((t*GK_localL[2]*GK_localL[1]*GK_localL[0] + z*GK_localL[1]*GK_localL[0] + y*GK_localL[0] + x)/2)*4*3*2 + mu*3*2 + c1*2 + ipart] = (Float) vec_source.H_elem()[t*GK_localL[2]*GK_localL[1]*GK_localL[0]*4*3*2 + z*GK_localL[1]*GK_localL[0]*4*3*2 + y*GK_localL[0]*4*3*2 + x*4*3*2 + mu*3*2 + c1*2 + ipart];
+		      tmp_vec_odd[((t*GK_localL[2]*GK_localL[1]*GK_localL[0] + z*GK_localL[1]*GK_localL[0] + y*GK_localL[0] + x)/2)*4*3*2 + mu*3*2 + c1*2 + ipart] = (Float) vec_in.H_elem()[t*GK_localL[2]*GK_localL[1]*GK_localL[0]*4*3*2 + z*GK_localL[1]*GK_localL[0]*4*3*2 + y*GK_localL[0]*4*3*2 + x*4*3*2 + mu*3*2 + c1*2 + ipart];
 		  }
 		  else{
 		    for(int ipart = 0 ; ipart < 2 ; ipart++)
-		      tmp_vec_even[((t*GK_localL[2]*GK_localL[1]*GK_localL[0] + z*GK_localL[1]*GK_localL[0] + y*GK_localL[0] + x)/2)*4*3*2 + mu*3*2 + c1*2 + ipart] = (Float) vec_source.H_elem()[t*GK_localL[2]*GK_localL[1]*GK_localL[0]*4*3*2 + z*GK_localL[1]*GK_localL[0]*4*3*2 + y*GK_localL[0]*4*3*2 + x*4*3*2 + mu*3*2 + c1*2 + ipart];
+		      tmp_vec_even[((t*GK_localL[2]*GK_localL[1]*GK_localL[0] + z*GK_localL[1]*GK_localL[0] + y*GK_localL[0] + x)/2)*4*3*2 + mu*3*2 + c1*2 + ipart] = (Float) vec_in.H_elem()[t*GK_localL[2]*GK_localL[1]*GK_localL[0]*4*3*2 + z*GK_localL[1]*GK_localL[0]*4*3*2 + y*GK_localL[0]*4*3*2 + x*4*3*2 + mu*3*2 + c1*2 + ipart];
 		  }
 		}  
   }  
   else if(isFullOp){
-    memcpy(tmp_vec,vec_source.H_elem(),total_length_per_NeV);
+    memcpy(tmp_vec,vec_in.H_elem(),bytes_total_length_per_NeV);
   }
 
   Float alpha[2] = {1.,0.};
@@ -2396,100 +2065,58 @@ void QKXTM_Deflation_Kepler<Float>::deflateGuessVector(QKXTM_Vector_Kepler<Float
       ptr_elem = tmp_vec_odd;
     }
   }
-  if(isFullOp)
+  else{
     ptr_elem = tmp_vec;
+  }
 
-  //  printf("I get %d num of omp threads and %d cores\n",mkl_get_max_threads(),omp_get_num_procs());
-  //  omp_set_nested(false);
+  
   if( typeid(Float) == typeid(float) ){
-    //#pragma omp parallel
-    // {
-    //  int id = omp_get_thread_num();
-    //  int icpu = sched_getcpu();
-    //  printf("%d %d\n",id,icpu);
-    //#pragma omp parallel for
-
-    //    for(int i = 0 ; i < NeV ; i++)
-    //  cblas_cdotc_sub(NN,H_elem()[i],incx,ptr_elem,incy,&(out_vec[2*i]));
-    cblas_cgemv(CblasColMajor, 'C', NN, NeV, (void*)alpha, (void *)h_elem, NN, ptr_elem, incx, (void *)beta, out_vec, incy);
-    
-    // }
+    cblas_cgemv(CblasColMajor, CblasConjTrans, NN, NeV, (void*) alpha, (void*) h_elem, NN, ptr_elem, incx, (void*) beta, out_vec, incy ); //-C.K: out_vec = H_elem^dag * ptr_elem -> U^dag * vec_in
+    memset(ptr_elem,0,NN*2*sizeof(Float)); //-C.K_CHECK: This might not be needed
     MPI_Allreduce(out_vec,out_vec_reduce,NeV*2,MPI_FLOAT,MPI_SUM,MPI_COMM_WORLD);
     for(int i = 0 ; i < NeV ; i++){
-      out_vec_reduce[i*2+0] /= eigenValues[i];
-      out_vec_reduce[i*2+1] /= eigenValues[i];
+      out_vec_reduce[i*2+0] /= eigenValues[i*2+0]; //-Eigenvalues are real!
+      out_vec_reduce[i*2+1] /= eigenValues[i*2+0]; //-C.K: out_vec_reduce -> \Lambda^(-1) * U^dag * vec_in
     }
-
-    memset(ptr_elem,0,(GK_localVolume/2)*4*3*2*sizeof(Float));
-    
-    for(int i = 0 ; i < NeV ; i++)
-      cblas_caxpy(NN,&(out_vec_reduce[2*i]),H_elem()[i],incx,ptr_elem,incy);
+    cblas_cgemv(CblasColMajor, CblasNoTrans, NN, NeV, (void*) alpha, (void*) h_elem, NN, out_vec_reduce, incx, (void*) beta, ptr_elem, incy ); //-C.K: ptr_elem = H_elem * out_vec_reduce -> ptr_elem = U * \Lambda^(-1) * U^dag * vec_in
   }
   else if ( typeid(Float) == typeid(double) ){
-    //#pragma omp parallel
-    // {
-    //  int id = omp_get_thread_num();
-    //  int icpu = sched_getcpu();
-    //  printf("%d %d\n",id,icpu);
-
-    //#pragma omp parallel for
-    for(int i = 0 ; i < NeV ; i++)
-      cblas_zdotc_sub(NN,H_elem()[i],incx,ptr_elem,incy,&(out_vec[2*i]));
-
-    //}
+    cblas_zgemv(CblasColMajor, CblasConjTrans, NN, NeV, (void*) alpha, (void*) h_elem, NN, ptr_elem, incx, (void*) beta, out_vec, incy );
+    memset(ptr_elem,0,NN*2*sizeof(Float)); //-C.K_CHECK: This might not be needed
     MPI_Allreduce(out_vec,out_vec_reduce,NeV*2,MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);
     for(int i = 0 ; i < NeV ; i++){
-      out_vec_reduce[i*2+0] /= eigenValues[i];
-      out_vec_reduce[i*2+1] /= eigenValues[i];
+      out_vec_reduce[i*2+0] /= eigenValues[2*i+0];
+      out_vec_reduce[i*2+1] /= eigenValues[2*i+0];
     }
-    memset(ptr_elem,0,(GK_localVolume/2)*4*3*2*sizeof(Float));
-    for(int i = 0 ; i < NeV ; i++) cblas_zaxpy(NN,&(out_vec_reduce[2*i]),H_elem()[i],incx,ptr_elem,incy);
+    cblas_zgemv(CblasColMajor, CblasNoTrans, NN, NeV, (void*) alpha, (void*) h_elem, NN, out_vec_reduce, incx, (void*) beta, ptr_elem, incy );    
+  }
+  
+
+  if(!isFullOp){
+    for(int t=0; t<GK_localL[3];t++)
+      for(int z=0; z<GK_localL[2];z++)
+	for(int y=0; y<GK_localL[1];y++)
+	  for(int x=0; x<GK_localL[0];x++)
+	    for(int mu=0; mu<4; mu++)
+	      for(int c1=0; c1<3; c1++)
+		{
+		  int oddBit     = (x+y+z+t) & 1;
+		  if(oddBit){
+		    for(int ipart = 0 ; ipart < 2 ; ipart++)
+		      tmp_vec_lex[t*GK_localL[2]*GK_localL[1]*GK_localL[0]*4*3*2 + z*GK_localL[1]*GK_localL[0]*4*3*2 + y*GK_localL[0]*4*3*2 + x*4*3*2 + mu*3*2 + c1*2 + ipart] = tmp_vec_odd[((t*GK_localL[2]*GK_localL[1]*GK_localL[0] + z*GK_localL[1]*GK_localL[0] + y*GK_localL[0] + x)/2)*4*3*2 + mu*3*2 + c1*2 + ipart];
+		  }
+		  else{
+		    for(int ipart = 0 ; ipart < 2 ; ipart++)
+		      tmp_vec_lex[t*GK_localL[2]*GK_localL[1]*GK_localL[0]*4*3*2 + z*GK_localL[1]*GK_localL[0]*4*3*2 + y*GK_localL[0]*4*3*2 + x*4*3*2 + mu*3*2 + c1*2 + ipart] = tmp_vec_even[((t*GK_localL[2]*GK_localL[1]*GK_localL[0] + z*GK_localL[1]*GK_localL[0] + y*GK_localL[0] + x)/2)*4*3*2 + mu*3*2 + c1*2 + ipart];
+		  }
+		}  
+  }
+  else{
+    memcpy(tmp_vec_lex,tmp_vec,bytes_total_length_per_NeV);
   }
 
-  /*  
-  if( typeid(Float) == typeid(float) ){
-    cblas_cgemv(CblasColMajor, CblasConjTrans, NN, NeV, alpha, H_elem(), NN, ptr_elem, incx, beta, out_vec, incy );
-    memset(ptr_elem,0,(GK_localVolume/2)*4*3*2*sizeof(Float));
-    MPI_Allreduce(out_vec,out_vec_reduce,NeV*2,MPI_FLOAT,MPI_SUM,MPI_COMM_WORLD);
-    for(int i = 0 ; i < NeV ; i++){
-      out_vec_reduce[i*2+0] /= eigenValues[i];
-      out_vec_reduce[i*2+1] /= eigenValues[i];
-    }
-    cblas_cgemv(CblasColMajor, CblasNoTrans, NN, NeV, alpha, H_elem(), NN, out_vec_reduce, incx, beta, ptr_elem, incy );
-  }
-  else if ( typeid(Float) == typeid(double) ){
-    cblas_zgemv(CblasColMajor, CblasConjTrans, NN, NeV, alpha, H_elem(), NN, ptr_elem, incx, beta, out_vec, incy );
-    memset(ptr_elem,0,(GK_localVolume/2)*4*3*2*sizeof(Float));
-    MPI_Allreduce(out_vec,out_vec_reduce,NeV*2,MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);
-    for(int i = 0 ; i < NeV ; i++){
-      out_vec_reduce[i*2+0] /= eigenValues[i];
-      out_vec_reduce[i*2+1] /= eigenValues[i];
-    }
-    cblas_zgemv(CblasColMajor, CblasNoTrans, NN, NeV, alpha, H_elem(), NN, out_vec_reduce, incx, beta, ptr_elem, incy );    
-  }
-  */
-
-  for(int t=0; t<GK_localL[3];t++)
-    for(int z=0; z<GK_localL[2];z++)
-      for(int y=0; y<GK_localL[1];y++)
-	for(int x=0; x<GK_localL[0];x++)
-	  for(int mu=0; mu<4; mu++)
-	    for(int c1=0; c1<3; c1++)
-	      {
-		int oddBit     = (x+y+z+t) & 1;
-		if(oddBit){
-		  for(int ipart = 0 ; ipart < 2 ; ipart++)
-		    tmp_vec_lex[t*GK_localL[2]*GK_localL[1]*GK_localL[0]*4*3*2 + z*GK_localL[1]*GK_localL[0]*4*3*2 + y*GK_localL[0]*4*3*2 + x*4*3*2 + mu*3*2 + c1*2 + ipart] = tmp_vec_odd[((t*GK_localL[2]*GK_localL[1]*GK_localL[0] + z*GK_localL[1]*GK_localL[0] + y*GK_localL[0] + x)/2)*4*3*2 + mu*3*2 + c1*2 + ipart];
-		}
-		else{
-		  for(int ipart = 0 ; ipart < 2 ; ipart++)
-		    tmp_vec_lex[t*GK_localL[2]*GK_localL[1]*GK_localL[0]*4*3*2 + z*GK_localL[1]*GK_localL[0]*4*3*2 + y*GK_localL[0]*4*3*2 + x*4*3*2 + mu*3*2 + c1*2 + ipart] = tmp_vec_even[((t*GK_localL[2]*GK_localL[1]*GK_localL[0] + z*GK_localL[1]*GK_localL[0] + y*GK_localL[0] + x)/2)*4*3*2 + mu*3*2 + c1*2 + ipart];
-		}
-	      }  
-
-
-  vec_guess.packVector((Float*) tmp_vec_lex);
-  vec_guess.loadVector();
+  vec_defl.packVector((Float*) tmp_vec_lex);
+  vec_defl.loadVector();
 
 
   free(out_vec);
@@ -2501,7 +2128,7 @@ void QKXTM_Deflation_Kepler<Float>::deflateGuessVector(QKXTM_Vector_Kepler<Float
 
 
 template<typename Float>
-void QKXTM_Deflation_Kepler<Float>::writeEigenVectors_ASCI(char *prefix_path){
+void QKXTM_Deflation_Kepler<Float>::writeEigenVectors_ASCII(char *prefix_path){
   if(NeV == 0)return;
   char filename[257];
   if(comm_rank() != 0) return;
@@ -2509,8 +2136,8 @@ void QKXTM_Deflation_Kepler<Float>::writeEigenVectors_ASCI(char *prefix_path){
   for(int nev = 0 ; nev < NeV ; nev++){
     sprintf(filename,"%s.%05d.txt",prefix_path,nev);
     fid = fopen(filename,"w");		  
-    for(int ir = 0 ; ir < (GK_localVolume/2)*4*3 ; ir++)
-      fprintf(fid,"%+e %+e\n",h_elem[nev][ir*2 + 0], h_elem[nev][ir*2 + 1]);
+    for(int ir = 0 ; ir < (GK_localVolume/fullorHalf)*4*3 ; ir++)
+      fprintf(fid,"%+e %+e\n",h_elem[nev*total_length_per_NeV + ir*2 + 0], h_elem[nev*total_length_per_NeV + ir*2 + 1]);
 		
     
     fclose(fid);
@@ -2520,7 +2147,9 @@ void QKXTM_Deflation_Kepler<Float>::writeEigenVectors_ASCI(char *prefix_path){
 
 template<typename Float>
 void QKXTM_Deflation_Kepler<Float>::polynomialOperator(cudaColorSpinorField &out, const cudaColorSpinorField &in){
+
   if(typeid(Float) != typeid(double)) errorQuda("Single precision is not implemented in member function of polynomial operator\n");
+
 
   double delta,theta;
   double sigma,sigma1,sigma_old;
@@ -2535,8 +2164,10 @@ void QKXTM_Deflation_Kepler<Float>::polynomialOperator(cudaColorSpinorField &out
   sigma1 = -delta/theta;
   copyCuda(out,in);
 
-  if( PolyDeg == 0 )
-    errorQuda("I got degree of the polynomial to be 0 check it\n");
+  if( PolyDeg == 0 ){
+    printfQuda("Got degree of the polynomial to be 0. Proceeding anyway...\n");
+    return;
+  }
 
   d1 =  sigma1/delta;
   d2 =  1.0;
@@ -2583,11 +2214,717 @@ void QKXTM_Deflation_Kepler<Float>::polynomialOperator(cudaColorSpinorField &out
 #include <sortingFunctions.h>
 #include <arpackHeaders.h>
 
+
 template<typename Float>
 void QKXTM_Deflation_Kepler<Float>::eigenSolver(){
 
+  //print the input:
+  //================
+  
+  printfQuda("Input to eigenvalues_arpack\n");
+  printfQuda("===========================\n");
+  printfQuda("Number of Ritz eigenvalues requested: %d\n", NeV);
+  printfQuda("Size of Krylov space is: %d\n", NkV);
+  printfQuda("Part of the spectrum requested: %s\n", spectrumPart);
+  printfQuda("Polynomial acceleration: %s\n", isACC ? "true" : "false");
+  if(isACC) printfQuda("chebyshev polynomial paramaters: degree %d amin %+e amx %+e\n",PolyDeg,amin,amax); 
+  printfQuda("The convergence criterion is %+e\n", tolArpack);
+  printfQuda("maximum number of iterations for arpack %d\n",maxIterArpack);
+   
+  
+  //create the MPI communicator
+#ifdef MPI_COMMS
+  MPI_Fint mpi_comm_f = MPI_Comm_c2f(MPI_COMM_WORLD);
+#endif
+
+  int ido=0;           //control of the action taken by reverse communications (set initially to zero)
+  char *bmat=strdup("I");     // Specifies that the right hand side matrix should be the identity matrix; this makes the problem a standard eigenvalue problem.
+                               
+  QudaInvertParam *param = invert_param;
+  bool pc_solution = ((param->solution_type == QUDA_MATPC_SOLUTION) ||  (param->solution_type == QUDA_MATPCDAG_MATPC_SOLUTION));
+ 
+  //- matrix dimensions 
+  int LDV;
+  int N;
+
+  LDV = (GK_localVolume/fullorHalf)*4*3;
+  N   = (GK_localVolume/fullorHalf)*4*3;
+
+  printfQuda("LDV = %d\n",LDV);
+
+  char *which_evals = strdup(spectrumPart);
+
+  double __complex__   *resid  = (double __complex__  *) malloc(LDV*sizeof(double __complex__ ));
+  if(resid == NULL)
+    errorQuda("Error: not enough memory for resid allocation in eigenSolver.\n");
+   
+  int *iparam = (int *) malloc(11*sizeof(int));
+  if(iparam == NULL)
+    errorQuda("Error: not enough memory for iparam allocation in eigenSolver.\n");
 
 
+
+  iparam[0]=1;  //use exact shifts
+  iparam[2]=maxIterArpack;
+  iparam[3]=1;
+  iparam[6]=1;
+
+
+  int *ipntr  = (int *) malloc(14*sizeof(int));
+  double __complex__  *workd  = (double __complex__  *) malloc(3*LDV*sizeof(double __complex__ )); 
+  int lworkl = (3*NkV*NkV+5*NkV)*2; //just allocate more space
+  double __complex__  *workl = (double __complex__  *) malloc(lworkl*sizeof(double __complex__ ));
+  double *rwork  = (double *) malloc(NkV*sizeof(double));
+  int rvec = 1;       //always call the subroutine that computes orthonormal basis for the eigenvectors
+  char *howmany = strdup("P");   //always compute orthonormal basis
+  int *select = (int *) malloc(NkV*sizeof(int)); //since all Ritz vectors or Schur vectors are computed no need to initialize this array
+  double __complex__  sigma;
+  double __complex__   *workev = (double __complex__  *) malloc(2*NkV*sizeof(double __complex__ ));
+  double *sorted_evals = (double *) malloc(NkV*sizeof(double)); //will be used to sort the eigenvalues
+  int *sorted_evals_index = (int *) malloc(NkV*sizeof(int)); 
+
+  if((ipntr == NULL) || (workd==NULL) || (workl==NULL) || (rwork==NULL) || (select==NULL) || (workev==NULL) || (sorted_evals==NULL) || (sorted_evals_index==NULL)){
+    errorQuda("Error: not enough memory for ipntr,workd,workl,rwork,select,workev,sorted_evals,sorted_evals_index in eigenSolver.\n");
+  }
+
+  double d1,d2,d3;
+
+  int info;
+  info = 0;                 //means use a random starting vector with Arnoldi
+
+  int i,j;
+
+  /* Code added to print the log of ARPACK */
+  //const char *arpack_logfile;
+  int arpack_log_u = 9999;
+
+#ifndef MPI_COMMS
+  //sprintf(arpack_logfile,"ARPACK_output.log");
+  if ( NULL != arpack_logfile ) {
+    /* correctness of this code depends on alignment in Fortran and C 
+       being the same ; if you observe crashes, disable this part */
+     
+    _AFT(initlog)(&arpack_log_u, arpack_logfile, strlen(arpack_logfile));
+    int msglvl0 = 0,
+      msglvl1 = 1,
+      msglvl2 = 2,
+      msglvl3 = 3;
+    _AFT(mcinitdebug)(
+		      &arpack_log_u,      /*logfil*/
+		      &msglvl3,           /*mcaupd*/
+		      &msglvl3,           /*mcaup2*/
+		      &msglvl0,           /*mcaitr*/
+		      &msglvl3,           /*mceigh*/
+		      &msglvl0,           /*mcapps*/
+		      &msglvl0,           /*mcgets*/
+		      &msglvl3            /*mceupd*/);
+     
+    printfQuda("*** ARPACK verbosity set to mcaup2=3 mcaupd=3 mceupd=3; \n"
+	       "*** output is directed to '%s';\n"
+	       "*** if you don't see output, your memory may be corrupted\n",
+	       arpack_logfile);
+  }
+#else
+
+  if ( NULL != arpack_logfile && (comm_rank() == 0) ) {
+    /* correctness of this code depends on alignment in Fortran and C 
+       being the same ; if you observe crashes, disable this part */
+    _AFT(initlog)(&arpack_log_u, arpack_logfile, strlen(arpack_logfile));
+    int msglvl0 = 0,
+      msglvl1 = 1,
+      msglvl2 = 2,
+      msglvl3 = 3;
+    _AFT(pmcinitdebug)(
+		       &arpack_log_u,      /*logfil*/
+		       &msglvl3,           /*mcaupd*/
+		       &msglvl3,           /*mcaup2*/
+		       &msglvl0,           /*mcaitr*/
+		       &msglvl3,           /*mceigh*/
+		       &msglvl0,           /*mcapps*/
+		       &msglvl0,           /*mcgets*/
+		       &msglvl3            /*mceupd*/);
+    
+    printfQuda("*** ARPACK verbosity set to mcaup2=3 mcaupd=3 mceupd=3; \n"
+	       "*** output is directed to '%s';\n"
+	       "*** if you don't see output, your memory may be corrupted\n",
+	       arpack_logfile);
+  }
+#endif   
+
+
+
+  cpuColorSpinorField *h_v = NULL;
+  cudaColorSpinorField *d_v = NULL;
+
+  cpuColorSpinorField *h_v2 = NULL;
+  cudaColorSpinorField *d_v2 = NULL;
+
+  int nconv;
+
+  /*
+    M A I N   L O O P (Reverse communication)  
+  */
+
+  bool checkIdo = true;
+
+  do
+    {
+
+#ifndef MPI_COMMS 
+      _AFT(znaupd)(&ido,"I", &N, which_evals, &NeV, &tolArpack, resid, &NkV,
+                   h_elem, &N, iparam, ipntr, workd, 
+		   workl, &lworkl,rwork,&info,1,2); 
+#else
+      _AFT(pznaupd)(&mpi_comm_f, &ido,"I", &N, which_evals, &NeV, &tolArpack, resid, &NkV,
+		    h_elem, &N, iparam, ipntr, workd, 
+		    workl, &lworkl,rwork,&info,1,2);
+#endif
+
+
+
+      if(checkIdo){
+	ColorSpinorParam cpuParam(workd+ipntr[0]-1,*param,GK_localL,!isFullOp);  // !!!!!!! please check that ipntr[0] does not change 
+	h_v = new cpuColorSpinorField(cpuParam);
+	cpuParam.v=workd+ipntr[1]-1;
+	h_v2 = new cpuColorSpinorField(cpuParam);
+
+	ColorSpinorParam cudaParam(cpuParam, *param);
+	cudaParam.create = QUDA_ZERO_FIELD_CREATE;
+	d_v = new cudaColorSpinorField( cudaParam);
+	d_v2 = new cudaColorSpinorField( cudaParam);
+	checkIdo = false;
+      }
+
+      if (ido == 99 || info == 1)
+	break;
+
+      if ((ido==-1)||(ido==1)){
+        *d_v = *h_v;
+	if(isACC){
+	  polynomialOperator(*d_v2,*d_v);
+	}
+	else{
+	  (*matDiracOp)(*d_v2,*d_v);
+	}
+	*h_v2= *d_v2;
+      }
+    } while (ido != 99);
+   
+  /*
+    Check for convergence 
+  */
+  if ( (info) < 0 ){
+    printfQuda("Error with _naupd, info = %d\n", info);
+  }
+  else{ 
+    nconv = iparam[4];
+    printfQuda("Number of converged eigenvectors: %d\n", nconv);
+
+    //compute eigenvectors 
+#ifndef MPI_COMMS
+    _AFT(zneupd) (&rvec,"P", select,eigenValues,h_elem,&N,&sigma, 
+		  workev,"I",&N,which_evals,&NeV,&tolArpack,resid,&NkV, 
+		  h_elem,&N,iparam,ipntr,workd,workl,&lworkl, 
+		  rwork,&info,1,1,2);
+#else
+    _AFT(pzneupd) (&mpi_comm_f,&rvec,"P", select,eigenValues, h_elem,&N,&sigma, 
+		   workev,"I",&N,which_evals,&NeV,&tolArpack, resid,&NkV, 
+		   h_elem,&N,iparam,ipntr,workd,workl,&lworkl, 
+		   rwork,&info,1,1,2);
+#endif
+
+    if( (info)!=0){
+      printfQuda("Error with _neupd, info = %d \n",(info));
+      printfQuda("Check the documentation of _neupd. \n");
+    }
+    else{ //report eiegnvalues and their residuals
+      printfQuda("Ritz Values and their errors\n");
+      printfQuda("============================\n");
+
+      /* print out the computed ritz values and their error estimates */
+      nconv = iparam[4];
+      for(j=0; j< nconv; j++){
+	printfQuda("RitzValue[%04d]  %+e  %+e  error= %+e \n",j,eigenValues[2*j+0],eigenValues[2*j+1],cabs(*(workl+ipntr[10]-1+j)));
+	sorted_evals_index[j] = j;
+	sorted_evals[j] = cabs(eigenValues[2*j]);
+      }
+
+      // SORT THE EIGENVALUES in ascending order based on their absolute value
+      // quicksort(nconv,sorted_evals,sorted_evals_index);
+      sortAbs(sorted_evals,nconv,false,sorted_evals_index); 
+      //Print sorted evals
+      printfQuda("Sorted eigenvalues based on their absolute values:\n");
+      
+      /* print out the computed ritz values and their error estimates */
+      for(j=0; j< nconv; j++){
+	printfQuda("RitzValue[%06d]  %+e  %+e  error= %+e \n",j,eigenValues[2*sorted_evals_index[j]+0],eigenValues[2*sorted_evals_index[j]+1],cabs(*(workl+ipntr[10]-1+sorted_evals_index[j])) );
+      }      
+    }
+
+    /*Print additional convergence information.*/
+    if( (info)==1){
+      printfQuda("Maximum number of iterations reached.\n");
+    }
+    else{
+      if(info==3){
+	printfQuda("Error: No shifts could be applied during implicit\n");
+	printfQuda("Error: Arnoldi update, try increasing NkV.\n");
+      }
+         
+      printfQuda("_NDRV1\n");
+      printfQuda("=======\n");
+      printfQuda("Size of the matrix is %d\n", N);
+      printfQuda("The number of Ritz values requested is %d\n", NeV);
+      printfQuda("The number of Arnoldi vectors generated is %d\n", NkV);
+      printfQuda("What portion of the spectrum: %s\n", which_evals);
+      printfQuda("The number of converged Ritz values is %d\n", nconv ); 
+      printfQuda("The number of Implicit Arnoldi update iterations taken is %d\n", iparam[2]);
+      printfQuda("The number of OP*x is %d\n", iparam[8]);
+      printfQuda("The convergence criterion is %+e\n", tolArpack);  
+    }
+  }  //if(info < 0) else part
+
+
+#ifndef MPI_COMMS
+  if (NULL != arpack_logfile)
+    _AFT(finilog)(&arpack_log_u);
+#else
+  if(comm_rank() == 0){
+    if (NULL != arpack_logfile){
+      _AFT(finilog)(&arpack_log_u);
+    }
+  }
+#endif     
+
+  ///// calculate eigenvalues of the actual operator
+  printfQuda("Eigenvalues of the actual operator:");
+
+  ColorSpinorParam cpuParam3(v,*param,GK_localL,!isFullOp);  // !!!!!!! please check that ipntr[0] does not change 
+  cpuColorSpinorField *h_v3 = NULL;
+  for(int i =0 ; i < NeV ; i++){
+    cpuParam3.v = (h_elem+i*LDV*2);
+    h_v3 = new cpuColorSpinorField(cpuParam3);
+    *d_v = *h_v3;
+    (*matDiracOp)(*d_v2,*d_v);    
+    eigenValues[2*i]=reDotProductCuda(*d_v,*d_v2);
+    axpbyCuda(1.0,*d_v2,-eigenValues[2*i+0],*d_v);
+    double norma = normCuda(*d_v);
+    printfQuda("Eval[%d] = %+e  %+e    Residual: %+e\n",eigenValues[2*i+0],eigenValues[2*i+1],norma);
+    delete h_v3;
+  }
+
+
+  //free memory
+  free(resid);
+  free(iparam);
+  free(ipntr);
+  free(workd);
+  free(workl);
+  free(rwork);
+  free(sorted_evals);
+  free(sorted_evals_index);
+  //free(zv);
+  free(select);
+  free(workev);
+     
+
+  delete h_v;
+  delete h_v2;
+  delete d_v;
+  delete d_v2;
+
+  return;
+}
+
+
+template<typename Float>
+void QKXTM_Deflation_Kepler<Float>::rotateFromChiralToUKQCD(){
+  if(NeV == 0) return;
+  std::complex<Float> transMatrix[4][4];
+  for(int mu = 0 ; mu < 4 ; mu++)
+    for(int nu = 0 ; nu < 4 ; nu++){
+      transMatrix[mu][nu].real();
+      transMatrix[mu][nu].imag();
+    }
+  Float value = 1./sqrt(2.);
+
+  transMatrix[0][0].real() = -value; // g4*g5*U
+  transMatrix[1][1].real() = -value;
+  transMatrix[2][2].real() = +value;
+  transMatrix[3][3].real() = +value;
+
+  transMatrix[0][2].real() = +value;
+  transMatrix[1][3].real() = +value;
+  transMatrix[2][0].real() = +value;
+  transMatrix[3][1].real() = +value;
+
+  std::complex<Float> tmp[4];
+  std::complex<Float> *vec_cmlx = NULL;
+
+  for(int i = 0 ; i < NeV ; i++){
+    vec_cmlx = (std::complex<Float>*) &(h_elem[i*total_length_per_NeV]);
+    for(int iv = 0 ; iv < (GK_localVolume)/fullorHalf ; iv++){
+      for(int ic = 0 ; ic < 3 ; ic++){
+        memset(tmp,0,4*2*sizeof(Float));
+        for(int mu = 0 ; mu < 4 ; mu++)
+          for(int nu = 0 ; nu < 4 ; nu++)
+            tmp[mu] = tmp[mu] + transMatrix[mu][nu] * ( *(vec_cmlx+(iv*4*3+nu*3+ic)) );
+        for(int mu = 0 ; mu < 4 ; mu++)
+	  *(vec_cmlx+(iv*4*3+mu*3+ic)) = tmp[mu];
+      }//-ic
+    }//-iv
+  }//-i
+
+  printfQuda("Rotation to UKQCD basis completed successfully\n");
+}
+
+
+template<typename Float>
+void QKXTM_Deflation_Kepler<Float>::multiply_by_phase(){
+  if(NeV == 0)return;
+  Float phaseRe, phaseIm;
+  Float tmp0,tmp1;
+
+  if(!isFullOp){
+    for(int ivec = 0 ; ivec < NeV ; ivec++)
+      for(int t=0; t<GK_localL[3];t++)
+	for(int z=0; z<GK_localL[2];z++)
+	  for(int y=0; y<GK_localL[1];y++)
+	    for(int x=0; x<GK_localL[0];x++)
+	      for(int mu=0; mu<4; mu++)
+		for(int c1=0; c1<3; c1++)
+		  {
+		    int oddBit     = (x+y+z+t) & 1;
+		    if(oddBit){
+		      continue;
+		    }
+		    else{
+		      phaseRe = cos(PI*(t+comm_coords(default_topo)[3]*GK_localL[3])/((Float) GK_totalL[3]));
+		      phaseIm = sin(PI*(t+comm_coords(default_topo)[3]*GK_localL[3])/((Float) GK_totalL[3]));
+		      int pos = ((t*GK_localL[2]*GK_localL[1]*GK_localL[0]+z*GK_localL[1]*GK_localL[0]+y*GK_localL[0]+x)/2)*4*3*2 + mu*3*2 + c1*2 ;
+		      tmp0 = h_elem[ivec*total_length_per_NeV + pos + 0] * phaseRe - h_elem[ivec*total_length_per_NeV + pos + 1] * phaseIm;
+		      tmp1 = h_elem[ivec*total_length_per_NeV + pos + 0] * phaseIm + h_elem[ivec*total_length_per_NeV + pos + 1] * phaseRe;
+		      h_elem[ivec*total_length_per_NeV + pos + 0] = tmp0;
+		      h_elem[ivec*total_length_per_NeV + pos + 1] = tmp1;
+		    }
+		  }
+  }
+  else{
+    for(int ivec = 0 ; ivec < NeV ; ivec++)
+      for(int t=0; t<GK_localL[3];t++)
+	for(int z=0; z<GK_localL[2];z++)
+	  for(int y=0; y<GK_localL[1];y++)
+	    for(int x=0; x<GK_localL[0];x++)
+	      for(int mu=0; mu<4; mu++)
+		for(int c1=0; c1<3; c1++){
+		  phaseRe = cos(PI*(t+comm_coords(default_topo)[3]*GK_localL[3])/((Float) GK_totalL[3]));
+		  phaseIm = sin(PI*(t+comm_coords(default_topo)[3]*GK_localL[3])/((Float) GK_totalL[3]));
+		  int pos = (t*GK_localL[2]*GK_localL[1]*GK_localL[0]+z*GK_localL[1]*GK_localL[0]+y*GK_localL[0]+x)*4*3*2 + mu*3*2 + c1*2 ;
+		  tmp0 = h_elem[ivec*total_length_per_NeV + pos + 0] * phaseRe - h_elem[ivec*total_length_per_NeV + pos + 1] * phaseIm;
+		  tmp1 = h_elem[ivec*total_length_per_NeV + pos + 0] * phaseIm + h_elem[ivec*total_length_per_NeV + pos + 1] * phaseRe;
+		  h_elem[ivec*total_length_per_NeV + pos + 0] = tmp0;
+		  h_elem[ivec*total_length_per_NeV + pos + 1] = tmp1;
+		}
+  }//-else
+
+  printfQuda("Multiplication by phase completed successfully\n");
+}
+
+
+template<typename Float>
+void QKXTM_Deflation_Kepler<Float>::readEigenVectors(char *prefix_path){
+  if(NeV == 0)return;
+   LimeReader *limereader;
+   FILE *fid;
+   char *lime_type,*lime_data;
+   unsigned long int lime_data_size;
+   char dummy;
+   MPI_Offset offset;
+   MPI_Datatype subblock;  //MPI-type, 5d subarray
+   MPI_File mpifid;
+   MPI_Status status;
+   int sizes[5], lsizes[5], starts[5];
+   unsigned int i,j;
+   unsigned short int chunksize,mu,c1;
+   char *buffer;
+   unsigned int x,y,z,t;
+   int  isDouble; // default precision
+   int error_occured=0;
+   int next_rec_is_prop = 0;
+   char filename[257];
+   
+   for(int nev = 0 ; nev < NeV ; nev++){
+     sprintf(filename,"%s.%05d",prefix_path,nev);
+     if(comm_rank() == 0)
+       {
+	 /* read lime header */
+	 fid=fopen(filename,"r");
+	 if(fid==NULL)
+	   {
+	     fprintf(stderr,"process 0: Error in %s Could not open %s for reading\n",__func__, filename);
+	     error_occured=1;
+	   }
+	 if ((limereader = limeCreateReader(fid))==NULL)
+	   {
+	     fprintf(stderr,"process 0: Error in %s! Could not create limeReader\n", __func__);
+	     error_occured=1;
+	   }
+	 if(!error_occured)
+	   {
+	     while(limeReaderNextRecord(limereader) != LIME_EOF )
+	       {
+		 lime_type = limeReaderType(limereader);
+		 if(strcmp(lime_type,"propagator-type")==0)
+		   {
+		     lime_data_size = limeReaderBytes(limereader);
+		     lime_data = (char * )malloc(lime_data_size);
+		     limeReaderReadData((void *)lime_data,&lime_data_size, limereader);
+		     
+		     if (strncmp ("DiracFermion_Source_Sink_Pairs", lime_data, strlen ("DiracFermion_Source_Sink_Pairs"))!=0 &&
+			 strncmp ("DiracFermion_Sink", lime_data, strlen ("DiracFermion_Sink"))!=0 )
+		       {
+			 fprintf (stderr, " process 0: Error in %s! Got %s for \"propagator-type\", expecting %s or %s\n", __func__, lime_data, 
+				  "DiracFermion_Source_Sink_Pairs", 
+				  "DiracFermion_Sink");
+			 error_occured = 1;
+			 break;
+		       }
+		     free(lime_data);
+		   }
+		 //lime_type="scidac-binary-data";
+		 if((strcmp(lime_type,"etmc-propagator-format")==0) || (strcmp(lime_type,"etmc-source-format")==0)
+		    || (strcmp(lime_type,"etmc-eigenvectors-format")==0) || (strcmp(lime_type,"eigenvector-info")==0))
+		   {
+		     lime_data_size = limeReaderBytes(limereader);
+		     lime_data = (char * )malloc(lime_data_size);
+		     limeReaderReadData((void *)lime_data,&lime_data_size, limereader);
+		     sscanf(qcd_getParam("<precision>",lime_data, lime_data_size),"%i",&isDouble);    
+		     //		     printf("got precision: %i\n",isDouble);
+		     free(lime_data);
+		     
+		     next_rec_is_prop = 1;
+		   }
+		 if(strcmp(lime_type,"scidac-binary-data")==0 && next_rec_is_prop)
+		   {	      
+		     break;
+		   }
+	       }
+	     /* read 1 byte to set file-pointer to start of binary data */
+	     lime_data_size=1;
+	     limeReaderReadData(&dummy,&lime_data_size,limereader);
+	     offset = ftell(fid)-1;
+	     limeDestroyReader(limereader);      
+	     fclose(fid);
+	   }     
+       }//end myid==0 condition
+     
+     MPI_Bcast(&error_occured,1,MPI_INT,0,MPI_COMM_WORLD);
+     if(error_occured) errorQuda("Error with reading eigenVectors\n");
+     //     if(isDouble != 32 && isDouble != 64 )isDouble = 32;     
+     MPI_Bcast(&isDouble,1,MPI_INT,0,MPI_COMM_WORLD);
+     MPI_Bcast(&offset,sizeof(MPI_Offset),MPI_BYTE,0,MPI_COMM_WORLD);
+
+     //     printfQuda("I have precision %d\n",isDouble);
+
+     if( typeid(Float) == typeid(double) ){
+       if( isDouble != 64 ) errorQuda("Your precisions does not agree");
+     }
+     else if(typeid(Float) == typeid(float) ){
+       if( isDouble != 32 ) errorQuda("Your precisions does not agree");
+     }
+     else
+       errorQuda("Problem with the precision\n");
+
+     if(isDouble==64)
+       isDouble=1;      
+     else if(isDouble==32)
+       isDouble=0; 
+     else
+       {
+	 fprintf(stderr,"process %i: Error in %s! Unsupported precision\n",comm_rank(), __func__);
+       }  
+     
+     if(isDouble)
+       {
+
+	 sizes[0] = GK_totalL[3];
+	 sizes[1] = GK_totalL[2];
+	 sizes[2] = GK_totalL[1];
+	 sizes[3] = GK_totalL[0];
+	 sizes[4] = (4*3*2);
+	 
+	 lsizes[0] = GK_localL[3];
+	 lsizes[1] = GK_localL[2];
+	 lsizes[2] = GK_localL[1];
+	 lsizes[3] = GK_localL[0];
+	 lsizes[4] = sizes[4];
+	 
+	 starts[0]      = comm_coords(default_topo)[3]*GK_localL[3];
+	 starts[1]      = comm_coords(default_topo)[2]*GK_localL[2];
+	 starts[2]      = comm_coords(default_topo)[1]*GK_localL[1];
+	 starts[3]      = comm_coords(default_topo)[0]*GK_localL[0];
+	 starts[4]      = 0;
+
+
+	 
+	 MPI_Type_create_subarray(5,sizes,lsizes,starts,MPI_ORDER_C,MPI_DOUBLE,&subblock);
+	 MPI_Type_commit(&subblock);
+      
+	 MPI_File_open(MPI_COMM_WORLD, filename, MPI_MODE_RDONLY, MPI_INFO_NULL, &mpifid);
+	 MPI_File_set_view(mpifid, offset, MPI_DOUBLE, subblock, "native", MPI_INFO_NULL);
+	 
+	 //load time-slice by time-slice:
+	 chunksize=4*3*2*sizeof(double);
+	 buffer = (char*) malloc(chunksize*GK_localVolume);
+	 if(buffer==NULL)
+	   {
+	     fprintf(stderr,"process %i: Error in %s! Out of memory\n",comm_rank(), __func__);
+	     return;
+	   }
+	 MPI_File_read_all(mpifid, buffer, 4*3*2*GK_localVolume, MPI_DOUBLE, &status);
+	 if(!qcd_isBigEndian())      
+	   qcd_swap_8((double*) buffer,(size_t)(2*4*3)*(size_t)GK_localVolume);
+	 i=0;
+	 if(!isFullOp){
+	   for(t=0; t<GK_localL[3];t++)
+	     for(z=0; z<GK_localL[2];z++)
+	       for(y=0; y<GK_localL[1];y++)
+		 for(x=0; x<GK_localL[0];x++)
+		   for(mu=0; mu<4; mu++)
+		     for(c1=0; c1<3; c1++){
+		       int oddBit     = (x+y+z+t) & 1;
+		       if(oddBit){
+			 h_elem[nev*total_length_per_NeV + ((t*GK_localL[2]*GK_localL[1]*GK_localL[0]+z*GK_localL[1]*GK_localL[0]+y*GK_localL[0]+x)/2)*4*3*2 + mu*3*2 + c1*2 + 0 ] = ((double*)buffer)[i];
+			 h_elem[nev*total_length_per_NeV + ((t*GK_localL[2]*GK_localL[1]*GK_localL[0]+z*GK_localL[1]*GK_localL[0]+y*GK_localL[0]+x)/2)*4*3*2 + mu*3*2 + c1*2 + 1 ] = ((double*)buffer)[i+1];
+			 i+=2;
+		       }
+		       else{
+			 i+=2;
+		       }
+		     }
+	 }
+	 else{
+	   for(t=0; t<GK_localL[3];t++)
+	     for(z=0; z<GK_localL[2];z++)
+	       for(y=0; y<GK_localL[1];y++)
+		 for(x=0; x<GK_localL[0];x++)
+		   for(mu=0; mu<4; mu++)
+		     for(c1=0; c1<3; c1++){
+			 h_elem[nev*total_length_per_NeV + (t*GK_localL[2]*GK_localL[1]*GK_localL[0]+z*GK_localL[1]*GK_localL[0]+y*GK_localL[0]+x)*4*3*2 + mu*3*2 + c1*2 + 0 ] = ((double*)buffer)[i];
+			 h_elem[nev*total_length_per_NeV + (t*GK_localL[2]*GK_localL[1]*GK_localL[0]+z*GK_localL[1]*GK_localL[0]+y*GK_localL[0]+x)*4*3*2 + mu*3*2 + c1*2 + 1 ] = ((double*)buffer)[i+1];
+			 i+=2;
+		     }
+	 }
+
+
+	 free(buffer);
+	 MPI_File_close(&mpifid);
+	 MPI_Type_free(&subblock);
+	 
+	 continue;
+       }//end isDouble condition
+     else
+       {
+	 sizes[0] = GK_totalL[3];
+	 sizes[1] = GK_totalL[2];
+	 sizes[2] = GK_totalL[1];
+	 sizes[3] = GK_totalL[0];
+	 sizes[4] = (4*3*2);
+	 
+	 lsizes[0] = GK_localL[3];
+	 lsizes[1] = GK_localL[2];
+	 lsizes[2] = GK_localL[1];
+	 lsizes[3] = GK_localL[0];
+	 lsizes[4] = sizes[4];
+	 
+	 starts[0]      = comm_coords(default_topo)[3]*GK_localL[3];
+	 starts[1]      = comm_coords(default_topo)[2]*GK_localL[2];
+	 starts[2]      = comm_coords(default_topo)[1]*GK_localL[1];
+	 starts[3]      = comm_coords(default_topo)[0]*GK_localL[0];
+	 starts[4]      = 0;
+
+	 //	 for(int ii = 0 ; ii < 5 ; ii++)
+	 //  printf("%d %d %d %d\n",comm_rank(),sizes[ii],lsizes[ii],starts[ii]);
+
+      MPI_Type_create_subarray(5,sizes,lsizes,starts,MPI_ORDER_C,MPI_FLOAT,&subblock);
+      MPI_Type_commit(&subblock);
+      
+      MPI_File_open(MPI_COMM_WORLD, filename, MPI_MODE_RDONLY, MPI_INFO_NULL, &mpifid);
+      MPI_File_set_view(mpifid, offset, MPI_FLOAT, subblock, "native", MPI_INFO_NULL);
+      
+      //load time-slice by time-slice:
+      chunksize=4*3*2*sizeof(float);
+      buffer = (char*) malloc(chunksize*GK_localVolume);
+      if(buffer==NULL)
+      {
+	fprintf(stderr,"process %i: Error in %s! Out of memory\n",comm_rank(), __func__);
+         return;
+      }
+      MPI_File_read_all(mpifid, buffer, 4*3*2*GK_localVolume, MPI_FLOAT, &status);
+
+      if(!qcd_isBigEndian())
+	qcd_swap_4((float*) buffer,(size_t)(2*4*3)*(size_t)GK_localVolume);
+      
+      i=0;
+      if(!isFullOp){
+	for(t=0; t<GK_localL[3];t++)
+	  for(z=0; z<GK_localL[2];z++)
+	    for(y=0; y<GK_localL[1];y++)
+	      for(x=0; x<GK_localL[0];x++)
+		for(mu=0; mu<4; mu++)
+		  for(c1=0; c1<3; c1++){
+		    int oddBit     = (x+y+z+t) & 1;
+		    if(oddBit){
+		      h_elem[nev*total_length_per_NeV + ((t*GK_localL[2]*GK_localL[1]*GK_localL[0]+z*GK_localL[1]*GK_localL[0]+y*GK_localL[0]+x)/2)*4*3*2 + mu*3*2 + c1*2 + 0 ] = *((float*)(buffer + i)); i+=4;
+		      h_elem[nev*total_length_per_NeV + ((t*GK_localL[2]*GK_localL[1]*GK_localL[0]+z*GK_localL[1]*GK_localL[0]+y*GK_localL[0]+x)/2)*4*3*2 + mu*3*2 + c1*2 + 1 ] = *((float*)(buffer + i)); i+=4;
+		    }
+		    else{
+		      i+=8;
+		    }
+		  }    
+      }  
+      else{
+	for(t=0; t<GK_localL[3];t++)
+	  for(z=0; z<GK_localL[2];z++)
+	    for(y=0; y<GK_localL[1];y++)
+	      for(x=0; x<GK_localL[0];x++)
+		for(mu=0; mu<4; mu++)
+		  for(c1=0; c1<3; c1++){
+		    h_elem[nev*total_length_per_NeV + (t*GK_localL[2]*GK_localL[1]*GK_localL[0]+z*GK_localL[1]*GK_localL[0]+y*GK_localL[0]+x)*4*3*2 + mu*3*2 + c1*2 + 0 ] = *((float*)(buffer + i)); i+=4;
+		    h_elem[nev*total_length_per_NeV + (t*GK_localL[2]*GK_localL[1]*GK_localL[0]+z*GK_localL[1]*GK_localL[0]+y*GK_localL[0]+x)*4*3*2 + mu*3*2 + c1*2 + 1 ] = *((float*)(buffer + i)); i+=4;
+		  }    
+      }
+      
+      free(buffer);
+      MPI_File_close(&mpifid);
+      MPI_Type_free(&subblock);            
+      
+      continue;
+       }//end isDouble condition
+   }
+   printfQuda("Eigenvectors loaded successfully\n");
+}//end qcd_getVectorLime 
+
+
+template<typename Float>
+void QKXTM_Deflation_Kepler<Float>::readEigenValues(char *filename){
+  if(NeV == 0)return;
+  FILE *ptr;
+  Float dummy;
+  ptr = fopen(filename,"r");
+  if(ptr == NULL)errorQuda("Error cannot open file to read eigenvalues\n");
+  char stringFormat[257];
+  if(typeid(Float) == typeid(double))
+    strcpy(stringFormat,"%lf");
+  else if(typeid(Float) == typeid(float))
+    strcpy(stringFormat,"%f");
+
+  for(int i = 0 ; i < NeV ; i++)
+    fscanf(ptr,stringFormat,&(EigenValues()[i]),&dummy);
+       
+
+  printfQuda("Eigenvalues loaded successfully\n");
+  fclose(ptr);
 }
 
 //////////////////////////////////////////////
@@ -3123,3 +3460,39 @@ void dumpLoop_oneD_v2(void *cn, const char *Pref,int accumLevel, int Q_sq, int m
     free(mom[ip]);
   free(mom);
 }
+
+
+//  _part of DeflateVector Function, was right after defining "ptr_elem"
+//   if( typeid(Float) == typeid(float) ){
+
+//     //    for(int i = 0 ; i < NeV ; i++)
+//     //      cblas_cdotc_sub(NN,H_elem()[i],incx,ptr_elem,incy,&(out_vec[2*i]));
+//     cblas_cgemv(CblasColMajor, 'C', NN, NeV, (void*)alpha, (void *)h_elem, NN, ptr_elem, incx, (void *)beta, out_vec, incy); // 
+
+//     MPI_Allreduce(out_vec,out_vec_reduce,NeV*2,MPI_FLOAT,MPI_SUM,MPI_COMM_WORLD);
+//     for(int i = 0 ; i < NeV ; i++){
+//       out_vec_reduce[i*2+0] /= eigenValues[i];
+//       out_vec_reduce[i*2+1] /= eigenValues[i];
+//     }
+
+//     memset(ptr_elem,0,(GK_localVolume/2)*4*3*2*sizeof(Float));
+    
+//     for(int i = 0 ; i < NeV ; i++)
+//       cblas_caxpy(NN,&(out_vec_reduce[2*i]),H_elem()[i],incx,ptr_elem,incy);
+//   }
+//   else if ( typeid(Float) == typeid(double) ){
+
+//     for(int i = 0 ; i < NeV ; i++)
+//       cblas_zdotc_sub(NN,H_elem()[i],incx,ptr_elem,incy,&(out_vec[2*i]));
+
+//     MPI_Allreduce(out_vec,out_vec_reduce,NeV*2,MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);
+//     for(int i = 0 ; i < NeV ; i++){
+//       out_vec_reduce[i*2+0] /= eigenValues[i];
+//       out_vec_reduce[i*2+1] /= eigenValues[i];
+//     }
+
+//     memset(ptr_elem,0,(GK_localVolume/2)*4*3*2*sizeof(Float));
+
+//     for(int i = 0 ; i < NeV ; i++)
+//       cblas_zaxpy(NN,&(out_vec_reduce[2*i]),H_elem()[i],incx,ptr_elem,incy);
+//   }

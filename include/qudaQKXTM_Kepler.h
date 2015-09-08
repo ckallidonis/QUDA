@@ -43,11 +43,11 @@ namespace quda {
   enum WHICHSPECTRUM{SR,LR,SM,LM,SI,LI};
 
   typedef struct{
-    int PolyDeg;  // degree of the polynomial
-    int N_EigenVectors;      // Number of the eigenvectors we want
-    int NkV;      // total size of Krylov space
+    int PolyDeg;     // degree of the Chebysev polynomial
+    int nEv;         // Number of the eigenvectors we want
+    int nKv;         // total size of Krylov space
     WHICHSPECTRUM spectrumPart; // for which part of the spectrum we want to solve
-    bool isACC;
+    bool isACC;            
     double tolArpack;
     int maxIterArpack;
     char *arpack_logfile;
@@ -291,5 +291,5 @@ void DeflateAndInvert_loop_w_One_Der(void **gaugeToPlaquette, QudaInvertParam *p
 void DeflateAndInvert_loop_w_One_Der_volumeSource(void **gaugeToPlaquette, QudaInvertParam *param ,QudaGaugeParam *gauge_param,char *filename_eigenValues_up, char *filename_eigenVectors_up, char *filename_eigenValues_down, char *filename_eigenVectors_down,char *filename_out , int NeV , int Nstoch, int seed , int NdumpStep, quda::qudaQKXTMinfo_Kepler info);
 void DeflateAndInvert_threepTwop(void **gaugeSmeared, void **gauge, QudaInvertParam *param ,QudaGaugeParam *gauge_param, char *filename_eigenValues_up, char *filename_eigenVectors_up, char *filename_eigenValues_down, char *filename_eigenVectors_down, char *filename_twop, char *filename_threep,int NeV, quda::qudaQKXTMinfo_Kepler info, quda::WHICHPARTICLE NUCLEON, quda::WHICHPROJECTOR PID );
 
-void calcEigenVectorsAndInvert_threepTwop(void **gaugeSmeared, void **gauge, QudaInvertParam *param ,QudaGaugeParam *gauge_param, char *filename_twop, char *filename_threep, int NeV, qudaQKXTMinfo_Kepler info, qudaQKXTM_arpackInfo arpackInfo, WHICHPARTICLE NUCLEON, WHICHPROJECTOR PID );
+void calcEigenVectorsAndInvert_threepTwop(void **gaugeSmeared, void **gauge, QudaInvertParam *param ,QudaGaugeParam *gauge_param, char *filename_twop, char *filename_threep, quda::qudaQKXTMinfo_Kepler info, quda::qudaQKXTM_arpackInfo arpackInfo, quda::WHICHPARTICLE NUCLEON, quda::WHICHPROJECTOR PID );
 #endif

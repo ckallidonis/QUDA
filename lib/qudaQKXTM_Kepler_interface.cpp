@@ -496,7 +496,7 @@ void checkReadingEigenVectors(int N_eigenVectors, char* pathIn, char *pathOut, c
   QKXTM_Deflation_Kepler<float> *deflation = new QKXTM_Deflation_Kepler<float>(N_eigenVectors,false);
   deflation->printInfo();
   deflation->readEigenVectors(pathIn);
-  deflation->writeEigenVectors_ASCI(pathOut);
+  deflation->writeEigenVectors_ASCII(pathOut);
   deflation->readEigenValues(pathEigenValues);
   for(int i = 0 ; i < N_eigenVectors; i++)
     printf("%e\n",deflation->EigenValues()[i]);
@@ -530,7 +530,7 @@ void checkDeflateVectorQuda(void **gauge,QudaInvertParam *param ,QudaGaugeParam 
       for(int c = 0 ; c < 3 ; c++)
 	vecIn->H_elem()[iv*4*3*2+mu*c*2+c*2+0] = 1.;
   
-  deflation->deflateGuessVector(*vecOut,*vecIn);
+  deflation->deflateVector(*vecOut,*vecIn);
   vecOut->download();
   vecTest->zero_host();
 
@@ -541,11 +541,11 @@ void checkDeflateVectorQuda(void **gauge,QudaInvertParam *param ,QudaGaugeParam 
 
   for(int ie = 0 ; ie < NeV ; ie++){
     cmplx_vecTest = (std::complex<float>*) vecTest->H_elem();
-    cmplx_U = (std::complex<float>*) deflation->H_elem()[ie];
+    cmplx_U = (std::complex<float>*) &(deflation->H_elem()[ie*(GK_localVolume/2)*4*3*2]);
     cmplx_b = (std::complex<float>*) vecIn->H_elem();
     for(int alpha = 0 ; alpha < (GK_localVolume/2)*4*3 ; alpha++)
       for(int beta = 0 ; beta < (GK_localVolume/2)*4*3 ; beta++)
-	cmplx_vecTest[alpha] = cmplx_vecTest[alpha] + cmplx_U[ alpha] * (1./deflation->EigenValues()[ie]) * conj(cmplx_U[beta]) * cmplx_b[beta]; 
+	cmplx_vecTest[alpha] = cmplx_vecTest[alpha] + (*(cmplx_U+alpha)) * (1./deflation->EigenValues()[ie]) * conj(cmplx_U[beta]) * cmplx_b[beta]; 
   }
 
   FILE *ptr_out = NULL;
@@ -664,7 +664,7 @@ void checkEigenVectorQuda(void **gauge,QudaInvertParam *param ,QudaGaugeParam *g
 
   free(input_vector);
   free(output_vector);
-  deflation->writeEigenVectors_ASCI(filename_out);
+  deflation->writeEigenVectors_ASCII(filename_out);
 
    delete dirac;  
    delete b;
@@ -805,7 +805,7 @@ void checkDeflateAndInvert(void **gaugeToPlaquette, QudaInvertParam *param ,Quda
   // now the the source vector b is ready to perform deflation and find the initial guess
   K_vector->downloadFromCuda(in,flag_eo);
   K_vector->download();
-  deflation->deflateGuessVector(*K_guess,*K_vector);
+  deflation->deflateVector(*K_guess,*K_vector);
   K_guess->uploadToCuda(out,flag_eo); // initial guess is ready
   t2 = MPI_Wtime();
 #ifdef TIMING_REPORT
@@ -1042,7 +1042,7 @@ void DeflateAndInvert_twop(void **gaugeSmeared, QudaInvertParam *param ,QudaGaug
       // now the the source vector b is ready to perform deflation and find the initial guess
       K_vector->downloadFromCuda(in,flag_eo);
       K_vector->download();
-      deflation_up->deflateGuessVector(*K_guess,*K_vector);
+      deflation_up->deflateVector(*K_guess,*K_vector);
       K_guess->uploadToCuda(out,flag_eo); // initial guess is ready
       //  zeroCuda(*out); // remove it later , just for test
       (*solve)(*out,*in);
@@ -1086,7 +1086,7 @@ void DeflateAndInvert_twop(void **gaugeSmeared, QudaInvertParam *param ,QudaGaug
       // now the the source vector b is ready to perform deflation and find the initial guess
       K_vector->downloadFromCuda(in,flag_eo);
       K_vector->download();
-      deflation_down->deflateGuessVector(*K_guess,*K_vector);
+      deflation_down->deflateVector(*K_guess,*K_vector);
       K_guess->uploadToCuda(out,flag_eo); // initial guess is ready
       //  zeroCuda(*out); // remove it later , just for test
       (*solve)(*out,*in);
@@ -1321,7 +1321,7 @@ void DeflateAndInvert_loop(void **gaugeToPlaquette, QudaInvertParam *param ,Quda
     // now the the source vector b is ready to perform deflation and find the initial guess
     K_vector->downloadFromCuda(in,flag_eo);
     K_vector->download();
-    deflation_down->deflateGuessVector(*K_guess,*K_vector);
+    deflation_down->deflateVector(*K_guess,*K_vector);
     K_guess->uploadToCuda(out,flag_eo); // initial guess is ready
     //  zeroCuda(*out); // remove it later , just for test
     (*solve)(*out,*in);
@@ -1549,7 +1549,7 @@ void DeflateAndInvert_loop_w_One_Der(void **gaugeToPlaquette, QudaInvertParam *p
     // now the the source vector b is ready to perform deflation and find the initial guess
     K_vector->downloadFromCuda(in,flag_eo);
     K_vector->download();
-    deflation_down->deflateGuessVector(*K_guess,*K_vector);
+    deflation_down->deflateVector(*K_guess,*K_vector);
     K_guess->uploadToCuda(out,flag_eo); // initial guess is ready
     //  zeroCuda(*out); // remove it later , just for test
     (*solve)(*out,*in);
@@ -1824,7 +1824,7 @@ void DeflateAndInvert_loop_w_One_Der_volumeSource(void **gaugeToPlaquette, QudaI
     // now the the source vector b is ready to perform deflation and find the initial guess
     K_vector->downloadFromCuda(in,flag_eo);
     K_vector->download();
-    deflation_up->deflateGuessVector(*K_guess,*K_vector);
+    deflation_up->deflateVector(*K_guess,*K_vector);
     K_guess->uploadToCuda(out,flag_eo); // initial guess is ready
     //  zeroCuda(*out); // remove it later , just for test
     (*solve)(*out,*in);
@@ -1881,7 +1881,7 @@ void DeflateAndInvert_loop_w_One_Der_volumeSource(void **gaugeToPlaquette, QudaI
     // now the the source vector b is ready to perform deflation and find the initial guess
     K_vector->downloadFromCuda(in,flag_eo);
     K_vector->download();
-    deflation_down->deflateGuessVector(*K_guess,*K_vector);
+    deflation_down->deflateVector(*K_guess,*K_vector);
     K_guess->uploadToCuda(out,flag_eo); // initial guess is ready
     //  zeroCuda(*out); // remove it later , just for test
     (*solve)(*out,*in);
@@ -2148,7 +2148,7 @@ void DeflateAndInvert_threepTwop(void **gaugeSmeared, void **gauge, QudaInvertPa
       // now the the source vector b is ready to perform deflation and find the initial guess
       K_vector->downloadFromCuda(in,flag_eo);
       K_vector->download();
-      deflation_up->deflateGuessVector(*K_guess,*K_vector);
+      deflation_up->deflateVector(*K_guess,*K_vector);
       K_guess->uploadToCuda(out,flag_eo); // initial guess is ready
       //  zeroCuda(*out); // remove it later , just for test
       (*solve)(*out,*in);
@@ -2192,7 +2192,7 @@ void DeflateAndInvert_threepTwop(void **gaugeSmeared, void **gauge, QudaInvertPa
       // now the the source vector b is ready to perform deflation and find the initial guess
       K_vector->downloadFromCuda(in,flag_eo);
       K_vector->download();
-      deflation_down->deflateGuessVector(*K_guess,*K_vector);
+      deflation_down->deflateVector(*K_guess,*K_vector);
       K_guess->uploadToCuda(out,flag_eo); // initial guess is ready
       //  zeroCuda(*out); // remove it later , just for test
       (*solve)(*out,*in);
@@ -2279,9 +2279,9 @@ void DeflateAndInvert_threepTwop(void **gaugeSmeared, void **gauge, QudaInvertPa
 	K_vector->downloadFromCuda(in,flag_eo);
 	K_vector->download();
 	if(NUCLEON == PROTON)
-	  deflation_down->deflateGuessVector(*K_guess,*K_vector);
+	  deflation_down->deflateVector(*K_guess,*K_vector);
 	else if(NUCLEON == NEUTRON)
-	  deflation_up->deflateGuessVector(*K_guess,*K_vector);
+	  deflation_up->deflateVector(*K_guess,*K_vector);
 	K_guess->uploadToCuda(out,flag_eo); // initial guess is ready
 	(*solve)(*out,*in);
 	dirac.reconstruct(*x,*b,param->solution_type);
@@ -2339,9 +2339,9 @@ void DeflateAndInvert_threepTwop(void **gaugeSmeared, void **gauge, QudaInvertPa
 	K_vector->downloadFromCuda(in,flag_eo);
 	K_vector->download();
 	if(NUCLEON == PROTON)
-	  deflation_up->deflateGuessVector(*K_guess,*K_vector);
+	  deflation_up->deflateVector(*K_guess,*K_vector);
 	else if(NUCLEON == NEUTRON)
-	  deflation_down->deflateGuessVector(*K_guess,*K_vector);
+	  deflation_down->deflateVector(*K_guess,*K_vector);
 	K_guess->uploadToCuda(out,flag_eo); // initial guess is ready
 	(*solve)(*out,*in);
 	dirac.reconstruct(*x,*b,param->solution_type);
@@ -2424,61 +2424,61 @@ void DeflateAndInvert_threepTwop(void **gaugeSmeared, void **gauge, QudaInvertPa
 }
 
 
-void calcEigenVectorsAndInvert_threepTwop(void **gaugeSmeared, void **gauge, QudaInvertParam *param ,QudaGaugeParam *gauge_param, char *filename_twop, char *filename_threep,int NeV, qudaQKXTMinfo_Kepler info, qudaQKXTM_arpackInfo arpackInfo, WHICHPARTICLE NUCLEON, WHICHPROJECTOR PID ){
-  bool flag_eo;
-  double t1,t2;
+// void calcEigenVectorsAndInvert_threepTwop(void **gaugeSmeared, void **gauge, QudaInvertParam *param ,QudaGaugeParam *gauge_param, char *filename_twop, char *filename_threep,int NeV, qudaQKXTMinfo_Kepler info, qudaQKXTM_arpackInfo arpackInfo, WHICHPARTICLE NUCLEON, WHICHPROJECTOR PID ){
+//   bool flag_eo;
+//   double t1,t2;
 
-  profileInvert.Start(QUDA_PROFILE_TOTAL);
-  if(param->solve_type != QUDA_NORMOP_PC_SOLVE) errorQuda("This function works only with even odd preconditioning");
-  if(param->inv_type != QUDA_CG_INVERTER) errorQuda("This function works only with CG method");
-  if( (param->matpc_type != QUDA_MATPC_EVEN_EVEN_ASYMMETRIC) && (param->matpc_type != QUDA_MATPC_ODD_ODD_ASYMMETRIC) ) errorQuda("Only asymmetric operators are supported in deflation\n");
-  if( param->matpc_type == QUDA_MATPC_EVEN_EVEN_ASYMMETRIC )
-    flag_eo = true;
-  else if(param->matpc_type == QUDA_MATPC_ODD_ODD_ASYMMETRIC)
-    flag_eo = false;
+//   profileInvert.Start(QUDA_PROFILE_TOTAL);
+//   if(param->solve_type != QUDA_NORMOP_PC_SOLVE) errorQuda("This function works only with even odd preconditioning");
+//   if(param->inv_type != QUDA_CG_INVERTER) errorQuda("This function works only with CG method");
+//   if( (param->matpc_type != QUDA_MATPC_EVEN_EVEN_ASYMMETRIC) && (param->matpc_type != QUDA_MATPC_ODD_ODD_ASYMMETRIC) ) errorQuda("Only asymmetric operators are supported in deflation\n");
+//   if( param->matpc_type == QUDA_MATPC_EVEN_EVEN_ASYMMETRIC )
+//     flag_eo = true;
+//   else if(param->matpc_type == QUDA_MATPC_ODD_ODD_ASYMMETRIC)
+//     flag_eo = false;
 
-  bool pc_solution = false;
-  bool pc_solve = true;
-  bool mat_solution = (param->solution_type == QUDA_MAT_SOLUTION) || (param->solution_type ==  QUDA_MATPC_SOLUTION);
-  bool direct_solve = false;
+//   bool pc_solution = false;
+//   bool pc_solve = true;
+//   bool mat_solution = (param->solution_type == QUDA_MAT_SOLUTION) || (param->solution_type ==  QUDA_MATPC_SOLUTION);
+//   bool direct_solve = false;
  
 
-  QKXTM_Deflation_Kepler<double> *deflation = new QKXTM_Deflation_Kepler<double>(arpackInfo,*param);
+//   QKXTM_Deflation_Kepler<double> *deflation = new QKXTM_Deflation_Kepler<double>(arpackInfo,param);
 
-  cudaColorSpinorField *b = NULL;
-  cudaColorSpinorField *x = NULL;
-  cudaColorSpinorField *in = NULL;
-  cudaColorSpinorField *out = NULL;
+//   cudaColorSpinorField *b = NULL;
+//   cudaColorSpinorField *x = NULL;
+//   cudaColorSpinorField *in = NULL;
+//   cudaColorSpinorField *out = NULL;
 
-  cudaGaugeField *cudaGauge = checkGauge(param);
-  checkInvertParam(param);
+//   cudaGaugeField *cudaGauge = checkGauge(param);
+//   checkInvertParam(param);
 
-  const int *X = cudaGauge->X();
+//   const int *X = cudaGauge->X();
 
-  void *input_vector = malloc(GK_localL[0]*GK_localL[1]*GK_localL[2]*GK_localL[3]*spinorSiteSize*sizeof(double));
-  void *output_vector = malloc(GK_localL[0]*GK_localL[1]*GK_localL[2]*GK_localL[3]*spinorSiteSize*sizeof(double));
+//   void *input_vector = malloc(GK_localL[0]*GK_localL[1]*GK_localL[2]*GK_localL[3]*spinorSiteSize*sizeof(double));
+//   void *output_vector = malloc(GK_localL[0]*GK_localL[1]*GK_localL[2]*GK_localL[3]*spinorSiteSize*sizeof(double));
 
-  memset(input_vector,0,X[0]*X[1]*X[2]*X[3]*spinorSiteSize*sizeof(double));
-  memset(output_vector,0,X[0]*X[1]*X[2]*X[3]*spinorSiteSize*sizeof(double));
+//   memset(input_vector,0,X[0]*X[1]*X[2]*X[3]*spinorSiteSize*sizeof(double));
+//   memset(output_vector,0,X[0]*X[1]*X[2]*X[3]*spinorSiteSize*sizeof(double));
 
-  ColorSpinorParam cpuParam(input_vector,*param,X,pc_solution);
-  ColorSpinorField *h_b = (param->input_location == QUDA_CPU_FIELD_LOCATION) ?
-    static_cast<ColorSpinorField*>(new cpuColorSpinorField(cpuParam)) :
-    static_cast<ColorSpinorField*>(new cudaColorSpinorField(cpuParam));
+//   ColorSpinorParam cpuParam(input_vector,*param,X,pc_solution);
+//   ColorSpinorField *h_b = (param->input_location == QUDA_CPU_FIELD_LOCATION) ?
+//     static_cast<ColorSpinorField*>(new cpuColorSpinorField(cpuParam)) :
+//     static_cast<ColorSpinorField*>(new cudaColorSpinorField(cpuParam));
 
-  cpuParam.v = output_vector;
-  ColorSpinorField *h_x = (param->output_location == QUDA_CPU_FIELD_LOCATION) ?
-    static_cast<ColorSpinorField*>(new cpuColorSpinorField(cpuParam)) :
-    static_cast<ColorSpinorField*>(new cudaColorSpinorField(cpuParam));
-
-
-  ColorSpinorParam cudaParam(cpuParam, *param);
-  cudaParam.create = QUDA_ZERO_FIELD_CREATE;
-  b = new cudaColorSpinorField( cudaParam);
-  cudaParam.create = QUDA_ZERO_FIELD_CREATE;
-  x = new cudaColorSpinorField(cudaParam);
+//   cpuParam.v = output_vector;
+//   ColorSpinorField *h_x = (param->output_location == QUDA_CPU_FIELD_LOCATION) ?
+//     static_cast<ColorSpinorField*>(new cpuColorSpinorField(cpuParam)) :
+//     static_cast<ColorSpinorField*>(new cudaColorSpinorField(cpuParam));
 
 
-  deflation->polynomialOperator(*x,*b);
-  delete deflation;
-}
+//   ColorSpinorParam cudaParam(cpuParam, *param);
+//   cudaParam.create = QUDA_ZERO_FIELD_CREATE;
+//   b = new cudaColorSpinorField( cudaParam);
+//   cudaParam.create = QUDA_ZERO_FIELD_CREATE;
+//   x = new cudaColorSpinorField(cudaParam);
+
+
+//   deflation->polynomialOperator(*x,*b);
+//   delete deflation;
+// }
