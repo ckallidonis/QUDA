@@ -1813,7 +1813,7 @@ public:
   void writeEigenVectors_ASCII(char *filename);
   void readEigenValues(char *filename);
   void deflateVector(QKXTM_Vector_Kepler<Float> &vec_defl, QKXTM_Vector_Kepler<Float> &vec_in);
-  //  void deflateGuessVector(QKXTM_Vector_Kepler<Float> &vec_guess, QKXTM_Vector_Kepler<Float> &vec_source);
+  void ApplyFullOp(Float *vec_out, Float *vec_in, QudaInvertParam *param);
   void copyEigenVectorToQKXTM_Vector_Kepler(int eigenVector_id, Float *vec);
   void copyEigenVectorFromQKXTM_Vector_Kepler(int eigenVector_id,Float *vec);
   void rotateFromChiralToUKQCD();
@@ -1912,7 +1912,7 @@ QKXTM_Deflation_Kepler<Float>::~QKXTM_Deflation_Kepler(){
   free(eigenValues);
   eigenValues=NULL;
   h_elem=NULL;
-  delete matDiracOp;
+  if(isFullOp) delete matDiracOp;
 }
 
 template<typename Float>
@@ -1930,6 +1930,38 @@ void QKXTM_Deflation_Kepler<Float>::printInfo(){
 }
 
 
+template<typename Float>
+void QKXTM_Deflation_Kepler<Float>::ApplyFullOp(Float *vec_out, Float *vec_in, QudaInvertParam *param){
+  if(!isFullOp)
+    errorQuda("ApplyFullOp function only works with the full Operator. Hint: Check your QKXTM_Deflation_Kepler object initialization.\n");
+
+
+  cudaColorSpinorField *in    = NULL;
+  cudaColorSpinorField *out   = NULL;
+  cpuColorSpinorField  *h_in  = NULL;
+  cpuColorSpinorField  *h_out = NULL;
+
+  ColorSpinorParam cpuParam((void*)vec_in,*param,GK_localL,!isFullOp);
+  h_in = new cpuColorSpinorField(cpuParam);
+  cpuParam.v = vec_out;
+  h_out = new cpuColorSpinorField(cpuParam);
+
+  ColorSpinorParam cudaParam(cpuParam, *param);
+  cudaParam.create = QUDA_COPY_FIELD_CREATE;
+  in  = new cudaColorSpinorField(h_in,cudaParam);
+  out = new cudaColorSpinorField( cudaParam);
+
+  (*matDiracOp)(*out,*in);
+
+  QKXTM_Vector_Kepler<double> *Kvec = new QKXTM_Vector_Kepler<double>(BOTH,VECTOR);
+
+  Kvec->downloadFromCuda(out,false);
+  Kvec->download();
+
+  memcpy(vec_out,Kvec->H_elem(),bytes_total_length_per_NeV);
+
+  printQuda("Application of Full Operator completed successfully\n");
+}
 
 
 
