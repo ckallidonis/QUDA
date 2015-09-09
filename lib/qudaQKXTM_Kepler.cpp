@@ -1935,13 +1935,14 @@ void QKXTM_Deflation_Kepler<Float>::ApplyFullOp(Float *vec_out, Float *vec_in, Q
   if(!isFullOp)
     errorQuda("ApplyFullOp function only works with the full Operator. Hint: Check your QKXTM_Deflation_Kepler object initialization.\n");
 
+  bool use_pc = (!isFullOp);
 
   cudaColorSpinorField *in    = NULL;
   cudaColorSpinorField *out   = NULL;
   cpuColorSpinorField  *h_in  = NULL;
   cpuColorSpinorField  *h_out = NULL;
 
-  ColorSpinorParam cpuParam((void*)vec_in,*param,GK_localL,!isFullOp);
+  ColorSpinorParam cpuParam((void*)vec_in,*param,GK_localL,use_pc);
   h_in = new cpuColorSpinorField(cpuParam);
   cpuParam.v = vec_out;
   h_out = new cpuColorSpinorField(cpuParam);
@@ -1949,13 +1950,13 @@ void QKXTM_Deflation_Kepler<Float>::ApplyFullOp(Float *vec_out, Float *vec_in, Q
   ColorSpinorParam cudaParam(cpuParam, *param);
   cudaParam.create = QUDA_COPY_FIELD_CREATE;
   in  = new cudaColorSpinorField(h_in,cudaParam);
-  out = new cudaColorSpinorField( cudaParam);
+  out = new cudaColorSpinorField(cudaParam);
 
   (*matDiracOp)(*out,*in);
 
   QKXTM_Vector_Kepler<double> *Kvec = new QKXTM_Vector_Kepler<double>(BOTH,VECTOR);
 
-  Kvec->downloadFromCuda(out,false);
+  Kvec->downloadFromCuda(out,use_pc);
   Kvec->download();
 
   memcpy(vec_out,Kvec->H_elem(),bytes_total_length_per_NeV);
