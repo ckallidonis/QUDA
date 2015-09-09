@@ -57,6 +57,7 @@ namespace quda {
     bool isFullOp;
   }qudaQKXTM_arpackInfo;
 
+
   // forward declaration
 template<typename Float>  class QKXTM_Field_Kepler;
 template<typename Float>  class QKXTM_Gauge_Kepler;

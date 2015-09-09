@@ -1608,6 +1608,23 @@ char pathEigenValuesUp[257] = "evals_u.dat";
 char pathEigenValuesDown[257] = "evals_d.dat";
 char loop_filename[257] = "loop";
 int NdumpStep = 1;
+
+
+//-C.K. ARPACK Parameters
+int PolyDeg = 100;     // degree of the Chebysev polynomial
+int nEv = 100;         // Number of the eigenvectors we want
+int nKv = 200;         // total size of Krylov space
+WHICHSPECTRUM spectrumPart = SR; // for which part of the spectrum we want to solve
+bool isACC = true;
+double tolArpack = 1.0e-5;
+int maxIterArpack = 100000;
+char *arpack_logfile = "arpack.log";
+double amin = 3.0e-4;
+double amax = 3.5;
+bool isEven = false;
+bool isFullOp = true;
+
+
 //////////////////////////////////////////////////////////////////////////////////////////////////////
 
 
@@ -1691,6 +1708,22 @@ void usage(char** argv )
   printf("    --pathEigenValuesDown                      # Path where the eigenVectors for up flavor are (default evals_d.dat)\n");
   printf("    --loop_filename                           # File name to save loops (default \"loop\")\n");
   printf("    --NdumpStep                           # Every how many noise vectors it will dump the data (default 1)\n");
+
+
+  // ARPACK
+  printf("    --PolyDeg                                   # The degree of the polynomial Acceleration (default 100)\n");
+  printf("    --nEv                                       # Number of eigenvalues requested by ARPACK (default 100)\n");
+  printf("    --nKv                                       # Total size of the Krylov space used by ARPACK (default 200)\n");
+  printf("    --spectrumPart                              # Which part of the spectrum we need (Options: SR,LR,SM,LM,SI,LI, default SR)\n");
+  printf("    --isACC                                     # Whether we want to use polynomial acceleration (yes/no, default yes)\n");
+  printf("    --tolARPACK                                 # Tolerance for convergence, used by ARPACK (default 1.0e-5)\n");
+  printf("    --maxIterARPACK                             # Maximum iterations number for ARPACK (default 100000)\n");
+  printf("    --pathArpackLogfile                         # Path to the ARPACK log file (default  \"arpack.log\")\n");
+  printf("    --aminARPACK                                # amin parameter used in Cheb. Poly. Acc. (default 3.0e-4)\n");
+  printf("    --amaxARPACK                                # amax parameter used in Cheb. Poly. Acc. (default 3.5)\n");
+  printf("    --UseEven                                   # Whether to use Even-Even operator (yes/no, default no)\n");
+  printf("    --UseFullOp                                 # Whether to use the Full Operator (yes,no, default yes)\n");
+
   ////////////////////////////////////////////////////////////////
 
   
@@ -1717,6 +1750,154 @@ int process_command_line_option(int argc, char** argv, int* idx)
   int ret = -1;
   
   int i = *idx;
+
+
+  //-----------------------------------------------------------------
+  //-C.K. ARPACK parameters
+
+  WHICHSPECTRUM spectrumPart = SR; // for which part of the spectrum we want to solve                                                                                                                                                       
+
+
+  printf("    --spectrumPart                              # Which part of the spectrum we need (Options: SR,LR,SM,LM,SI,LI, default SR)\n");
+
+
+  if( strcmp(argv[i], "--PolyDeg") ==0){
+    if(i+1 >= argc){
+      usage(argv);
+    }
+    PolyDeg = atoi(argv[i+1]);
+    i++;
+    ret = 0;
+    goto out;
+  }
+
+  if( strcmp(argv[i], "--nEv") ==0){
+    if(i+1 >= argc){
+      usage(argv);
+    }
+    nEv = atoi(argv[i+1]);
+    i++;
+    ret = 0;
+    goto out;
+  }
+
+  if( strcmp(argv[i], "--nKv") ==0){
+    if(i+1 >= argc){
+      usage(argv);
+    }
+    nKv = atoi(argv[i+1]);
+    i++;
+    ret = 0;
+    goto out;
+  }
+
+  if( strcmp(argv[i], "--spectrumPart") ==0){
+    if(i+1 >= argc){
+      usage(argv);
+    }
+    
+    if(strcmp(argv[i+1],"SR")) spectrumPart = SR;
+    else if (strcmp(argv[i+1],"LR")) spectrumPart = LR;
+    else if (strcmp(argv[i+1],"SM")) spectrumPart = SM;
+    else if (strcmp(argv[i+1],"LM")) spectrumPart = LM;
+    else if (strcmp(argv[i+1],"SI")) spectrumPart = SI;
+    else if (strcmp(argv[i+1],"LI")) spectrumPart = LI;
+    else usage(argv);
+
+    i++;
+    ret = 0;
+    goto out;
+  }
+
+  if( strcmp(argv[i], "--isACC") ==0){
+    if(i+1 >= argc){
+      usage(argv);
+    }
+    if( strcmp(argv[i+1],"yes") || strcmp(argv[i+1],"YES") ) isACC = true;
+    else if ( strcmp(argv[i+1],"no") || strcmp(argv[i+1],"NO") ) isACC = false;
+    else usage(argv);
+    i++;
+    ret = 0;
+    goto out;
+  }
+
+  if( strcmp(argv[i], "--tolARPACK") ==0){
+    if(i+1 >= argc){
+      usage(argv);
+    }
+    tolArpack = atof(argv[i+1]);
+    i++;
+    ret = 0;
+    goto out;
+  }
+
+  if( strcmp(argv[i], "--maxIterARPACK") ==0){
+    if(i+1 >= argc){
+      usage(argv);
+    }
+    maxIterArpack = atoi(argv[i+1]);
+    i++;
+    ret = 0;
+    goto out;
+  }
+
+  if( strcmp(argv[i], "--pathArpackLogfile") == 0){
+    if(i+1 >= argc){
+      usage(argv);
+    }
+    strcpy(arpack_logfile,argv[i+1]);
+    i++;
+    ret = 0;
+    goto out;
+  }
+
+  if( strcmp(argv[i], "--aminARPACK") ==0){
+    if(i+1 >= argc){
+      usage(argv);
+    }
+    amin = atof(argv[i+1]);
+    i++;
+    ret = 0;
+    goto out;
+  }
+
+  if( strcmp(argv[i], "--amaxARPACK") ==0){
+    if(i+1 >= argc){
+      usage(argv);
+    }
+    amax = atof(argv[i+1]);
+    i++;
+    ret = 0;
+    goto out;
+  }
+
+  if( strcmp(argv[i], "--UseEven") ==0){
+    if(i+1 >= argc){
+      usage(argv);
+    }
+    if( strcmp(argv[i+1],"yes") || strcmp(argv[i+1],"YES") ) isEven = true;
+    else if ( strcmp(argv[i+1],"no") || strcmp(argv[i+1],"NO") ) isEven = false;
+    else usage(argv);
+    i++;
+    ret = 0;
+    goto out;
+  }
+
+  if( strcmp(argv[i], "--UseFullOp") ==0){
+    if(i+1 >= argc){
+      usage(argv);
+    }
+    if( strcmp(argv[i+1],"yes") || strcmp(argv[i+1],"YES") ) isFullOp = true;
+    else if ( strcmp(argv[i+1],"no") || strcmp(argv[i+1],"NO") ) isFullOp = false;
+    else usage(argv);
+    i++;
+    ret = 0;
+    goto out;
+  }
+
+
+  //-----------------------------------------------------------------
+
 
   //////////////////////// KX /////////////////////
   if( strcmp(argv[i], "--x_source") ==0){
