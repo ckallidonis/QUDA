@@ -2569,6 +2569,12 @@ void EigenSolver_arpack( int nev,  int ncv, int which, int use_acc, double __com
 #endif     
 
      ///// calculate eigenvalues of the actual operator
+     FILE *fid;
+     char fname[257] = "evecs_QUDA_ARPACK-fullOp";
+     char filename[257];
+     int n_elem_write = 10000;
+
+
      ColorSpinorParam cpuParam3(v,*param,X,pc_solution);  // !!!!!!! please check that ipntr[0] does not change 
 
      cpuColorSpinorField *h_v3 = NULL;
@@ -2581,10 +2587,17 @@ void EigenSolver_arpack( int nev,  int ncv, int which, int use_acc, double __com
        axpbyCuda(1.,*d_v2,-creal(evals[i]),*d_v);
        double norma = normCuda(*d_v);
        printfQuda("Eigenvalue of A (%+e,%+e) and residual %+e\n",creal(evals[i]),cimag(evals[i]),norma);
+
+       sprintf(filename,"%s.%05d.txt",fname,i);
+       fid = fopen(filename,"w");  
+       for(int ir = 0 ; ir < n_elem_write ; ir++){ fprintf(fid,"%+e %+e\n",creal(v[i*LDV+ir]), cimag(v[i*LDV+ir])); }        
+       fclose(fid);
+
        delete h_v3;
      }
 
      
+
 
      //free memory
      free(resid);

@@ -400,8 +400,8 @@ int main(int argc, char **argv)
   printfQuda("After clover term\n");
 
 
-  int nev=100;
-  int ncv=200;
+  int nev=10;
+  int ncv=50;
   double tol=1e-5;
   int maxiter=100000;
   char filenameArpackLog[] = "/scratch/daint/kallidoc/Nf2Clover_mu0p0060/log/arpack_log";
@@ -421,14 +421,14 @@ int main(int argc, char **argv)
 
   // eig_param.MatPoly_param[1]= 3.5;
 
-  eig_param.NPoly = 100;
+  eig_param.NPoly = 0;
   eig_param.eigen_shift = kappa;
 
 
   double amin=7.5e-4;
   double amax=5.5;
 
-  EigenSolver_arpack(nev,ncv,1,1,evals,evecs,tol,maxiter, filenameArpackLog, &eig_param, amin, amax);
+  EigenSolver_arpack(nev,ncv,1,0,evals,evecs,tol,maxiter, filenameArpackLog, &eig_param, amin, amax);
 
   free(evecs);
   free(evals);
