@@ -50,7 +50,7 @@ namespace quda {
     bool isACC;            
     double tolArpack;
     int maxIterArpack;
-    char *arpack_logfile;
+    char arpack_logfile[257];
     double amin;
     double amax;
     bool isEven;
@@ -291,6 +291,8 @@ void DeflateAndInvert_loop(void **gaugeToPlaquette, QudaInvertParam *param ,Quda
 void DeflateAndInvert_loop_w_One_Der(void **gaugeToPlaquette, QudaInvertParam *param ,QudaGaugeParam *gauge_param, char *filename_eigenValues_down, char *filename_eigenVectors_down,char *filename_out , int NeV , int Nstoch, int seed , int NdumpStep, quda::qudaQKXTMinfo_Kepler info);
 void DeflateAndInvert_loop_w_One_Der_volumeSource(void **gaugeToPlaquette, QudaInvertParam *param ,QudaGaugeParam *gauge_param,char *filename_eigenValues_up, char *filename_eigenVectors_up, char *filename_eigenValues_down, char *filename_eigenVectors_down,char *filename_out , int NeV , int Nstoch, int seed , int NdumpStep, quda::qudaQKXTMinfo_Kepler info);
 void DeflateAndInvert_threepTwop(void **gaugeSmeared, void **gauge, QudaInvertParam *param ,QudaGaugeParam *gauge_param, char *filename_eigenValues_up, char *filename_eigenVectors_up, char *filename_eigenValues_down, char *filename_eigenVectors_down, char *filename_twop, char *filename_threep,int NeV, quda::qudaQKXTMinfo_Kepler info, quda::WHICHPARTICLE NUCLEON, quda::WHICHPROJECTOR PID );
+
+void calcEigenVectors(QudaInvertParam *param , quda::qudaQKXTM_arpackInfo arpackInfo);
 
 void calcEigenVectorsAndInvert_threepTwop(void **gaugeSmeared, void **gauge, QudaInvertParam *param ,QudaGaugeParam *gauge_param, char *filename_twop, char *filename_threep, quda::qudaQKXTMinfo_Kepler info, quda::qudaQKXTM_arpackInfo arpackInfo, quda::WHICHPARTICLE NUCLEON, quda::WHICHPROJECTOR PID );
 #endif

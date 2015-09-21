@@ -17,14 +17,16 @@ LDFLAGS += -L/users/kallidoc/install/lib -larpack -lparpack
 	$(HISQ_UNITARIZE_FORCE_TEST)
 
 #TESTS = deflationLoops_w_oneD deflationLoops_w_oneD_volumeSource deflationTwopThreep
-TESTS = EigenSolver deflationTwopThreep deflationInverter deflationLoops deflationLoops_w_oneD deflationLoops_w_oneD_volumeSource createWritePropsSLReadApeGauge test_plaquette
+TESTS = CalcEigenVecs deflationTwopThreep deflationInverter deflationLoops deflationLoops_w_oneD deflationLoops_w_oneD_volumeSource createWritePropsSLReadApeGauge test_plaquette
 
 all: $(TESTS)
 
 
-EigenSolver: EigenSolver.o test_util.o wilson_dslash_reference.o domain_wall_dslash_reference.o misc.o blas_reference.o $(QIO_UTIL) $(QUDA)
-	$(CXX) $(LDFLAGS) $^ -o $@ $(LDFLAGS)
+#EigenSolver: EigenSolver.o test_util.o wilson_dslash_reference.o domain_wall_dslash_reference.o misc.o blas_reference.o $(QIO_UTIL) $(QUDA)
+#	$(CXX) $(LDFLAGS) $^ -o $@ $(LDFLAGS)
 
+CalcEigenVecs: CalcEigenVecs.o test_util.o wilson_dslash_reference.o domain_wall_dslash_reference.o misc.o blas_reference.o $(QIO_UTIL) $(QUDA)
+	$(CXX) $(LDFLAGS) $^ -o $@ $(LDFLAGS)
 
 deflationInverter: deflationInverter.o test_util.o wilson_dslash_reference.o domain_wall_dslash_reference.o misc.o blas_reference.o $(QIO_UTIL) $(QUDA)
 	$(CXX) $(LDFLAGS) $^ -o $@ $(LDFLAGS)
@@ -94,7 +96,7 @@ clean:
 	staggered_invert_test su3_test pack_test blas_test llfat_test	\
 	gauge_force_test fermion_force_test hisq_paths_force_test	\
 	hisq_unitarize_force_test unitarize_link_test \
-	deflationTwopThreep deflationInverter deflationLoops deflationLoops_w_oneD deflationLoops_w_oneD_volumeSource EigenSolver \
+	deflationTwopThreep deflationInverter deflationLoops deflationLoops_w_oneD deflationLoops_w_oneD_volumeSource CalcEigenVecs \
 	createWritePropsSLReadApeGauge test_plaquette
 
 %.o: %.c $(HDRS)

@@ -1790,13 +1790,14 @@ private:
   void create_host();
   void destroy_host();
 
-  DiracMdagM *matDiracOp;
+  //  DiracMdagM *matDiracOp;
+  Dirac *diracOp;
 
   QudaInvertParam *invert_param;
 
 public:
   QKXTM_Deflation_Kepler(int,bool);
-  QKXTM_Deflation_Kepler(qudaQKXTM_arpackInfo,QudaInvertParam*);
+  QKXTM_Deflation_Kepler(QudaInvertParam*,qudaQKXTM_arpackInfo);
 
   ~QKXTM_Deflation_Kepler();
 
@@ -1856,13 +1857,8 @@ QKXTM_Deflation_Kepler<Float>::QKXTM_Deflation_Kepler(int N_EigenVectors,bool is
 
 //-C.K. Constructor for the full Operator functions
 template<typename Float>
-QKXTM_Deflation_Kepler<Float>::QKXTM_Deflation_Kepler(qudaQKXTM_arpackInfo arpackInfo, QudaInvertParam *param): h_elem(NULL), eigenValues(NULL), matDiracOp(NULL){
+QKXTM_Deflation_Kepler<Float>::QKXTM_Deflation_Kepler(QudaInvertParam *param, qudaQKXTM_arpackInfo arpackInfo): h_elem(NULL), eigenValues(NULL), diracOp(NULL){
   if(GK_init_qudaQKXTM_Kepler_flag == false)errorQuda("You must initialize QKXTM library first\n");
-
-  if(NeV == 0){
-    warningQuda("Warning you choose zero eigenVectors\n");
-    return;
-  }
 
   PolyDeg = arpackInfo.PolyDeg;
   NeV = arpackInfo.nEv;
@@ -1877,6 +1873,11 @@ QKXTM_Deflation_Kepler<Float>::QKXTM_Deflation_Kepler(qudaQKXTM_arpackInfo arpac
   isEv = arpackInfo.isEven;
   isFullOp = arpackInfo.isFullOp;
 
+  if(NeV == 0){
+    warningQuda("Warning you choose zero eigenVectors\n");
+    return;
+  }
+
   invert_param = param;
 
   field_length = 4*3;
@@ -1889,7 +1890,7 @@ QKXTM_Deflation_Kepler<Float>::QKXTM_Deflation_Kepler(qudaQKXTM_arpackInfo arpac
   bytes_total_length = NeV*bytes_total_length_per_NeV;  //total_length*2*sizeof(Float);
 
   h_elem = (Float*)malloc(NkV*bytes_total_length_per_NeV);
-  if(h_elem != NULL) errorQuda("Error: Out of memory for eigenVectors.\n");
+  if(h_elem == NULL) errorQuda("Error: Out of memory for eigenVectors.\n");
   memset(h_elem,0,NkV*bytes_total_length_per_NeV);
 
   eigenValues = (Float*)malloc(2*NkV*sizeof(Float));
@@ -1898,10 +1899,10 @@ QKXTM_Deflation_Kepler<Float>::QKXTM_Deflation_Kepler(qudaQKXTM_arpackInfo arpac
   if(NeV == 0) return;
 
   DiracParam diracParam;
-  setDiracParam(diracParam,&param,!isFullOp);
-  Dirac *diracMat = Dirac::create(diracParam);
-  matDiracOp = new DiracMdagM(diracMat);
-  delete diracMat;
+  setDiracParam(diracParam,param,!isFullOp);
+  diracOp = Dirac::create(diracParam);
+  //  Dirac *diracOp = Dirac::create(diracParam);
+  //  matDiracOp = new DiracMdagM(diracMat);
 }
 
 template<typename Float>
@@ -1912,7 +1913,10 @@ QKXTM_Deflation_Kepler<Float>::~QKXTM_Deflation_Kepler(){
   free(eigenValues);
   eigenValues=NULL;
   h_elem=NULL;
-  if(isFullOp) delete matDiracOp;
+  if(isFullOp){
+    delete diracOp;
+    //    delete matDiracOp;
+  }
 }
 
 template<typename Float>
@@ -1952,7 +1956,9 @@ void QKXTM_Deflation_Kepler<Float>::ApplyFullOp(Float *vec_out, Float *vec_in, Q
   in  = new cudaColorSpinorField(h_in,cudaParam);
   out = new cudaColorSpinorField(cudaParam);
 
-  (*matDiracOp)(*out,*in);
+  //(*matDiracOp)(*out,*in);
+  diracOp->MdagM(*out,*in);
+
 
   QKXTM_Vector_Kepler<double> *Kvec = new QKXTM_Vector_Kepler<double>(BOTH,VECTOR);
 
@@ -2183,7 +2189,6 @@ void QKXTM_Deflation_Kepler<Float>::polynomialOperator(cudaColorSpinorField &out
 
   if(typeid(Float) != typeid(double)) errorQuda("Single precision is not implemented in member function of polynomial operator\n");
 
-
   double delta,theta;
   double sigma,sigma1,sigma_old;
   double d1,d2,d3;
@@ -2205,7 +2210,8 @@ void QKXTM_Deflation_Kepler<Float>::polynomialOperator(cudaColorSpinorField &out
   d1 =  sigma1/delta;
   d2 =  1.0;
 
-  (*matDiracOp)(out,in); //!!!!! check if I need (2*k)^2
+  //  (*matDiracOp)(out,in); //!!!!! check if I need (2*k)^2
+  diracOp->MdagM(out,in); //!!!!! check if I need (2*k)^2
   axpbyCuda(d2, const_cast<cudaColorSpinorField&>(in), d1, out);
 
   if( PolyDeg == 1 )
@@ -2219,25 +2225,25 @@ void QKXTM_Deflation_Kepler<Float>::polynomialOperator(cudaColorSpinorField &out
 
   sigma_old = sigma1;
 
-  for(int i=2; i <= PolyDeg; i++)
-    {
-      sigma = 1.0/(2.0/sigma1-sigma_old);
-
-      d1 = 2.0*sigma/delta;
-      d2 = -d1*theta;
-      d3 = -sigma*sigma_old;
-
-      (*matDiracOp)( out, *tm2); //!!!!! check if I need (2*k)^2
-      // axCuda(1./(2.*shift),out);
-                                                                                                                                
-      axCuda(d3,*tm1);
-      std::complex<double> d1c(d1,0);
-      std::complex<double> d2c(d2,0);
-      cxpaypbzCuda(*tm1,d2c,*tm2,d1c,out);
-      copyCuda(*tm1,*tm2);
-      copyCuda(*tm2,out);
-      sigma_old  = sigma;
-    }
+  for(int i=2; i <= PolyDeg; i++){
+    sigma = 1.0/(2.0/sigma1-sigma_old);
+    
+    d1 = 2.0*sigma/delta;
+    d2 = -d1*theta;
+    d3 = -sigma*sigma_old;
+    
+    //    (*matDiracOp)( out, *tm2); //!!!!! check if I need (2*k)^2
+    diracOp->MdagM( out, *tm2); //!!!!! check if I need (2*k)^2
+    // axCuda(1./(2.*shift),out);
+    
+    axCuda(d3,*tm1);
+    std::complex<double> d1c(d1,0);
+    std::complex<double> d2c(d2,0);
+    cxpaypbzCuda(*tm1,d2c,*tm2,d1c,out);
+    copyCuda(*tm1,*tm2);
+    copyCuda(*tm2,out);
+    sigma_old  = sigma;
+  }
 
   delete tm1;
   delete tm2;
@@ -2251,27 +2257,59 @@ void QKXTM_Deflation_Kepler<Float>::polynomialOperator(cudaColorSpinorField &out
 template<typename Float>
 void QKXTM_Deflation_Kepler<Float>::eigenSolver(){
 
-  //print the input:
-  //================
+  //-print the input:
+
+  char *which_evals_req;
+  if (spectrumPart==SR)      which_evals_req = strdup("SR");
+  else if (spectrumPart==LR) which_evals_req = strdup("LR");
+  else if (spectrumPart==SM) which_evals_req = strdup("SM");
+  else if (spectrumPart==LM) which_evals_req = strdup("LM");
+  else if (spectrumPart==SI) which_evals_req = strdup("SI");
+  else if (spectrumPart==LI) which_evals_req = strdup("LI");
+  else{    
+    errorQuda("Error: Option for spectrumPart is suspicious\n");
+    exit(-1);
+  }
   
-  printfQuda("Input to eigenvalues_arpack\n");
+
+  char *which_evals;
+  if(isACC){
+    if (spectrumPart==SR)      which_evals = strdup("LR");
+    else if (spectrumPart==LR) which_evals = strdup("SR");
+    else if (spectrumPart==SM) which_evals = strdup("LM");
+    else if (spectrumPart==LM) which_evals = strdup("SM");
+    else if (spectrumPart==SI) which_evals = strdup("LI");
+    else if (spectrumPart==LI) which_evals = strdup("SI");
+  }
+  else{
+    if (spectrumPart==SR)      which_evals = strdup("SR");
+    else if (spectrumPart==LR) which_evals = strdup("LR");
+    else if (spectrumPart==SM) which_evals = strdup("SM");
+    else if (spectrumPart==LM) which_evals = strdup("LM");
+    else if (spectrumPart==SI) which_evals = strdup("SI");
+    else if (spectrumPart==LI) which_evals = strdup("LI");    
+  }
+
+  printfQuda("Input to eigenSolver ARPACK\n");
   printfQuda("===========================\n");
   printfQuda("Number of Ritz eigenvalues requested: %d\n", NeV);
   printfQuda("Size of Krylov space is: %d\n", NkV);
-  printfQuda("Part of the spectrum requested: %s\n", spectrumPart);
-  printfQuda("Polynomial acceleration: %s\n", isACC ? "true" : "false");
-  if(isACC) printfQuda("chebyshev polynomial paramaters: degree %d amin %+e amx %+e\n",PolyDeg,amin,amax); 
+  printfQuda("Part of the spectrum requested: %s\n", which_evals_req);
+  printfQuda("Part of the spectrum passed to ARPACK (may be different due to Poly. Acc.): %s\n", which_evals);
+  printfQuda("Polynomial acceleration: %s\n", isACC ? "yes" : "no");
+  if(isACC) printfQuda("Chebyshev polynomial paramaters: Degree = %d, amin = %+e, amax = %+e\n",PolyDeg,amin,amax); 
   printfQuda("The convergence criterion is %+e\n", tolArpack);
-  printfQuda("maximum number of iterations for arpack %d\n",maxIterArpack);
-   
+  printfQuda("Maximum number of iterations for ARPACK is %d\n",maxIterArpack);
+  //------------------------------------------------------------------------------------------------   
+
   
-  //create the MPI communicator
+  //- create the MPI communicator
 #ifdef MPI_COMMS
   MPI_Fint mpi_comm_f = MPI_Comm_c2f(MPI_COMM_WORLD);
 #endif
 
-  int ido=0;           //control of the action taken by reverse communications (set initially to zero)
-  char *bmat=strdup("I");     // Specifies that the right hand side matrix should be the identity matrix; this makes the problem a standard eigenvalue problem.
+  int ido=0;               // control of the action taken by reverse communications (set initially to zero)
+  char *bmat=strdup("I");  // Specifies that the right hand side matrix should be the identity matrix; this makes the problem a standard eigenvalue problem.
                                
   QudaInvertParam *param = invert_param;
   bool pc_solution = ((param->solution_type == QUDA_MATPC_SOLUTION) ||  (param->solution_type == QUDA_MATPCDAG_MATPC_SOLUTION));
@@ -2279,46 +2317,47 @@ void QKXTM_Deflation_Kepler<Float>::eigenSolver(){
   //- matrix dimensions 
   int LDV;
   int N;
-
   LDV = (GK_localVolume/fullorHalf)*4*3;
   N   = (GK_localVolume/fullorHalf)*4*3;
 
   printfQuda("LDV = %d\n",LDV);
 
-  char *which_evals = strdup(spectrumPart);
+  //- Define all the necessary pointers
+  std::complex<Float> *helem_cplx = NULL;
+  helem_cplx = (std::complex<Float>*) &(h_elem[0]);
 
-  double __complex__   *resid  = (double __complex__  *) malloc(LDV*sizeof(double __complex__ ));
-  if(resid == NULL)
-    errorQuda("Error: not enough memory for resid allocation in eigenSolver.\n");
-   
-  int *iparam = (int *) malloc(11*sizeof(int));
-  if(iparam == NULL)
-    errorQuda("Error: not enough memory for iparam allocation in eigenSolver.\n");
+  std::complex<Float> *evals_cplx = NULL;
+  evals_cplx = (std::complex<Float>*) &(eigenValues[0]);
 
-
-
-  iparam[0]=1;  //use exact shifts
-  iparam[2]=maxIterArpack;
-  iparam[3]=1;
-  iparam[6]=1;
-
-
-  int *ipntr  = (int *) malloc(14*sizeof(int));
-  double __complex__  *workd  = (double __complex__  *) malloc(3*LDV*sizeof(double __complex__ )); 
-  int lworkl = (3*NkV*NkV+5*NkV)*2; //just allocate more space
-  double __complex__  *workl = (double __complex__  *) malloc(lworkl*sizeof(double __complex__ ));
-  double *rwork  = (double *) malloc(NkV*sizeof(double));
-  int rvec = 1;       //always call the subroutine that computes orthonormal basis for the eigenvectors
-  char *howmany = strdup("P");   //always compute orthonormal basis
-  int *select = (int *) malloc(NkV*sizeof(int)); //since all Ritz vectors or Schur vectors are computed no need to initialize this array
-  double __complex__  sigma;
-  double __complex__   *workev = (double __complex__  *) malloc(2*NkV*sizeof(double __complex__ ));
-  double *sorted_evals = (double *) malloc(NkV*sizeof(double)); //will be used to sort the eigenvalues
+  int *ipntr              = (int *) malloc(14 *sizeof(int));
+  int *select             = (int *) malloc(NkV*sizeof(int)); //since all Ritz vectors or Schur vectors are computed no need to initialize this array
   int *sorted_evals_index = (int *) malloc(NkV*sizeof(int)); 
+  int *iparam             = (int *) malloc(11 *sizeof(int));
+  int rvec = 1;  // always call the subroutine that computes orthonormal basis for the eigenvectors
+  int lworkl = (3*NkV*NkV+5*NkV)*2; // just allocate more space
+
+  char *howmany = strdup("P");   //always compute orthonormal basis
+
+  double *rwork        = (double *) malloc(NkV*sizeof(double));
+  double *sorted_evals = (double *) malloc(NkV*sizeof(double)); //will be used to sort the eigenvalues
+
+  std::complex<Float> *resid  = (std::complex<Float> *) malloc(LDV   *sizeof(std::complex<Float>));
+  std::complex<Float> *workd  = (std::complex<Float> *) malloc(3*LDV *sizeof(std::complex<Float>)); 
+  std::complex<Float> *workl  = (std::complex<Float> *) malloc(lworkl*sizeof(std::complex<Float>));
+  std::complex<Float> *workev = (std::complex<Float> *) malloc(2*NkV *sizeof(std::complex<Float>));
+  std::complex<Float> sigma;
+
+  if(resid == NULL)  errorQuda("Error: not enough memory for resid allocation in eigenSolver.\n");
+  if(iparam == NULL) errorQuda("Error: not enough memory for iparam allocation in eigenSolver.\n");
 
   if((ipntr == NULL) || (workd==NULL) || (workl==NULL) || (rwork==NULL) || (select==NULL) || (workev==NULL) || (sorted_evals==NULL) || (sorted_evals_index==NULL)){
     errorQuda("Error: not enough memory for ipntr,workd,workl,rwork,select,workev,sorted_evals,sorted_evals_index in eigenSolver.\n");
   }
+
+  iparam[0] = 1;  //use exact shifts
+  iparam[2] = maxIterArpack;
+  iparam[3] = 1;
+  iparam[6] = 1;
 
   double d1,d2,d3;
 
@@ -2327,16 +2366,15 @@ void QKXTM_Deflation_Kepler<Float>::eigenSolver(){
 
   int i,j;
 
-  /* Code added to print the log of ARPACK */
-  //const char *arpack_logfile;
+
+  /* Code added to print the log of ARPACK */  
   int arpack_log_u = 9999;
 
 #ifndef MPI_COMMS
-  //sprintf(arpack_logfile,"ARPACK_output.log");
   if ( NULL != arpack_logfile ) {
     /* correctness of this code depends on alignment in Fortran and C 
        being the same ; if you observe crashes, disable this part */
-     
+    
     _AFT(initlog)(&arpack_log_u, arpack_logfile, strlen(arpack_logfile));
     int msglvl0 = 0,
       msglvl1 = 1,
@@ -2351,14 +2389,13 @@ void QKXTM_Deflation_Kepler<Float>::eigenSolver(){
 		      &msglvl0,           /*mcapps*/
 		      &msglvl0,           /*mcgets*/
 		      &msglvl3            /*mceupd*/);
-     
+    
     printfQuda("*** ARPACK verbosity set to mcaup2=3 mcaupd=3 mceupd=3; \n"
 	       "*** output is directed to '%s';\n"
 	       "*** if you don't see output, your memory may be corrupted\n",
 	       arpack_logfile);
   }
-#else
-
+#else  
   if ( NULL != arpack_logfile && (comm_rank() == 0) ) {
     /* correctness of this code depends on alignment in Fortran and C 
        being the same ; if you observe crashes, disable this part */
@@ -2384,8 +2421,6 @@ void QKXTM_Deflation_Kepler<Float>::eigenSolver(){
   }
 #endif   
 
-
-
   cpuColorSpinorField *h_v = NULL;
   cudaColorSpinorField *d_v = NULL;
 
@@ -2400,48 +2435,48 @@ void QKXTM_Deflation_Kepler<Float>::eigenSolver(){
 
   bool checkIdo = true;
 
-  do
-    {
+  do{
 
 #ifndef MPI_COMMS 
-      _AFT(znaupd)(&ido,"I", &N, which_evals, &NeV, &tolArpack, resid, &NkV,
-                   h_elem, &N, iparam, ipntr, workd, 
-		   workl, &lworkl,rwork,&info,1,2); 
+    _AFT(znaupd)(&ido,"I", &N, which_evals, &NeV, &tolArpack, resid, &NkV,
+		 helem_cplx, &N, iparam, ipntr, workd, 
+		 workl, &lworkl,rwork,&info,1,2); 
 #else
-      _AFT(pznaupd)(&mpi_comm_f, &ido,"I", &N, which_evals, &NeV, &tolArpack, resid, &NkV,
-		    h_elem, &N, iparam, ipntr, workd, 
-		    workl, &lworkl,rwork,&info,1,2);
+    _AFT(pznaupd)(&mpi_comm_f, &ido,"I", &N, which_evals, &NeV, &tolArpack, resid, &NkV,
+		  helem_cplx, &N, iparam, ipntr, workd, 
+		  workl, &lworkl,rwork,&info,1,2);
 #endif
 
+    if(checkIdo){
+      ColorSpinorParam cpuParam(workd+ipntr[0]-1,*param,GK_localL,!isFullOp);  // !!!!!!! please check that ipntr[0] does not change 
+      h_v = new cpuColorSpinorField(cpuParam);
+      cpuParam.v=workd+ipntr[1]-1;
+      h_v2 = new cpuColorSpinorField(cpuParam);
 
+      ColorSpinorParam cudaParam(cpuParam, *param);
+      cudaParam.create = QUDA_ZERO_FIELD_CREATE;
+      d_v = new cudaColorSpinorField( cudaParam);
+      d_v2 = new cudaColorSpinorField( cudaParam);
+      checkIdo = false;
+    }
+	
+    if (ido == 99 || info == 1)
+      break;
 
-      if(checkIdo){
-	ColorSpinorParam cpuParam(workd+ipntr[0]-1,*param,GK_localL,!isFullOp);  // !!!!!!! please check that ipntr[0] does not change 
-	h_v = new cpuColorSpinorField(cpuParam);
-	cpuParam.v=workd+ipntr[1]-1;
-	h_v2 = new cpuColorSpinorField(cpuParam);
-
-	ColorSpinorParam cudaParam(cpuParam, *param);
-	cudaParam.create = QUDA_ZERO_FIELD_CREATE;
-	d_v = new cudaColorSpinorField( cudaParam);
-	d_v2 = new cudaColorSpinorField( cudaParam);
-	checkIdo = false;
+    if( (ido==-1) || (ido==1) ){
+      *d_v = *h_v;
+      if(isACC){
+	polynomialOperator(*d_v2,*d_v);
       }
-
-      if (ido == 99 || info == 1)
-	break;
-
-      if ((ido==-1)||(ido==1)){
-        *d_v = *h_v;
-	if(isACC){
-	  polynomialOperator(*d_v2,*d_v);
-	}
-	else{
-	  (*matDiracOp)(*d_v2,*d_v);
-	}
-	*h_v2= *d_v2;
+      else{
+	diracOp->MdagM(*d_v2,*d_v);
       }
-    } while (ido != 99);
+      *h_v2= *d_v2;
+    }
+
+  } while (ido != 99);
+  
+  fprintf(stderr,"OK after ido loop, ido=%d\n",ido);
    
   /*
     Check for convergence 
@@ -2455,14 +2490,14 @@ void QKXTM_Deflation_Kepler<Float>::eigenSolver(){
 
     //compute eigenvectors 
 #ifndef MPI_COMMS
-    _AFT(zneupd) (&rvec,"P", select,eigenValues,h_elem,&N,&sigma, 
+    _AFT(zneupd) (&rvec,"P", select,evals_cplx,helem_cplx,&N,&sigma, 
 		  workev,"I",&N,which_evals,&NeV,&tolArpack,resid,&NkV, 
-		  h_elem,&N,iparam,ipntr,workd,workl,&lworkl, 
+		  helem_cplx,&N,iparam,ipntr,workd,workl,&lworkl, 
 		  rwork,&info,1,1,2);
 #else
-    _AFT(pzneupd) (&mpi_comm_f,&rvec,"P", select,eigenValues, h_elem,&N,&sigma, 
+    _AFT(pzneupd) (&mpi_comm_f,&rvec,"P", select,evals_cplx, helem_cplx,&N,&sigma, 
 		   workev,"I",&N,which_evals,&NeV,&tolArpack, resid,&NkV, 
-		   h_elem,&N,iparam,ipntr,workd,workl,&lworkl, 
+		   helem_cplx,&N,iparam,ipntr,workd,workl,&lworkl, 
 		   rwork,&info,1,1,2);
 #endif
 
@@ -2477,9 +2512,9 @@ void QKXTM_Deflation_Kepler<Float>::eigenSolver(){
       /* print out the computed ritz values and their error estimates */
       nconv = iparam[4];
       for(j=0; j< nconv; j++){
-	printfQuda("RitzValue[%04d]  %+e  %+e  error= %+e \n",j,eigenValues[2*j+0],eigenValues[2*j+1],cabs(*(workl+ipntr[10]-1+j)));
+	printfQuda("RitzValue[%04d]  %+e  %+e  error= %+e \n",j,real(evals_cplx[j]),imag(evals_cplx[j]),std::abs(*(workl+ipntr[10]-1+j)));
 	sorted_evals_index[j] = j;
-	sorted_evals[j] = cabs(eigenValues[2*j]);
+	sorted_evals[j] = std::abs(evals_cplx[j]);
       }
 
       // SORT THE EIGENVALUES in ascending order based on their absolute value
@@ -2490,7 +2525,7 @@ void QKXTM_Deflation_Kepler<Float>::eigenSolver(){
       
       /* print out the computed ritz values and their error estimates */
       for(j=0; j< nconv; j++){
-	printfQuda("RitzValue[%06d]  %+e  %+e  error= %+e \n",j,eigenValues[2*sorted_evals_index[j]+0],eigenValues[2*sorted_evals_index[j]+1],cabs(*(workl+ipntr[10]-1+sorted_evals_index[j])) );
+	printfQuda("RitzValue[%04d]  %+e  %+e  error= %+e \n",j,real(evals_cplx[sorted_evals_index[j]]),imag(evals_cplx[sorted_evals_index[j]]),std::abs(*(workl+ipntr[10]-1+sorted_evals_index[j])) );
       }      
     }
 
@@ -2509,13 +2544,13 @@ void QKXTM_Deflation_Kepler<Float>::eigenSolver(){
       printfQuda("Size of the matrix is %d\n", N);
       printfQuda("The number of Ritz values requested is %d\n", NeV);
       printfQuda("The number of Arnoldi vectors generated is %d\n", NkV);
-      printfQuda("What portion of the spectrum: %s\n", which_evals);
+      printfQuda("What portion of the spectrum requested: %s\n", which_evals_req);
       printfQuda("The number of converged Ritz values is %d\n", nconv ); 
       printfQuda("The number of Implicit Arnoldi update iterations taken is %d\n", iparam[2]);
       printfQuda("The number of OP*x is %d\n", iparam[8]);
       printfQuda("The convergence criterion is %+e\n", tolArpack);  
     }
-  }  //if(info < 0) else part
+  }//- if(info < 0) else part
 
 
 #ifndef MPI_COMMS
@@ -2529,20 +2564,20 @@ void QKXTM_Deflation_Kepler<Float>::eigenSolver(){
   }
 #endif     
 
-  ///// calculate eigenvalues of the actual operator
-  printfQuda("Eigenvalues of the actual operator:");
+  //- calculate eigenvalues of the actual operator
+  printfQuda("Eigenvalues of the %s Dirac operator:\n",isFullOp ? "Full" : "Even-Odd");
 
-  ColorSpinorParam cpuParam3(v,*param,GK_localL,!isFullOp);  // !!!!!!! please check that ipntr[0] does not change 
+  ColorSpinorParam cpuParam3(helem_cplx,*param,GK_localL,!isFullOp);  // !!!!!!! please check that ipntr[0] does not change 
   cpuColorSpinorField *h_v3 = NULL;
   for(int i =0 ; i < NeV ; i++){
-    cpuParam3.v = (h_elem+i*LDV*2);
+    cpuParam3.v = (helem_cplx+i*LDV);
     h_v3 = new cpuColorSpinorField(cpuParam3);
-    *d_v = *h_v3;
-    (*matDiracOp)(*d_v2,*d_v);    
-    eigenValues[2*i]=reDotProductCuda(*d_v,*d_v2);
-    axpbyCuda(1.0,*d_v2,-eigenValues[2*i+0],*d_v);
+    *d_v = *h_v3;                                   // d_v = v
+    diracOp->MdagM(*d_v2,*d_v);                     // d_v2 = M*v
+    evals_cplx[i]=cDotProductCuda(*d_v,*d_v2);      // lambda = v^dag * M*v
+    axpbyCuda(1.0,*d_v2,-real(evals_cplx[i]),*d_v); // d_v = ||M*v - lambda*v||
     double norma = normCuda(*d_v);
-    printfQuda("Eval[%d] = %+e  %+e    Residual: %+e\n",eigenValues[2*i+0],eigenValues[2*i+1],norma);
+    printfQuda("Eval[%04d] = %+e  %+e    Residual: %+e\n",i,real(evals_cplx[i]),imag(evals_cplx[i]),sqrt(norma));
     delete h_v3;
   }
 

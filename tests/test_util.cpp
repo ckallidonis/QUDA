@@ -1614,16 +1614,15 @@ int NdumpStep = 1;
 int PolyDeg = 100;     // degree of the Chebysev polynomial
 int nEv = 100;         // Number of the eigenvectors we want
 int nKv = 200;         // total size of Krylov space
-WHICHSPECTRUM spectrumPart = SR; // for which part of the spectrum we want to solve
+char *spectrumPart; // for which part of the spectrum we want to solve
 bool isACC = true;
 double tolArpack = 1.0e-5;
 int maxIterArpack = 100000;
-char *arpack_logfile = "arpack.log";
+char arpack_logfile[257] = "arpack.log";
 double amin = 3.0e-4;
 double amax = 3.5;
 bool isEven = false;
 bool isFullOp = true;
-
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -1755,11 +1754,6 @@ int process_command_line_option(int argc, char** argv, int* idx)
   //-----------------------------------------------------------------
   //-C.K. ARPACK parameters
 
-  WHICHSPECTRUM spectrumPart = SR; // for which part of the spectrum we want to solve                                                                                                                                                       
-
-
-  printf("    --spectrumPart                              # Which part of the spectrum we need (Options: SR,LR,SM,LM,SI,LI, default SR)\n");
-
 
   if( strcmp(argv[i], "--PolyDeg") ==0){
     if(i+1 >= argc){
@@ -1770,7 +1764,7 @@ int process_command_line_option(int argc, char** argv, int* idx)
     ret = 0;
     goto out;
   }
-
+  
   if( strcmp(argv[i], "--nEv") ==0){
     if(i+1 >= argc){
       usage(argv);
@@ -1791,19 +1785,12 @@ int process_command_line_option(int argc, char** argv, int* idx)
     goto out;
   }
 
+  spectrumPart = strdup("SR");
   if( strcmp(argv[i], "--spectrumPart") ==0){
     if(i+1 >= argc){
       usage(argv);
-    }
-    
-    if(strcmp(argv[i+1],"SR")) spectrumPart = SR;
-    else if (strcmp(argv[i+1],"LR")) spectrumPart = LR;
-    else if (strcmp(argv[i+1],"SM")) spectrumPart = SM;
-    else if (strcmp(argv[i+1],"LM")) spectrumPart = LM;
-    else if (strcmp(argv[i+1],"SI")) spectrumPart = SI;
-    else if (strcmp(argv[i+1],"LI")) spectrumPart = LI;
-    else usage(argv);
-
+    }    
+    spectrumPart = strdup(argv[i+1]);
     i++;
     ret = 0;
     goto out;
@@ -1813,8 +1800,8 @@ int process_command_line_option(int argc, char** argv, int* idx)
     if(i+1 >= argc){
       usage(argv);
     }
-    if( strcmp(argv[i+1],"yes") || strcmp(argv[i+1],"YES") ) isACC = true;
-    else if ( strcmp(argv[i+1],"no") || strcmp(argv[i+1],"NO") ) isACC = false;
+    if( strcmp(argv[i+1],"yes")==0 || strcmp(argv[i+1],"YES")==0 ) isACC = true;
+    else if ( strcmp(argv[i+1],"no")==0 || strcmp(argv[i+1],"NO")==0 ) isACC = false;
     else usage(argv);
     i++;
     ret = 0;
@@ -1875,8 +1862,8 @@ int process_command_line_option(int argc, char** argv, int* idx)
     if(i+1 >= argc){
       usage(argv);
     }
-    if( strcmp(argv[i+1],"yes") || strcmp(argv[i+1],"YES") ) isEven = true;
-    else if ( strcmp(argv[i+1],"no") || strcmp(argv[i+1],"NO") ) isEven = false;
+    if( strcmp(argv[i+1],"yes")==0 || strcmp(argv[i+1],"YES")==0 ) isEven = true;
+    else if ( strcmp(argv[i+1],"no")==0 || strcmp(argv[i+1],"NO")==0 ) isEven = false;
     else usage(argv);
     i++;
     ret = 0;
@@ -1887,14 +1874,13 @@ int process_command_line_option(int argc, char** argv, int* idx)
     if(i+1 >= argc){
       usage(argv);
     }
-    if( strcmp(argv[i+1],"yes") || strcmp(argv[i+1],"YES") ) isFullOp = true;
-    else if ( strcmp(argv[i+1],"no") || strcmp(argv[i+1],"NO") ) isFullOp = false;
+    if( strcmp(argv[i+1],"yes")==0 || strcmp(argv[i+1],"YES")==0 ) isFullOp = true;
+    else if ( strcmp(argv[i+1],"no")==0 || strcmp(argv[i+1],"NO")==0 ) isFullOp = false;
     else usage(argv);
     i++;
     ret = 0;
     goto out;
   }
-
 
   //-----------------------------------------------------------------
 

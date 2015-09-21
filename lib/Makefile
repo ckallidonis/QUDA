@@ -130,7 +130,7 @@ wilson_pack_clover_twisted_face_dagger_core.h wilson_pack_face_core.h	\
 wilson_pack_face_dagger_core.h wilson_pack_twisted_face_core.h		\
 wilson_pack_twisted_face_dagger_core.h
 
-INC += -I../include -Idslash_core -I. -I./code_pieces -I./code_pieces_Kepler -I/users/krikitos/lime-1.3.2/include -I/opt/intel/14.0.1.106/composer_xe_2013_sp1.2.144/mkl/include/
+INC += -I../include -Idslash_core -I. -I./code_pieces -I./code_pieces_Kepler -I/opt/intel/14.0.1.106/composer_xe_2013_sp1.2.144/mkl/include/
 
 HDRS = $(QUDA_HDRS:%=../include/%)
 HDRS += $(QUDA_INLN)

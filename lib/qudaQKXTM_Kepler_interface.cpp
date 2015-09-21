@@ -2424,6 +2424,18 @@ void DeflateAndInvert_threepTwop(void **gaugeSmeared, void **gauge, QudaInvertPa
 }
 
 
+
+void calcEigenVectors(QudaInvertParam *param , qudaQKXTM_arpackInfo arpackInfo){
+
+  QKXTM_Deflation_Kepler<double> *deflation = new QKXTM_Deflation_Kepler<double>(param,arpackInfo);
+
+  deflation->eigenSolver();
+
+  delete deflation;
+
+}
+
+
 // void calcEigenVectorsAndInvert_threepTwop(void **gaugeSmeared, void **gauge, QudaInvertParam *param ,QudaGaugeParam *gauge_param, char *filename_twop, char *filename_threep,int NeV, qudaQKXTMinfo_Kepler info, qudaQKXTM_arpackInfo arpackInfo, WHICHPARTICLE NUCLEON, WHICHPROJECTOR PID ){
 //   bool flag_eo;
 //   double t1,t2;
