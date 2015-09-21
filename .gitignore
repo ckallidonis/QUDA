@@ -11,5 +11,6 @@ tests/deflationLoops
 tests/deflationLoops_w_oneD
 tests/deflationLoops_w_oneD_volumeSource
 tests/deflationTwopThreep
+tests/CalcEigenVecs
 *orig*
 *log
