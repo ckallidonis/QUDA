@@ -1596,6 +1596,9 @@ int Nstoch = 1;
 char latfile_smeared[257] = "";
 double csw = 1.57551;
 
+char pathListRun3pt[257] = "listrun3pt.txt";
+char run3pt[257] = "all";
+
 int numSourcePositions = 1;
 char pathListSourcePositions[257] = "listSourcePositions.txt";
 int NeV = 20;
@@ -1661,6 +1664,8 @@ void usage(char** argv )
   printf("    --z_source                                # Source position in z direction (default 0)\n");
   printf("    --t_source                                # Source position in t direction (default 0)\n");
   printf("    --pathListSinkSource                      # Path to find the list of the sink-source separations (default \" list_tsinksource.txt \")\n");
+  printf("    --pathListRun3pt                          # Path to find the list of which source positions to run for 2pt- and 3pt- functions (default \" listrun3pt.txt \")\n");
+  printf("    --run3pt                                  # Option to choose whether to run for all (=all/ALL) source-positions or only some (=file/FILE, given in --pathListRun3pt) (default \" all \")\n");
   printf("    --Ntsink                                  # Number of sink-source separations (default \" list_tsinksource.txt \")\n");
   printf("    --Q_sqMax                                 # The maximum Q^2 momentum (default 0)\n");
   printf("    --nsmearAPE                               # Number of APE smearing iterations (default 20)\n");
@@ -1930,6 +1935,26 @@ int process_command_line_option(int argc, char** argv, int* idx)
       usage(argv);
     }     
     strcpy(pathListSourcePositions, argv[i+1]);
+    i++;
+    ret = 0;
+    goto out;
+  }
+
+  if( strcmp(argv[i], "--pathListRun3pt") == 0){
+    if (i+1 >= argc){
+      usage(argv);
+    }     
+    strcpy(pathListRun3pt, argv[i+1]);
+    i++;
+    ret = 0;
+    goto out;
+  }
+
+  if( strcmp(argv[i], "--run3pt") == 0){
+    if (i+1 >= argc){
+      usage(argv);
+    }     
+    strcpy(run3pt, argv[i+1]);
     i++;
     ret = 0;
     goto out;

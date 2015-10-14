@@ -68,6 +68,8 @@ extern char prop_path[];
 extern double csw;
 extern int numSourcePositions;
 extern char pathListSourcePositions[];
+extern char pathListRun3pt[];
+extern char run3pt[];
 extern int NeV;
 extern char pathEigenVectorsUp[];
 extern char pathEigenVectorsDown[];
@@ -362,6 +364,37 @@ int main(int argc, char **argv)
   info.Q_sq = Q_sq;
   //  info.tsinkSource=t_sinkSource;
   info.Ntsink = Ntsink;
+
+
+  if(strcmp(run3pt,"all")==0 || strcmp(run3pt,"ALL")==0){
+    printfQuda("Will run for all %d source-positions for 2pt- and 3pt- functions\n",numSourcePositions);
+    for(int is = 0; is < numSourcePositions; is++){
+      info.run3pt_src[is] = 1;
+    }
+  }
+  else if(strcmp(run3pt,"file")==0 || strcmp(run3pt,"FILE")==0){
+    printfQuda("Will read from file %s for which source-positions for 3pt- functions to run\n",pathListRun3pt);  
+    FILE *ptr_run3pt;
+    ptr_run3pt = fopen(pathListRun3pt,"r");
+    if(ptr_run3pt == NULL){
+      fprintf(stderr,"Error opening file %s \n",pathListRun3pt);
+      exit(-1);
+    }
+
+    int nRun3pt = 0;
+    for(int is = 0; is < numSourcePositions; is++){
+      fscanf(ptr_run3pt,"%d\n",&(info.run3pt_src[is]));
+      nRun3pt += info.run3pt_src[is];
+    }
+    printfQuda("Will run for %d source-positions for 3pt-functions\n",nRun3pt);  
+
+    fclose(ptr_run3pt);
+  }
+  else{
+    printfQuda("Option --run3pt only accepts all/ALL and file/FILE parameters, or, if running for all source-positions, just disregard it.\n");
+    exit(-1);
+  }
+
 
   FILE *ptr_sources;
   ptr_sources = fopen(pathListSourcePositions,"r");
