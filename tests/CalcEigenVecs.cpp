@@ -440,8 +440,7 @@ int main(int argc, char **argv)
 
   eig_param.invert_param=&inv_param;
 
-  printfQuda("Calling calcEigenVectors function...\n");
-  calcEigenVectors(&inv_param,arpackInfo);
+  calcEigenVectors_Check(&inv_param,arpackInfo);
   
   //  EigenSolver_arpack(nev,ncv,1,0,evals,evecs,tol,maxiter, filenameArpackLog, &eig_param, amin, amax);
   

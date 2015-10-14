@@ -11,6 +11,15 @@ tests/deflationLoops
 tests/deflationLoops_w_oneD
 tests/deflationLoops_w_oneD_volumeSource
 tests/deflationTwopThreep
+tests/CalcEigenVecs_2pt3pt
 tests/CalcEigenVecs
+tests/createWritePropsSLReadApeGauge
+tests/test_plaquette
 *orig*
+tests/*orig*
+lib/*orig*
 *log
+#*
+lib/#*
+tests/#*
+include/#*

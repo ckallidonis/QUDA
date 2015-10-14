@@ -788,7 +788,7 @@ void quda::run_UploadToCuda(void* in,cudaColorSpinorField &qudaVec, int precisio
     }
   }
   else{
-
+    //    printfQuda("### Uploading to QUDA both even and odd sites\n");
     if(precision == 4){
       uploadToCuda_kernel<float2><<<gridDim,blockDim>>>((float2*) in,(double2*) qudaVec.Even().V(), (double2*) qudaVec.Odd().V() );
     }
@@ -831,7 +831,7 @@ void quda::run_DownloadFromCuda(void* out,cudaColorSpinorField &qudaVec, int pre
     }
   }
   else{
-
+    //    printfQuda("### Downloading from QUDA both even and odd sites\n");
     if(precision == 4){
       downloadFromCuda_kernel<float2><<<gridDim,blockDim>>>((float2*) out,(double2*) qudaVec.Even().V(), (double2*) qudaVec.Odd().V() );
     }

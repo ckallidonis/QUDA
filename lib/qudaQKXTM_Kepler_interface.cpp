@@ -1969,6 +1969,8 @@ void DeflateAndInvert_loop_w_One_Der_volumeSource(void **gaugeToPlaquette, QudaI
 
  */
 
+
+
 void DeflateAndInvert_threepTwop(void **gaugeSmeared, void **gauge, QudaInvertParam *param ,QudaGaugeParam *gauge_param, char *filename_eigenValues_up, char *filename_eigenVectors_up, char *filename_eigenValues_down, char *filename_eigenVectors_down, char *filename_twop, char *filename_threep,int NeV, qudaQKXTMinfo_Kepler info, WHICHPARTICLE NUCLEON, WHICHPROJECTOR PID ){
   bool flag_eo;
   double t1,t2;
@@ -2112,12 +2114,13 @@ void DeflateAndInvert_threepTwop(void **gaugeSmeared, void **gauge, QudaInvertPa
 
   for(int isource = 0 ; isource < info.Nsources ; isource++){
 
-    sprintf(filename_mesons,"%s.mesons.SS.%02d.%02d.%02d.%02d.dat",filename_twop,info.sourcePosition[isource][0],info.sourcePosition[isource][1],info.sourcePosition[isource][2],info.sourcePosition[isource][3]);
-    sprintf(filename_baryons,"%s.baryons.SS.%02d.%02d.%02d.%02d.dat",filename_twop,info.sourcePosition[isource][0],info.sourcePosition[isource][1],info.sourcePosition[isource][2],info.sourcePosition[isource][3]);
-    bool checkMesons, checkBaryons;
-    checkMesons = exists_file(filename_mesons);
-    checkBaryons = exists_file(filename_baryons);
-    if( (checkMesons == true) && (checkBaryons == true) ) continue; // because threep are written before twop if I checked twop I know that threep are fine
+     sprintf(filename_mesons,"%s.mesons.SS.%02d.%02d.%02d.%02d.dat",filename_twop,info.sourcePosition[isource][0],info.sourcePosition[isource][1],info.sourcePosition[isource][2],info.sourcePosition[isource][3]);
+     sprintf(filename_baryons,"%s.baryons.SS.%02d.%02d.%02d.%02d.dat",filename_twop,info.sourcePosition[isource][0],info.sourcePosition[isource][1],info.sourcePosition[isource][2],info.sourcePosition[isource][3]);
+
+//      bool checkMesons, checkBaryons;
+//      checkMesons = exists_file(filename_mesons);
+//      checkBaryons = exists_file(filename_baryons);
+//      if( (checkMesons == true) && (checkBaryons == true) ) continue; // because threep are written before twop if I checked twop I know that threep are fine
 
     for(int isc = 0 ; isc < 12 ; isc++){
       ///////////////////////////////////////////////////////////////////////////////// forward prop for up quark ///////////////////////////
@@ -2208,165 +2211,186 @@ void DeflateAndInvert_threepTwop(void **gaugeSmeared, void **gauge, QudaInvertPa
       printfQuda("Inversion down = %d,  for source = %d finished in time %f sec\n",isc,isource,t2-t1);
     } // close loop over 12 spin-color
 
-    /////////////////////////////////// Smearing on the 3D propagators
-    t1 = MPI_Wtime();
-    int my_fixSinkTime;
-    my_fixSinkTime = (info.tsinkSource + info.sourcePosition[isource][3])%GK_totalL[3] - comm_coords(default_topo)[3] * X[3];
-    K_temp->zero_device();
-    checkCudaError();
-    if( (my_fixSinkTime >= 0) && ( my_fixSinkTime < X[3] ) ){
-      K_prop3D_up->absorbTimeSlice(*K_prop_up,my_fixSinkTime);
-      K_prop3D_down->absorbTimeSlice(*K_prop_down,my_fixSinkTime);
+
+    if(info.run3pt_src[isource]){
+
+      /////////////////////////////////// Smearing on the 3D propagators
+
+      //-C.Kallidonis: Loop over the number of sink-source separations
+      int my_fixSinkTime;
+      char filename_threep_tsink[257];
+      for(int its=0;its<info.Ntsink;its++){
+	my_fixSinkTime = (info.tsinkSource[its] + info.sourcePosition[isource][3])%GK_totalL[3] - comm_coords(default_topo)[3] * X[3];
+	sprintf(filename_threep_tsink,"%s_tsink%d",filename_threep,info.tsinkSource[its]);
+	printfQuda("The three-point function base name is: %s\n",filename_threep_tsink);
+      
+	t1 = MPI_Wtime();
+	K_temp->zero_device();
+	checkCudaError();
+	if( (my_fixSinkTime >= 0) && ( my_fixSinkTime < X[3] ) ){
+	  K_prop3D_up->absorbTimeSlice(*K_prop_up,my_fixSinkTime);
+	  K_prop3D_down->absorbTimeSlice(*K_prop_down,my_fixSinkTime);
+	}
+	comm_barrier();
+
+	for(int nu = 0 ; nu < 4 ; nu++)
+	  for(int c2 = 0 ; c2 < 3 ; c2++){
+	    // up //
+	    K_temp->zero_device();
+	    if( (my_fixSinkTime >= 0) && ( my_fixSinkTime < X[3] ) ) K_temp->copyPropagator3D(*K_prop3D_up,my_fixSinkTime,nu,c2);
+	    comm_barrier();
+	    K_vector->castFloatToDouble(*K_temp);
+	    K_guess->gaussianSmearing(*K_vector,*K_gaugeSmeared);
+	    K_temp->castDoubleToFloat(*K_guess);
+	    if( (my_fixSinkTime >= 0) && ( my_fixSinkTime < X[3] ) ) K_prop3D_up->absorbVectorTimeSlice(*K_temp,my_fixSinkTime,nu,c2);
+	    comm_barrier();
+	    K_temp->zero_device();
+
+	    // down //
+	    if( (my_fixSinkTime >= 0) && ( my_fixSinkTime < X[3] ) ) K_temp->copyPropagator3D(*K_prop3D_down,my_fixSinkTime,nu,c2);
+	    comm_barrier();
+	    K_vector->castFloatToDouble(*K_temp);
+	    K_guess->gaussianSmearing(*K_vector,*K_gaugeSmeared);
+	    K_temp->castDoubleToFloat(*K_guess);
+	    if( (my_fixSinkTime >= 0) && ( my_fixSinkTime < X[3] ) ) K_prop3D_down->absorbVectorTimeSlice(*K_temp,my_fixSinkTime,nu,c2);
+	    comm_barrier();
+	    K_temp->zero_device();	
+	  }
+	t2 = MPI_Wtime();
+	printfQuda("Time needed to prepare the 3D props for sink-source[%d]=%d is %f sec\n",its,info.tsinkSource[its],t2-t1);
+
+	/////////////////////////////////////////sequential propagator for the part 1
+	for(int nu = 0 ; nu < 4 ; nu++)
+	  for(int c2 = 0 ; c2 < 3 ; c2++){
+	    t1 = MPI_Wtime();
+	    K_temp->zero_device();
+	    if(NUCLEON == PROTON){
+	      if( (my_fixSinkTime >= 0) && ( my_fixSinkTime < X[3] ) ) K_contract->seqSourceFixSinkPart1(*K_temp,*K_prop3D_up, *K_prop3D_down, my_fixSinkTime, nu, c2, PID, NUCLEON);}
+	    else if(NUCLEON == NEUTRON){
+	      if( (my_fixSinkTime >= 0) && ( my_fixSinkTime < X[3] ) ) K_contract->seqSourceFixSinkPart1(*K_temp,*K_prop3D_down, *K_prop3D_up, my_fixSinkTime, nu, c2, PID, NUCLEON);}
+	    comm_barrier();
+	    K_temp->conjugate();
+	    K_temp->apply_gamma5();
+	    K_vector->castFloatToDouble(*K_temp);
+	    //
+	    K_vector->scaleVector(1e+10);
+	    //
+	    K_guess->gaussianSmearing(*K_vector,*K_gaugeSmeared);
+	    if(NUCLEON == PROTON){
+	      b->changeTwist(QUDA_TWIST_MINUS); x->changeTwist(QUDA_TWIST_MINUS); b->Even().changeTwist(QUDA_TWIST_MINUS);
+	      b->Odd().changeTwist(QUDA_TWIST_MINUS); x->Even().changeTwist(QUDA_TWIST_MINUS); x->Odd().changeTwist(QUDA_TWIST_MINUS);
+	    }
+	    else{
+	      b->changeTwist(QUDA_TWIST_PLUS); x->changeTwist(QUDA_TWIST_PLUS); b->Even().changeTwist(QUDA_TWIST_PLUS);
+	      b->Odd().changeTwist(QUDA_TWIST_PLUS); x->Even().changeTwist(QUDA_TWIST_PLUS); x->Odd().changeTwist(QUDA_TWIST_PLUS);
+	    }
+	    K_guess->uploadToCuda(b,flag_eo);
+	    dirac.prepare(in,out,*x,*b,param->solution_type);
+	  
+	    cudaColorSpinorField *tmp = new cudaColorSpinorField(*in);
+	    dirac.Mdag(*in, *tmp);
+	    delete tmp;
+	    K_vector->downloadFromCuda(in,flag_eo);
+	    K_vector->download();
+	    if(NUCLEON == PROTON)
+	      deflation_down->deflateVector(*K_guess,*K_vector);
+	    else if(NUCLEON == NEUTRON)
+	      deflation_up->deflateVector(*K_guess,*K_vector);
+	    K_guess->uploadToCuda(out,flag_eo); // initial guess is ready
+	    (*solve)(*out,*in);
+	    dirac.reconstruct(*x,*b,param->solution_type);
+	    K_vector->downloadFromCuda(x,flag_eo);
+	    if (param->mass_normalization == QUDA_MASS_NORMALIZATION || param->mass_normalization == QUDA_ASYMMETRIC_MASS_NORMALIZATION) {
+	      K_vector->scaleVector(2*param->kappa);
+	    }
+	    //
+	    K_vector->scaleVector(1e-10);
+	    //
+	    K_temp->castDoubleToFloat(*K_vector);
+	    K_seqProp->absorbVectorToDevice(*K_temp,nu,c2);
+	    t2 = MPI_Wtime();
+	    printfQuda("Inversion for seq prop part 1 = %d,  for source = %d and sink-source = %d finished in time %f sec\n",nu*3+c2,isource,info.tsinkSource[its],t2-t1);
+	  }
+
+	////////////////// Contractions for part 1 ////////////////
+	t1 = MPI_Wtime();
+	if(NUCLEON == PROTON){
+	  K_contract->contractFixSink(*K_seqProp, *K_prop_up, *K_gaugeContractions, PID, NUCLEON, 1, filename_threep_tsink, isource, info.tsinkSource[its]);
+	}
+	if(NUCLEON == NEUTRON){
+	  K_contract->contractFixSink(*K_seqProp, *K_prop_down, *K_gaugeContractions, PID, NUCLEON, 1, filename_threep_tsink, isource, info.tsinkSource[its]);
+	}                
+	t2 = MPI_Wtime();
+	printfQuda("Time for fix sink contractions for part 1 at sink-source = %d is %f sec\n",info.tsinkSource[its],t2-t1);
+	/////////////////////////////////////////sequential propagator for the part 2
+	for(int nu = 0 ; nu < 4 ; nu++)
+	  for(int c2 = 0 ; c2 < 3 ; c2++){
+	    t1 = MPI_Wtime();
+	    K_temp->zero_device();
+	    if(NUCLEON == PROTON){
+	      if( (my_fixSinkTime >= 0) && ( my_fixSinkTime < X[3] ) ) K_contract->seqSourceFixSinkPart2(*K_temp,*K_prop3D_up, my_fixSinkTime, nu, c2, PID, NUCLEON);}
+	    else if(NUCLEON == NEUTRON){
+	      if( (my_fixSinkTime >= 0) && ( my_fixSinkTime < X[3] ) ) K_contract->seqSourceFixSinkPart2(*K_temp,*K_prop3D_down, my_fixSinkTime, nu, c2, PID, NUCLEON);}
+	    comm_barrier();
+	    K_temp->conjugate();
+	    K_temp->apply_gamma5();
+	    K_vector->castFloatToDouble(*K_temp);
+	    //
+	    K_vector->scaleVector(1e+10);
+	    //
+	    K_guess->gaussianSmearing(*K_vector,*K_gaugeSmeared);
+	    if(NUCLEON == PROTON){
+	      b->changeTwist(QUDA_TWIST_PLUS); x->changeTwist(QUDA_TWIST_PLUS); b->Even().changeTwist(QUDA_TWIST_PLUS);
+	      b->Odd().changeTwist(QUDA_TWIST_PLUS); x->Even().changeTwist(QUDA_TWIST_PLUS); x->Odd().changeTwist(QUDA_TWIST_PLUS);
+	    }
+	    else{
+	      b->changeTwist(QUDA_TWIST_MINUS); x->changeTwist(QUDA_TWIST_MINUS); b->Even().changeTwist(QUDA_TWIST_MINUS);
+	      b->Odd().changeTwist(QUDA_TWIST_MINUS); x->Even().changeTwist(QUDA_TWIST_MINUS); x->Odd().changeTwist(QUDA_TWIST_MINUS);
+	    }
+	    K_guess->uploadToCuda(b,flag_eo);
+	    dirac.prepare(in,out,*x,*b,param->solution_type);
+	  
+	    cudaColorSpinorField *tmp = new cudaColorSpinorField(*in);
+	    dirac.Mdag(*in, *tmp);
+	    delete tmp;
+	    K_vector->downloadFromCuda(in,flag_eo);
+	    K_vector->download();
+	    if(NUCLEON == PROTON)
+	      deflation_up->deflateVector(*K_guess,*K_vector);
+	    else if(NUCLEON == NEUTRON)
+	      deflation_down->deflateVector(*K_guess,*K_vector);
+	    K_guess->uploadToCuda(out,flag_eo); // initial guess is ready
+	    (*solve)(*out,*in);
+	    dirac.reconstruct(*x,*b,param->solution_type);
+	    K_vector->downloadFromCuda(x,flag_eo);
+	    if (param->mass_normalization == QUDA_MASS_NORMALIZATION || param->mass_normalization == QUDA_ASYMMETRIC_MASS_NORMALIZATION) {
+	      K_vector->scaleVector(2*param->kappa);
+	    }
+	    //
+	    K_vector->scaleVector(1e-10);
+	    //
+	    K_temp->castDoubleToFloat(*K_vector);
+	    K_seqProp->absorbVectorToDevice(*K_temp,nu,c2);
+	    t2 = MPI_Wtime();
+	    printfQuda("Inversion for seq prop part 2 = %d,  for source = %d and sink-source = %d finished in time %f sec\n",nu*3+c2,isource,info.tsinkSource[its],t2-t1);
+	  }
+
+	////////////////// Contractions for part 2 ////////////////
+	t1 = MPI_Wtime();
+	if(NUCLEON == PROTON)
+	  K_contract->contractFixSink(*K_seqProp, *K_prop_down, *K_gaugeContractions, PID, NUCLEON, 2, filename_threep_tsink, isource, info.tsinkSource[its]);
+	if(NUCLEON == NEUTRON)
+	  K_contract->contractFixSink(*K_seqProp, *K_prop_up, *K_gaugeContractions, PID, NUCLEON, 2, filename_threep_tsink, isource, info.tsinkSource[its]);
+	t2 = MPI_Wtime();
+
+	printfQuda("Time for fix sink contractions for part 2 at sink-source = %d is %f sec\n",info.tsinkSource[its],t2-t1);
+
+      }//-loop over sink-source separations      
+
     }
-    comm_barrier();
-
-    for(int nu = 0 ; nu < 4 ; nu++)
-      for(int c2 = 0 ; c2 < 3 ; c2++){
-	// up //
-	K_temp->zero_device();
-	if( (my_fixSinkTime >= 0) && ( my_fixSinkTime < X[3] ) ) K_temp->copyPropagator3D(*K_prop3D_up,my_fixSinkTime,nu,c2);
-	comm_barrier();
-	K_vector->castFloatToDouble(*K_temp);
-	K_guess->gaussianSmearing(*K_vector,*K_gaugeSmeared);
-	K_temp->castDoubleToFloat(*K_guess);
-	if( (my_fixSinkTime >= 0) && ( my_fixSinkTime < X[3] ) ) K_prop3D_up->absorbVectorTimeSlice(*K_temp,my_fixSinkTime,nu,c2);
-        comm_barrier();
-	K_temp->zero_device();
-
-	// down //
-	if( (my_fixSinkTime >= 0) && ( my_fixSinkTime < X[3] ) ) K_temp->copyPropagator3D(*K_prop3D_down,my_fixSinkTime,nu,c2);
-	comm_barrier();
-	K_vector->castFloatToDouble(*K_temp);
-	K_guess->gaussianSmearing(*K_vector,*K_gaugeSmeared);
-	K_temp->castDoubleToFloat(*K_guess);
-	if( (my_fixSinkTime >= 0) && ( my_fixSinkTime < X[3] ) ) K_prop3D_down->absorbVectorTimeSlice(*K_temp,my_fixSinkTime,nu,c2);
-        comm_barrier();
-	K_temp->zero_device();	
-      }
-    t2 = MPI_Wtime();
-    printfQuda("Time needed to prepare the 3D props is %f sec\n",t2-t1);
-    /////////////////////////////////////////sequential propagator for the part 1
-    for(int nu = 0 ; nu < 4 ; nu++)
-      for(int c2 = 0 ; c2 < 3 ; c2++){
-	t1 = MPI_Wtime();
-	K_temp->zero_device();
-	if(NUCLEON == PROTON){
-	  if( (my_fixSinkTime >= 0) && ( my_fixSinkTime < X[3] ) ) K_contract->seqSourceFixSinkPart1(*K_temp,*K_prop3D_up, *K_prop3D_down, my_fixSinkTime, nu, c2, PID, NUCLEON);}
-	else if(NUCLEON == NEUTRON){
-	  if( (my_fixSinkTime >= 0) && ( my_fixSinkTime < X[3] ) ) K_contract->seqSourceFixSinkPart1(*K_temp,*K_prop3D_down, *K_prop3D_up, my_fixSinkTime, nu, c2, PID, NUCLEON);}
-	comm_barrier();
-	K_temp->conjugate();
-	K_temp->apply_gamma5();
-	K_vector->castFloatToDouble(*K_temp);
-	//
-	K_vector->scaleVector(1e+10);
-	//
-        K_guess->gaussianSmearing(*K_vector,*K_gaugeSmeared);
-	if(NUCLEON == PROTON){
-	  b->changeTwist(QUDA_TWIST_MINUS); x->changeTwist(QUDA_TWIST_MINUS); b->Even().changeTwist(QUDA_TWIST_MINUS);
-	  b->Odd().changeTwist(QUDA_TWIST_MINUS); x->Even().changeTwist(QUDA_TWIST_MINUS); x->Odd().changeTwist(QUDA_TWIST_MINUS);
-	}
-	else{
-	  b->changeTwist(QUDA_TWIST_PLUS); x->changeTwist(QUDA_TWIST_PLUS); b->Even().changeTwist(QUDA_TWIST_PLUS);
-	  b->Odd().changeTwist(QUDA_TWIST_PLUS); x->Even().changeTwist(QUDA_TWIST_PLUS); x->Odd().changeTwist(QUDA_TWIST_PLUS);
-	}
-	K_guess->uploadToCuda(b,flag_eo);
-	dirac.prepare(in,out,*x,*b,param->solution_type);
-
-	cudaColorSpinorField *tmp = new cudaColorSpinorField(*in);
-	dirac.Mdag(*in, *tmp);
-	delete tmp;
-	K_vector->downloadFromCuda(in,flag_eo);
-	K_vector->download();
-	if(NUCLEON == PROTON)
-	  deflation_down->deflateVector(*K_guess,*K_vector);
-	else if(NUCLEON == NEUTRON)
-	  deflation_up->deflateVector(*K_guess,*K_vector);
-	K_guess->uploadToCuda(out,flag_eo); // initial guess is ready
-	(*solve)(*out,*in);
-	dirac.reconstruct(*x,*b,param->solution_type);
-	K_vector->downloadFromCuda(x,flag_eo);
-	if (param->mass_normalization == QUDA_MASS_NORMALIZATION || param->mass_normalization == QUDA_ASYMMETRIC_MASS_NORMALIZATION) {
-	  K_vector->scaleVector(2*param->kappa);
-	}
-	//
-	K_vector->scaleVector(1e-10);
-	//
-	K_temp->castDoubleToFloat(*K_vector);
-	K_seqProp->absorbVectorToDevice(*K_temp,nu,c2);
-	t2 = MPI_Wtime();
-	printfQuda("Inversion for seq prop part 1 = %d,  for source = %d finished in time %f sec\n",nu*3+c2,isource,t2-t1);
-      }
-    ////////////////// Contractions for part 1 ////////////////
-    t1 = MPI_Wtime();
-    if(NUCLEON == PROTON)
-      K_contract->contractFixSink(*K_seqProp, *K_prop_up, *K_gaugeContractions, PID, NUCLEON, 1, filename_threep, isource, info.tsinkSource);
-    if(NUCLEON == NEUTRON)
-      K_contract->contractFixSink(*K_seqProp, *K_prop_down, *K_gaugeContractions, PID, NUCLEON, 1, filename_threep, isource, info.tsinkSource);
-    t2 = MPI_Wtime();
-    printfQuda("Time for fix sink contractions is %f sec\n",t2-t1);
-    /////////////////////////////////////////sequential propagator for the part 2
-    for(int nu = 0 ; nu < 4 ; nu++)
-      for(int c2 = 0 ; c2 < 3 ; c2++){
-	t1 = MPI_Wtime();
-	K_temp->zero_device();
-	if(NUCLEON == PROTON){
-	  if( (my_fixSinkTime >= 0) && ( my_fixSinkTime < X[3] ) ) K_contract->seqSourceFixSinkPart2(*K_temp,*K_prop3D_up, my_fixSinkTime, nu, c2, PID, NUCLEON);}
-	else if(NUCLEON == NEUTRON){
-	  if( (my_fixSinkTime >= 0) && ( my_fixSinkTime < X[3] ) ) K_contract->seqSourceFixSinkPart2(*K_temp,*K_prop3D_down, my_fixSinkTime, nu, c2, PID, NUCLEON);}
-	comm_barrier();
-	K_temp->conjugate();
-	K_temp->apply_gamma5();
-	K_vector->castFloatToDouble(*K_temp);
-	//
-	K_vector->scaleVector(1e+10);
-	//
-        K_guess->gaussianSmearing(*K_vector,*K_gaugeSmeared);
-	if(NUCLEON == PROTON){
-	  b->changeTwist(QUDA_TWIST_PLUS); x->changeTwist(QUDA_TWIST_PLUS); b->Even().changeTwist(QUDA_TWIST_PLUS);
-	  b->Odd().changeTwist(QUDA_TWIST_PLUS); x->Even().changeTwist(QUDA_TWIST_PLUS); x->Odd().changeTwist(QUDA_TWIST_PLUS);
-	}
-	else{
-	  b->changeTwist(QUDA_TWIST_MINUS); x->changeTwist(QUDA_TWIST_MINUS); b->Even().changeTwist(QUDA_TWIST_MINUS);
-	  b->Odd().changeTwist(QUDA_TWIST_MINUS); x->Even().changeTwist(QUDA_TWIST_MINUS); x->Odd().changeTwist(QUDA_TWIST_MINUS);
-	}
-	K_guess->uploadToCuda(b,flag_eo);
-	dirac.prepare(in,out,*x,*b,param->solution_type);
-
-	cudaColorSpinorField *tmp = new cudaColorSpinorField(*in);
-	dirac.Mdag(*in, *tmp);
-	delete tmp;
-	K_vector->downloadFromCuda(in,flag_eo);
-	K_vector->download();
-	if(NUCLEON == PROTON)
-	  deflation_up->deflateVector(*K_guess,*K_vector);
-	else if(NUCLEON == NEUTRON)
-	  deflation_down->deflateVector(*K_guess,*K_vector);
-	K_guess->uploadToCuda(out,flag_eo); // initial guess is ready
-	(*solve)(*out,*in);
-	dirac.reconstruct(*x,*b,param->solution_type);
-	K_vector->downloadFromCuda(x,flag_eo);
-	if (param->mass_normalization == QUDA_MASS_NORMALIZATION || param->mass_normalization == QUDA_ASYMMETRIC_MASS_NORMALIZATION) {
-	  K_vector->scaleVector(2*param->kappa);
-	}
-	//
-	K_vector->scaleVector(1e-10);
-	//
-	K_temp->castDoubleToFloat(*K_vector);
-	K_seqProp->absorbVectorToDevice(*K_temp,nu,c2);
-	t2 = MPI_Wtime();
-	printfQuda("Inversion for seq prop part 2 = %d,  for source = %d finished in time %f sec\n",nu*3+c2,isource,t2-t1);
-      }
-    ////////////////// Contractions for part 2 ////////////////
-    t1 = MPI_Wtime();
-    if(NUCLEON == PROTON)
-      K_contract->contractFixSink(*K_seqProp, *K_prop_down, *K_gaugeContractions, PID, NUCLEON, 2, filename_threep, isource, info.tsinkSource);
-    if(NUCLEON == NEUTRON)
-      K_contract->contractFixSink(*K_seqProp, *K_prop_up, *K_gaugeContractions, PID, NUCLEON, 2, filename_threep, isource, info.tsinkSource);
-    t2 = MPI_Wtime();
-    printfQuda("Time for fix sink contractions is %f sec\n",t2-t1);
     ////////// At the very end ///////////////////////
-    
+
+
     // smear the forward propagators
     for(int nu = 0 ; nu < 4 ; nu++)
       for(int c2 = 0 ; c2 < 3 ; c2++){
@@ -2375,7 +2399,7 @@ void DeflateAndInvert_threepTwop(void **gaugeSmeared, void **gauge, QudaInvertPa
 	K_guess->gaussianSmearing(*K_vector,*K_gaugeSmeared);
 	K_temp->castDoubleToFloat(*K_guess);
 	K_prop_up->absorbVectorToDevice(*K_temp,nu,c2);
-
+	
 	K_temp->copyPropagator(*K_prop_down,nu,c2);
 	K_vector->castFloatToDouble(*K_temp);
 	K_guess->gaussianSmearing(*K_vector,*K_gaugeSmeared);
@@ -2424,73 +2448,664 @@ void DeflateAndInvert_threepTwop(void **gaugeSmeared, void **gauge, QudaInvertPa
 }
 
 
+//=================================================================================================//
+//========================= F U L L   O P E R A T O R   F U N C T I O N S =========================//
+//=================================================================================================//
+
+void calcEigenVectors_Check(QudaInvertParam *param , qudaQKXTM_arpackInfo arpackInfo){
+
+  printfQuda("Running eigensolver and checking the eigenvectors...\n");
+
+  QKXTM_Deflation_Kepler<double> *deflation = new QKXTM_Deflation_Kepler<double>(param,arpackInfo);
+
+  int total_length_per_NeV = GK_localVolume*4*3*2;
+  int bytes_total_length_per_NeV = total_length_per_NeV*sizeof(double);
+
+  double *vec_in = (double*) malloc(bytes_total_length_per_NeV);
+  double *vec_out = (double*) malloc(bytes_total_length_per_NeV);
+
+  FILE *ptr_evecs;
+  char filename[257];
+  char filename2[257];
+
+  int n_elem_write = GK_localVolume*4*3;
+
+  //-Calculate the eigenvectors
+  deflation->printInfo();
+  deflation->eigenSolver();
+
+  for(int i=0;i<arpackInfo.nEv;i++){
+    for(int k=0;k<240;k++){
+      printfQuda("BEFORE ANYTHING: i = %04d, k = %04d: %+e  %+e\n",i,k,deflation->H_elem()[i*total_length_per_NeV+2*k],deflation->H_elem()[i*total_length_per_NeV+2*k+1]);
+    }
+    printfQuda("\n\n");
+  }
+
+  sprintf(filename2,"h_elem_evenodd");
+  deflation->writeEigenVectors_ASCII(filename2);
+
+  deflation->MapEvenOddToFull();
+
+  for(int i=0;i<arpackInfo.nEv;i++){
+    sprintf(filename,"eigenvecs_applyOp.%04d.txt",i);
+    if( (ptr_evecs=fopen(filename,"w"))==NULL ) errorQuda("Cannot open filename for test\n");
+
+    memset(vec_in ,0,bytes_total_length_per_NeV);
+    memset(vec_out,0,bytes_total_length_per_NeV);
+    deflation->copyEigenVectorToQKXTM_Vector_Kepler(i,vec_in);
+
+    deflation->ApplyFullOp(vec_out,vec_in,param);
+
+    //deflation->MapEvenOddToFull(i);
+    //    memset(vec_in ,0,bytes_total_length_per_NeV);
+    //    deflation->copyEigenVectorToQKXTM_Vector_Kepler(i,vec_in);
+     
+    for(int k=0;k<n_elem_write;k++){
+      fprintf(ptr_evecs,"i = %04d , k = %10d: %+e  %+e     %+e  %+e     %7.5f  %7.5f\n",i,k,vec_out[2*k],vec_out[2*k+1],vec_in[2*k],vec_in[2*k+1],
+	      vec_out[2*k]/(deflation->EigenValues()[2*i]*vec_in[2*k]),vec_out[2*k+1]/(deflation->EigenValues()[2*i]*vec_in[2*k+1]));
+    }
+    fclose(ptr_evecs);
+  }
+
+  sprintf(filename2,"h_elem_full");
+  deflation->writeEigenVectors_ASCII(filename2);
+
+  free(vec_in);
+  free(vec_out);
+  delete deflation;
+}
+
 
 void calcEigenVectors(QudaInvertParam *param , qudaQKXTM_arpackInfo arpackInfo){
+
+  printfQuda("Running eigensolver...\n");
 
   QKXTM_Deflation_Kepler<double> *deflation = new QKXTM_Deflation_Kepler<double>(param,arpackInfo);
 
   deflation->eigenSolver();
-
+  
   delete deflation;
+}
+
+
+void calcEigenVectors_threepTwop_FullOp(void **gaugeSmeared, void **gauge, QudaGaugeParam *gauge_param, QudaInvertParam *param, qudaQKXTM_arpackInfo arpackInfo, qudaQKXTMinfo_Kepler info,
+					char *filename_twop, char *filename_threep, WHICHPARTICLE NUCLEON, WHICHPROJECTOR PID ){
+
+  double t1,t2;
+
+  profileInvert.Start(QUDA_PROFILE_TOTAL);
+  //if(param->solve_type != QUDA_NORMOP_PC_SOLVE) errorQuda("This function works only with even odd preconditioning");
+  if(param->inv_type != QUDA_CG_INVERTER) errorQuda("This function works only with CG method");
+  if( !arpackInfo.isFullOp ) errorQuda("This function works only with the Full Operator\n");
+  printfQuda("Solving for the FULL operator\n");
+
+  if( param->solve_type != QUDA_NORMOP_SOLVE ) errorQuda("This function is intended to solve for the Full Operator\n");
+  else printfQuda("Solving for the FULL operator\n");
+
+  bool pc_solve = !arpackInfo.isFullOp;
+  bool mat_solution = (param->solution_type == QUDA_MAT_SOLUTION) || (param->solution_type ==  QUDA_MATPC_SOLUTION);
+  bool direct_solve = false;
+
+  QKXTM_Deflation_Kepler<double> *deflation_up = new QKXTM_Deflation_Kepler<double>(param,arpackInfo);
+
+  //  param.mu *= -1.0;
+  //  QKXTM_Deflation_Kepler<double> *deflation_down = new QKXTM_Deflation_Kepler<double>(param,arpackInfo);
+  //  param.mu *= -1.0;
+
+  QKXTM_Gauge_Kepler<double> *K_gaugeSmeared = new QKXTM_Gauge_Kepler<double>(BOTH,GAUGE);
+  QKXTM_Gauge_Kepler<float> *K_gaugeContractions = new QKXTM_Gauge_Kepler<float>(BOTH,GAUGE);
+
+  QKXTM_Vector_Kepler<double> *K_vector = new QKXTM_Vector_Kepler<double>(BOTH,VECTOR);
+  QKXTM_Vector_Kepler<double> *K_guess = new QKXTM_Vector_Kepler<double>(BOTH,VECTOR);
+  QKXTM_Vector_Kepler<float> *K_temp = new QKXTM_Vector_Kepler<float>(BOTH,VECTOR);
+
+  QKXTM_Propagator_Kepler<float> *K_prop_up = new QKXTM_Propagator_Kepler<float>(BOTH,PROPAGATOR);
+  QKXTM_Propagator_Kepler<float> *K_prop_down = new QKXTM_Propagator_Kepler<float>(BOTH,PROPAGATOR);  
+  QKXTM_Propagator_Kepler<float> *K_seqProp = new QKXTM_Propagator_Kepler<float>(BOTH,PROPAGATOR);
+
+  QKXTM_Propagator3D_Kepler<float> *K_prop3D_up = new QKXTM_Propagator3D_Kepler<float>(BOTH,PROPAGATOR3D);
+  QKXTM_Propagator3D_Kepler<float> *K_prop3D_down = new QKXTM_Propagator3D_Kepler<float>(BOTH,PROPAGATOR3D);
+
+  QKXTM_Contraction_Kepler<float> *K_contract = new QKXTM_Contraction_Kepler<float>();
+
+  printfQuda("Memory allocation was successfull\n");
+
+  if(param->gamma_basis != QUDA_UKQCD_GAMMA_BASIS) errorQuda("This function works only with ukqcd gamma basis\n");
+  if(param->dirac_order != QUDA_DIRAC_ORDER) errorQuda("This function works only with colors inside the spins\n");
+
+  //-Calculate the eigenvectors for the +mu
+  deflation_up->printInfo();
+  t1 = MPI_Wtime();
+  deflation_up->eigenSolver();
+  t2 = MPI_Wtime();
+  printfQuda("TIME_REPORT: ARPACK for +mu:  %f sec\n",t2-t1);
+  //-----------------------------------------------------------------
+
+  //-Calculate the eigenvectors for the -mu
+//   deflation_down->printInfo();
+//   t1 = MPI_Wtime();
+//   deflation_down->eigenSolver();
+//   t2 = MPI_Wtime();
+//   printfQuda("TIME_REPORT: ARPACK for -mu:  %f sec\n",t2-t1);
+
+
+  if (!initialized) errorQuda("QUDA not initialized");
+  pushVerbosity(param->verbosity);
+  if (getVerbosity() >= QUDA_DEBUG_VERBOSE) printQudaInvertParam(param);
+
+  cudaGaugeField *cudaGauge = checkGauge(param);
+  checkInvertParam(param);
+
+  K_gaugeContractions->packGauge(gauge);
+  K_gaugeContractions->loadGauge();
+
+  K_gaugeSmeared->packGauge(gaugeSmeared);
+  K_gaugeSmeared->loadGauge();
+  K_gaugeSmeared->calculatePlaq();
+
+  param->spinorGiB = cudaGauge->VolumeCB() * spinorSiteSize;
+  if (!pc_solve) param->spinorGiB *= 2;
+  param->spinorGiB *= (param->cuda_prec == QUDA_DOUBLE_PRECISION ? sizeof(double) : sizeof(float));
+  if (param->preserve_source == QUDA_PRESERVE_SOURCE_NO) {
+    param->spinorGiB *= (param->inv_type == QUDA_CG_INVERTER ? 5 : 7)/(double)(1<<30);
+  } else {
+    param->spinorGiB *= (param->inv_type == QUDA_CG_INVERTER ? 8 : 9)/(double)(1<<30);
+  }
+  param->secs = 0;
+  param->gflops = 0;
+  param->iter = 0;
+  
+  // create the dirac operator
+  Dirac *d = NULL;
+  Dirac *dSloppy = NULL;
+  Dirac *dPre = NULL;
+  createDirac(d, dSloppy, dPre, *param, pc_solve);
+  Dirac &dirac = *d;
+  Dirac &diracSloppy = *dSloppy;
+  Dirac &diracPre = *dPre;
+
+  profileInvert.Start(QUDA_PROFILE_H2D);
+
+  cudaColorSpinorField *b = NULL;
+  cudaColorSpinorField *x = NULL;
+  cudaColorSpinorField *in = NULL;
+  cudaColorSpinorField *out = NULL;
+
+  void *input_vector  = malloc(GK_localL[0]*GK_localL[1]*GK_localL[2]*GK_localL[3]*spinorSiteSize*sizeof(double));
+  void *output_vector = malloc(GK_localL[0]*GK_localL[1]*GK_localL[2]*GK_localL[3]*spinorSiteSize*sizeof(double));
+
+  memset(input_vector ,0,GK_localL[0]*GK_localL[1]*GK_localL[2]*GK_localL[3]*spinorSiteSize*sizeof(double));
+  memset(output_vector,0,GK_localL[0]*GK_localL[1]*GK_localL[2]*GK_localL[3]*spinorSiteSize*sizeof(double));
+
+  ColorSpinorParam cpuParam(input_vector,*param,GK_localL,pc_solve);
+  ColorSpinorField *h_b = (param->input_location == QUDA_CPU_FIELD_LOCATION) ?
+    static_cast<ColorSpinorField*>(new cpuColorSpinorField(cpuParam)) :
+    static_cast<ColorSpinorField*>(new cudaColorSpinorField(cpuParam));
+
+  cpuParam.v = output_vector;
+  ColorSpinorField *h_x = (param->output_location == QUDA_CPU_FIELD_LOCATION) ?
+    static_cast<ColorSpinorField*>(new cpuColorSpinorField(cpuParam)) :
+    static_cast<ColorSpinorField*>(new cudaColorSpinorField(cpuParam));
+
+
+  ColorSpinorParam cudaParam(cpuParam, *param);
+  cudaParam.create = QUDA_ZERO_FIELD_CREATE;
+  b = new cudaColorSpinorField( cudaParam);
+  cudaParam.create = QUDA_ZERO_FIELD_CREATE;
+  x = new cudaColorSpinorField(cudaParam);
+
+  profileInvert.Stop(QUDA_PROFILE_H2D);
+  setTuning(param->tune);
+  
+  zeroCuda(*x);
+  zeroCuda(*b);
+
+  DiracMMdag m(dirac), mSloppy(diracSloppy), mPre(diracPre);
+  SolverParam solverParam(*param);
+  Solver *solve = Solver::create(solverParam, m, mSloppy, mPre, profileInvert);
+
+  int my_src[4];
+  char filename_mesons[257];
+  char filename_baryons[257];
+
+  for(int isource = 0 ; isource < info.Nsources ; isource++){
+
+     sprintf(filename_mesons,"%s.mesons.SS.%02d.%02d.%02d.%02d.dat",filename_twop,info.sourcePosition[isource][0],info.sourcePosition[isource][1],info.sourcePosition[isource][2],info.sourcePosition[isource][3]);
+     sprintf(filename_baryons,"%s.baryons.SS.%02d.%02d.%02d.%02d.dat",filename_twop,info.sourcePosition[isource][0],info.sourcePosition[isource][1],info.sourcePosition[isource][2],info.sourcePosition[isource][3]);
+
+    for(int isc = 0 ; isc < 12 ; isc++){
+      ///////////////////////////////////////////////////////////////////////////////// forward propagators for up AND down quarks ///////////////////////////
+      t1 = MPI_Wtime();
+      memset(input_vector,0,GK_localL[0]*GK_localL[1]*GK_localL[2]*GK_localL[3]*spinorSiteSize*sizeof(double));
+      b->changeTwist(QUDA_TWIST_PLUS);
+      x->changeTwist(QUDA_TWIST_PLUS);
+      b->Even().changeTwist(QUDA_TWIST_PLUS);
+      b->Odd().changeTwist(QUDA_TWIST_PLUS);
+      x->Even().changeTwist(QUDA_TWIST_PLUS);
+      x->Odd().changeTwist(QUDA_TWIST_PLUS);
+      for(int i = 0 ; i < 4 ; i++)
+	my_src[i] = info.sourcePosition[isource][i] - comm_coords(default_topo)[i] * GK_localL[i];
+
+      if( (my_src[0]>=0) && (my_src[0]<GK_localL[0]) && (my_src[1]>=0) && (my_src[1]<GK_localL[1]) && (my_src[2]>=0) && (my_src[2]<GK_localL[2]) && (my_src[3]>=0) && (my_src[3]<GK_localL[3]))
+	*( (double*)input_vector + my_src[3]*GK_localL[2]*GK_localL[1]*GK_localL[0]*24 + my_src[2]*GK_localL[1]*GK_localL[0]*24 + my_src[1]*GK_localL[0]*24 + my_src[0]*24 + isc*2 ) = 1.;
+
+      K_vector->packVector((double*) input_vector);
+      K_vector->loadVector();
+      K_guess->gaussianSmearing(*K_vector,*K_gaugeSmeared);
+      K_guess->uploadToCuda(b,pc_solve);
+      dirac.prepare(in,out,*x,*b,param->solution_type);
+      // in is reference to the b but for a parity sinlet
+      // out is reference to the x but for a parity sinlet
+      // now the source vector b is ready to perform deflation and find the initial guess
+      K_vector->downloadFromCuda(in,pc_solve);
+      K_vector->download();
+      deflation_up->deflateVector(*K_guess,*K_vector);
+      K_guess->uploadToCuda(out,pc_solve); // initial guess is ready
+      (*solve)(*out,*in);
+      dirac.reconstruct(*x,*b,param->solution_type);
+
+      cudaColorSpinorField *y = new cudaColorSpinorField(*x);
+
+      //-Get the solution for the up flavor
+      dirac.Mdag(*x, *y);
+
+      K_vector->downloadFromCuda(x,pc_solve);
+      if (param->mass_normalization == QUDA_MASS_NORMALIZATION || param->mass_normalization == QUDA_ASYMMETRIC_MASS_NORMALIZATION) {
+	K_vector->scaleVector(2*param->kappa);
+      }
+
+      K_temp->castDoubleToFloat(*K_vector);
+      K_prop_up->absorbVectorToDevice(*K_temp,isc/3,isc%3);
+      //----------------------------------
+
+      //-Get the solution for the down flavor
+      y->changeTwist(QUDA_TWIST_MINUS);
+      x->changeTwist(QUDA_TWIST_MINUS);
+      dirac.Mdag(*x, *y);
+
+      K_vector->downloadFromCuda(x,pc_solve);
+      if (param->mass_normalization == QUDA_MASS_NORMALIZATION || param->mass_normalization == QUDA_ASYMMETRIC_MASS_NORMALIZATION) {
+	K_vector->scaleVector(2*param->kappa);
+      }
+      K_temp->castDoubleToFloat(*K_vector);
+      K_prop_down->absorbVectorToDevice(*K_temp,isc/3,isc%3);
+      //----------------------------------
+
+      t2 = MPI_Wtime();
+      printfQuda("Forward Inversion up and down = %d,  for source = %d finished in time %f sec\n",isc,isource,t2-t1);
+    } // close loop over 12 spin-color
+
+
+//     if(info.run3pt_src[isource]){
+
+//       /////////////////////////////////// Smearing on the 3D propagators
+
+//       //-C.Kallidonis: Loop over the number of sink-source separations
+//       int my_fixSinkTime;
+//       char filename_threep_tsink[257];
+//       for(int its=0;its<info.Ntsink;its++){
+// 	my_fixSinkTime = (info.tsinkSource[its] + info.sourcePosition[isource][3])%GK_totalL[3] - comm_coords(default_topo)[3] * GK_localL[3];
+// 	sprintf(filename_threep_tsink,"%s_tsink%d",filename_threep,info.tsinkSource[its]);
+// 	printfQuda("The three-point function base name is: %s\n",filename_threep_tsink);
+      
+// 	t1 = MPI_Wtime();
+// 	K_temp->zero_device();
+// 	checkCudaError();
+// 	if( (my_fixSinkTime >= 0) && ( my_fixSinkTime < GK_localL[3] ) ){
+// 	  K_prop3D_up->absorbTimeSlice(*K_prop_up,my_fixSinkTime);
+// 	  K_prop3D_down->absorbTimeSlice(*K_prop_down,my_fixSinkTime);
+// 	}
+// 	comm_barrier();
+
+// 	for(int nu = 0 ; nu < 4 ; nu++)
+// 	  for(int c2 = 0 ; c2 < 3 ; c2++){
+// 	    // up //
+// 	    K_temp->zero_device();
+// 	    if( (my_fixSinkTime >= 0) && ( my_fixSinkTime < GK_localL[3] ) ) K_temp->copyPropagator3D(*K_prop3D_up,my_fixSinkTime,nu,c2);
+// 	    comm_barrier();
+// 	    K_vector->castFloatToDouble(*K_temp);
+// 	    K_guess->gaussianSmearing(*K_vector,*K_gaugeSmeared);
+// 	    K_temp->castDoubleToFloat(*K_guess);
+// 	    if( (my_fixSinkTime >= 0) && ( my_fixSinkTime < GK_localL[3] ) ) K_prop3D_up->absorbVectorTimeSlice(*K_temp,my_fixSinkTime,nu,c2);
+// 	    comm_barrier();
+// 	    K_temp->zero_device();
+
+// 	    // down //
+// 	    if( (my_fixSinkTime >= 0) && ( my_fixSinkTime < GK_localL[3] ) ) K_temp->copyPropagator3D(*K_prop3D_down,my_fixSinkTime,nu,c2);
+// 	    comm_barrier();
+// 	    K_vector->castFloatToDouble(*K_temp);
+// 	    K_guess->gaussianSmearing(*K_vector,*K_gaugeSmeared);
+// 	    K_temp->castDoubleToFloat(*K_guess);
+// 	    if( (my_fixSinkTime >= 0) && ( my_fixSinkTime < GK_localL[3] ) ) K_prop3D_down->absorbVectorTimeSlice(*K_temp,my_fixSinkTime,nu,c2);
+// 	    comm_barrier();
+// 	    K_temp->zero_device();	
+// 	  }
+// 	t2 = MPI_Wtime();
+// 	printfQuda("Time needed to prepare the 3D props for sink-source[%d]=%d is %f sec\n",its,info.tsinkSource[its],t2-t1);
+
+// 	/////////////////////////////////////////sequential propagator for the part 1
+// 	for(int nu = 0 ; nu < 4 ; nu++)
+// 	  for(int c2 = 0 ; c2 < 3 ; c2++){
+// 	    t1 = MPI_Wtime();
+// 	    K_temp->zero_device();
+// 	    if(NUCLEON == PROTON){
+// 	      if( (my_fixSinkTime >= 0) && ( my_fixSinkTime < GK_localL[3] ) ) K_contract->seqSourceFixSinkPart1(*K_temp,*K_prop3D_up, *K_prop3D_down, my_fixSinkTime, nu, c2, PID, NUCLEON);}
+// 	    else if(NUCLEON == NEUTRON){
+// 	      if( (my_fixSinkTime >= 0) && ( my_fixSinkTime < GK_localL[3] ) ) K_contract->seqSourceFixSinkPart1(*K_temp,*K_prop3D_down, *K_prop3D_up, my_fixSinkTime, nu, c2, PID, NUCLEON);}
+// 	    comm_barrier();
+// 	    K_temp->conjugate();
+// 	    K_temp->apply_gamma5();
+// 	    K_vector->castFloatToDouble(*K_temp);
+// 	    //
+// 	    K_vector->scaleVector(1e+10);
+// 	    //
+// 	    K_guess->gaussianSmearing(*K_vector,*K_gaugeSmeared);
+// 	    if(NUCLEON == PROTON){
+// 	      b->changeTwist(QUDA_TWIST_MINUS); x->changeTwist(QUDA_TWIST_MINUS); b->Even().changeTwist(QUDA_TWIST_MINUS);
+// 	      b->Odd().changeTwist(QUDA_TWIST_MINUS); x->Even().changeTwist(QUDA_TWIST_MINUS); x->Odd().changeTwist(QUDA_TWIST_MINUS);
+// 	    }
+// 	    else{
+// 	      b->changeTwist(QUDA_TWIST_PLUS); x->changeTwist(QUDA_TWIST_PLUS); b->Even().changeTwist(QUDA_TWIST_PLUS);
+// 	      b->Odd().changeTwist(QUDA_TWIST_PLUS); x->Even().changeTwist(QUDA_TWIST_PLUS); x->Odd().changeTwist(QUDA_TWIST_PLUS);
+// 	    }
+// 	    K_guess->uploadToCuda(b,pc_solve);
+// 	    dirac.prepare(in,out,*x,*b,param->solution_type);
+	  
+// 	    cudaColorSpinorField *tmp = new cudaColorSpinorField(*in);
+// 	    dirac.Mdag(*in, *tmp);
+// 	    delete tmp;
+// 	    K_vector->downloadFromCuda(in,pc_solve);
+// 	    K_vector->download();
+// 	    if(NUCLEON == PROTON)
+// 	      deflation_down->deflateVector(*K_guess,*K_vector);
+// 	    else if(NUCLEON == NEUTRON)
+// 	      deflation_up->deflateVector(*K_guess,*K_vector);
+// 	    K_guess->uploadToCuda(out,pc_solve); // initial guess is ready
+// 	    (*solve)(*out,*in);
+// 	    dirac.reconstruct(*x,*b,param->solution_type);
+// 	    K_vector->downloadFromCuda(x,pc_solve);
+// 	    if (param->mass_normalization == QUDA_MASS_NORMALIZATION || param->mass_normalization == QUDA_ASYMMETRIC_MASS_NORMALIZATION) {
+// 	      K_vector->scaleVector(2*param->kappa);
+// 	    }
+// 	    //
+// 	    K_vector->scaleVector(1e-10);
+// 	    //
+// 	    K_temp->castDoubleToFloat(*K_vector);
+// 	    K_seqProp->absorbVectorToDevice(*K_temp,nu,c2);
+// 	    t2 = MPI_Wtime();
+// 	    printfQuda("Inversion for seq prop part 1 = %d,  for source = %d and sink-source = %d finished in time %f sec\n",nu*3+c2,isource,info.tsinkSource[its],t2-t1);
+// 	  }
+
+// 	////////////////// Contractions for part 1 ////////////////
+// 	t1 = MPI_Wtime();
+// 	if(NUCLEON == PROTON){
+// 	  K_contract->contractFixSink(*K_seqProp, *K_prop_up, *K_gaugeContractions, PID, NUCLEON, 1, filename_threep_tsink, isource, info.tsinkSource[its]);
+// 	}
+// 	if(NUCLEON == NEUTRON){
+// 	  K_contract->contractFixSink(*K_seqProp, *K_prop_down, *K_gaugeContractions, PID, NUCLEON, 1, filename_threep_tsink, isource, info.tsinkSource[its]);
+// 	}                
+// 	t2 = MPI_Wtime();
+// 	printfQuda("Time for fix sink contractions for part 1 at sink-source = %d is %f sec\n",info.tsinkSource[its],t2-t1);
+// 	/////////////////////////////////////////sequential propagator for the part 2
+// 	for(int nu = 0 ; nu < 4 ; nu++)
+// 	  for(int c2 = 0 ; c2 < 3 ; c2++){
+// 	    t1 = MPI_Wtime();
+// 	    K_temp->zero_device();
+// 	    if(NUCLEON == PROTON){
+// 	      if( (my_fixSinkTime >= 0) && ( my_fixSinkTime < GK_localL[3] ) ) K_contract->seqSourceFixSinkPart2(*K_temp,*K_prop3D_up, my_fixSinkTime, nu, c2, PID, NUCLEON);}
+// 	    else if(NUCLEON == NEUTRON){
+// 	      if( (my_fixSinkTime >= 0) && ( my_fixSinkTime < GK_localL[3] ) ) K_contract->seqSourceFixSinkPart2(*K_temp,*K_prop3D_down, my_fixSinkTime, nu, c2, PID, NUCLEON);}
+// 	    comm_barrier();
+// 	    K_temp->conjugate();
+// 	    K_temp->apply_gamma5();
+// 	    K_vector->castFloatToDouble(*K_temp);
+// 	    //
+// 	    K_vector->scaleVector(1e+10);
+// 	    //
+// 	    K_guess->gaussianSmearing(*K_vector,*K_gaugeSmeared);
+// 	    if(NUCLEON == PROTON){
+// 	      b->changeTwist(QUDA_TWIST_PLUS); x->changeTwist(QUDA_TWIST_PLUS); b->Even().changeTwist(QUDA_TWIST_PLUS);
+// 	      b->Odd().changeTwist(QUDA_TWIST_PLUS); x->Even().changeTwist(QUDA_TWIST_PLUS); x->Odd().changeTwist(QUDA_TWIST_PLUS);
+// 	    }
+// 	    else{
+// 	      b->changeTwist(QUDA_TWIST_MINUS); x->changeTwist(QUDA_TWIST_MINUS); b->Even().changeTwist(QUDA_TWIST_MINUS);
+// 	      b->Odd().changeTwist(QUDA_TWIST_MINUS); x->Even().changeTwist(QUDA_TWIST_MINUS); x->Odd().changeTwist(QUDA_TWIST_MINUS);
+// 	    }
+// 	    K_guess->uploadToCuda(b,pc_solve);
+// 	    dirac.prepare(in,out,*x,*b,param->solution_type);
+	  
+// 	    cudaColorSpinorField *tmp = new cudaColorSpinorField(*in);
+// 	    dirac.Mdag(*in, *tmp);
+// 	    delete tmp;
+// 	    K_vector->downloadFromCuda(in,pc_solve);
+// 	    K_vector->download();
+// 	    if(NUCLEON == PROTON)
+// 	      deflation_up->deflateVector(*K_guess,*K_vector);
+// 	    else if(NUCLEON == NEUTRON)
+// 	      deflation_down->deflateVector(*K_guess,*K_vector);
+// 	    K_guess->uploadToCuda(out,pc_solve); // initial guess is ready
+// 	    (*solve)(*out,*in);
+// 	    dirac.reconstruct(*x,*b,param->solution_type);
+// 	    K_vector->downloadFromCuda(x,pc_solve);
+// 	    if (param->mass_normalization == QUDA_MASS_NORMALIZATION || param->mass_normalization == QUDA_ASYMMETRIC_MASS_NORMALIZATION) {
+// 	      K_vector->scaleVector(2*param->kappa);
+// 	    }
+// 	    //
+// 	    K_vector->scaleVector(1e-10);
+// 	    //
+// 	    K_temp->castDoubleToFloat(*K_vector);
+// 	    K_seqProp->absorbVectorToDevice(*K_temp,nu,c2);
+// 	    t2 = MPI_Wtime();
+// 	    printfQuda("Inversion for seq prop part 2 = %d,  for source = %d and sink-source = %d finished in time %f sec\n",nu*3+c2,isource,info.tsinkSource[its],t2-t1);
+// 	  }
+
+// 	////////////////// Contractions for part 2 ////////////////
+// 	t1 = MPI_Wtime();
+// 	if(NUCLEON == PROTON)
+// 	  K_contract->contractFixSink(*K_seqProp, *K_prop_down, *K_gaugeContractions, PID, NUCLEON, 2, filename_threep_tsink, isource, info.tsinkSource[its]);
+// 	if(NUCLEON == NEUTRON)
+// 	  K_contract->contractFixSink(*K_seqProp, *K_prop_up, *K_gaugeContractions, PID, NUCLEON, 2, filename_threep_tsink, isource, info.tsinkSource[its]);
+// 	t2 = MPI_Wtime();
+
+// 	printfQuda("Time for fix sink contractions for part 2 at sink-source = %d is %f sec\n",info.tsinkSource[its],t2-t1);
+
+//       }//-loop over sink-source separations      
+
+//     }//-info.run3pt
+    ////////// At the very end ///////////////////////
+
+
+    // smear the forward propagators
+    for(int nu = 0 ; nu < 4 ; nu++)
+      for(int c2 = 0 ; c2 < 3 ; c2++){
+	K_temp->copyPropagator(*K_prop_up,nu,c2);
+	K_vector->castFloatToDouble(*K_temp);
+	K_guess->gaussianSmearing(*K_vector,*K_gaugeSmeared);
+	K_temp->castDoubleToFloat(*K_guess);
+	K_prop_up->absorbVectorToDevice(*K_temp,nu,c2);
+	
+	K_temp->copyPropagator(*K_prop_down,nu,c2);
+	K_vector->castFloatToDouble(*K_temp);
+	K_guess->gaussianSmearing(*K_vector,*K_gaugeSmeared);
+	K_temp->castDoubleToFloat(*K_guess);
+	K_prop_down->absorbVectorToDevice(*K_temp,nu,c2);
+      }
+    /////
+    K_prop_up->rotateToPhysicalBase_device(+1);
+    K_prop_down->rotateToPhysicalBase_device(-1);
+    t1 = MPI_Wtime();
+    K_contract->contractMesons(*K_prop_up,*K_prop_down,filename_mesons,isource);
+    K_contract->contractBaryons(*K_prop_up,*K_prop_down,filename_baryons,isource);
+    t2 = MPI_Wtime();
+    printfQuda("Contractions for source = %d finished in time %f sec\n",isource,t2-t1);
+  } // close loop over source positions
+
+
+  free(input_vector);
+  free(output_vector);
+  delete K_temp;
+  delete K_contract;
+  delete K_prop_down;
+  delete K_prop_up;
+  delete solve;
+  delete d;
+  delete dSloppy;
+  delete dPre;
+  delete K_guess;
+  delete K_vector;
+  delete K_gaugeSmeared;
+  delete deflation_up;
+  //  delete deflation_down;
+  delete h_x;
+  delete h_b;
+  delete x;
+  delete b;
+  delete K_gaugeContractions;
+  delete K_seqProp;
+  delete K_prop3D_up;
+  delete K_prop3D_down;
+
+  popVerbosity();
+  saveTuneCache(getVerbosity());
+  profileInvert.Stop(QUDA_PROFILE_TOTAL);
 
 }
 
 
-// void calcEigenVectorsAndInvert_threepTwop(void **gaugeSmeared, void **gauge, QudaInvertParam *param ,QudaGaugeParam *gauge_param, char *filename_twop, char *filename_threep,int NeV, qudaQKXTMinfo_Kepler info, qudaQKXTM_arpackInfo arpackInfo, WHICHPARTICLE NUCLEON, WHICHPROJECTOR PID ){
-//   bool flag_eo;
-//   double t1,t2;
 
-//   profileInvert.Start(QUDA_PROFILE_TOTAL);
-//   if(param->solve_type != QUDA_NORMOP_PC_SOLVE) errorQuda("This function works only with even odd preconditioning");
-//   if(param->inv_type != QUDA_CG_INVERTER) errorQuda("This function works only with CG method");
-//   if( (param->matpc_type != QUDA_MATPC_EVEN_EVEN_ASYMMETRIC) && (param->matpc_type != QUDA_MATPC_ODD_ODD_ASYMMETRIC) ) errorQuda("Only asymmetric operators are supported in deflation\n");
-//   if( param->matpc_type == QUDA_MATPC_EVEN_EVEN_ASYMMETRIC )
-//     flag_eo = true;
-//   else if(param->matpc_type == QUDA_MATPC_ODD_ODD_ASYMMETRIC)
-//     flag_eo = false;
+//   This piece of code belongs to the CalcEigenvecs_Check function
+//   //-Test 2
+//   sprintf(filename,"eigenvecs_applyOp_test2.txt");
+//   if( (ptr_evecs=fopen(filename,"w"))==NULL ) errorQuda("Cannot open filename for test 2\n");
 
-//   bool pc_solution = false;
-//   bool pc_solve = true;
-//   bool mat_solution = (param->solution_type == QUDA_MAT_SOLUTION) || (param->solution_type ==  QUDA_MATPC_SOLUTION);
-//   bool direct_solve = false;
- 
+//   for(int i=0;i<arpackInfo.nEv;i++){
+//     memset(vec_in ,0,bytes_total_length_per_NeV);
+//     memset(vec_out,0,bytes_total_length_per_NeV);
+//     deflation->copyEigenVectorToQKXTM_Vector_Kepler(i,vec_in);
+//     deflation->ApplyFullOp_2(vec_out,vec_in,param);
+     
+//     for(int k=0;k<240;k++){
+//       fprintf(ptr_evecs,"i = %04d , k = %04d: %+e  %+e     %+e  %+e     %+e  %+e\n",i,k,vec_out[2*k],vec_out[2*k+1],vec_in[2*k],vec_in[2*k+1],
+// 		 vec_out[2*k]/(deflation->EigenValues()[2*i]*vec_in[2*k]),vec_out[2*k+1]/(deflation->EigenValues()[2*i]*vec_in[2*k+1]));
+//     }
 
-//   QKXTM_Deflation_Kepler<double> *deflation = new QKXTM_Deflation_Kepler<double>(arpackInfo,param);
-
-//   cudaColorSpinorField *b = NULL;
-//   cudaColorSpinorField *x = NULL;
-//   cudaColorSpinorField *in = NULL;
-//   cudaColorSpinorField *out = NULL;
-
-//   cudaGaugeField *cudaGauge = checkGauge(param);
-//   checkInvertParam(param);
-
-//   const int *X = cudaGauge->X();
-
-//   void *input_vector = malloc(GK_localL[0]*GK_localL[1]*GK_localL[2]*GK_localL[3]*spinorSiteSize*sizeof(double));
-//   void *output_vector = malloc(GK_localL[0]*GK_localL[1]*GK_localL[2]*GK_localL[3]*spinorSiteSize*sizeof(double));
-
-//   memset(input_vector,0,X[0]*X[1]*X[2]*X[3]*spinorSiteSize*sizeof(double));
-//   memset(output_vector,0,X[0]*X[1]*X[2]*X[3]*spinorSiteSize*sizeof(double));
-
-//   ColorSpinorParam cpuParam(input_vector,*param,X,pc_solution);
-//   ColorSpinorField *h_b = (param->input_location == QUDA_CPU_FIELD_LOCATION) ?
-//     static_cast<ColorSpinorField*>(new cpuColorSpinorField(cpuParam)) :
-//     static_cast<ColorSpinorField*>(new cudaColorSpinorField(cpuParam));
-
-//   cpuParam.v = output_vector;
-//   ColorSpinorField *h_x = (param->output_location == QUDA_CPU_FIELD_LOCATION) ?
-//     static_cast<ColorSpinorField*>(new cpuColorSpinorField(cpuParam)) :
-//     static_cast<ColorSpinorField*>(new cudaColorSpinorField(cpuParam));
+//     fprintf(ptr_evecs,"\n\n");
+//   }
+//   fclose(ptr_evecs);
 
 
-//   ColorSpinorParam cudaParam(cpuParam, *param);
-//   cudaParam.create = QUDA_ZERO_FIELD_CREATE;
-//   b = new cudaColorSpinorField( cudaParam);
-//   cudaParam.create = QUDA_ZERO_FIELD_CREATE;
-//   x = new cudaColorSpinorField(cudaParam);
+//   //-Test 3
+//   sprintf(filename,"eigenvecs_applyOp_test3.txt");
+//   if( (ptr_evecs=fopen(filename,"w"))==NULL ) errorQuda("Cannot open filename for test 3\n");
+
+//   for(int i=0;i<arpackInfo.nEv;i++){
+//     memset(vec_in ,0,bytes_total_length_per_NeV);
+//     memset(vec_out,0,bytes_total_length_per_NeV);
+//     deflation->copyEigenVectorToQKXTM_Vector_Kepler(i,vec_in);
+//     deflation->ApplyFullOp_3(vec_out,vec_in,param);
+     
+//     for(int k=0;k<240;k++){
+//       fprintf(ptr_evecs,"i = %04d , k = %04d: %+e  %+e     %+e  %+e     %+e  %+e\n",i,k,vec_out[2*k],vec_out[2*k+1],vec_in[2*k],vec_in[2*k+1],
+// 		 vec_out[2*k]/(deflation->EigenValues()[2*i]*vec_in[2*k]),vec_out[2*k+1]/(deflation->EigenValues()[2*i]*vec_in[2*k+1]));
+//     }
+
+//     fprintf(ptr_evecs,"\n\n");
+//   }
+//   fclose(ptr_evecs);
 
 
-//   deflation->polynomialOperator(*x,*b);
-//   delete deflation;
-// }
+//   //-Test 4
+//   sprintf(filename,"eigenvecs_applyOp_test4.txt");
+//   if( (ptr_evecs=fopen(filename,"w"))==NULL ) errorQuda("Cannot open filename for test 4\n");
+
+//   for(int i=0;i<arpackInfo.nEv;i++){
+//     memset(vec_in ,0,bytes_total_length_per_NeV);
+//     memset(vec_out,0,bytes_total_length_per_NeV);
+//     deflation->copyEigenVectorToQKXTM_Vector_Kepler(i,vec_in);
+
+//     for(int k=0;k<240;k++){
+//       printfQuda("TEST 4 BEFORE APPLY: i = %04d, k = %04d: %+e  %+e\n",i,k,vec_in[2*k],vec_in[2*k+1]);
+//     }
+//     printfQuda("\n\n");
+
+
+//     deflation->ApplyFullOp_4(vec_out,vec_in,param);
+     
+//     for(int k=0;k<240;k++){
+//       fprintf(ptr_evecs,"i = %04d , k = %04d: %+e  %+e     %+e  %+e     %+e  %+e\n",i,k,vec_out[2*k],vec_out[2*k+1],vec_in[2*k],vec_in[2*k+1],
+// 		 vec_out[2*k]/(deflation->EigenValues()[2*i]*vec_in[2*k]),vec_out[2*k+1]/(deflation->EigenValues()[2*i]*vec_in[2*k+1]));
+//     }
+
+//     fprintf(ptr_evecs,"\n\n");
+//   }
+//   fclose(ptr_evecs);
+
+
+//   //-Test 5
+//   sprintf(filename,"eigenvecs_applyOp_test5.txt");
+//   if( (ptr_evecs=fopen(filename,"w"))==NULL ) errorQuda("Cannot open filename for test 5\n");
+
+//   for(int i=0;i<arpackInfo.nEv;i++){
+//     memset(vec_in ,0,bytes_total_length_per_NeV);
+//     memset(vec_out,0,bytes_total_length_per_NeV);
+//     deflation->copyEigenVectorToQKXTM_Vector_Kepler(i,vec_in);
+//     deflation->ApplyFullOp_5(vec_out,vec_in,param);
+     
+//     for(int k=0;k<240;k++){
+//       fprintf(ptr_evecs,"i = %04d , k = %04d: %+e  %+e     %+e  %+e     %+e  %+e\n",i,k,vec_out[2*k],vec_out[2*k+1],vec_in[2*k],vec_in[2*k+1],
+// 		 vec_out[2*k]/(deflation->EigenValues()[2*i]*vec_in[2*k]),vec_out[2*k+1]/(deflation->EigenValues()[2*i]*vec_in[2*k+1]));
+//     }
+
+//     fprintf(ptr_evecs,"\n\n");
+//   }
+//   fclose(ptr_evecs);
+
+
+//   //-Test 6
+//   sprintf(filename,"eigenvecs_applyOp_test6.txt");
+//   if( (ptr_evecs=fopen(filename,"w"))==NULL ) errorQuda("Cannot open filename for test 6\n");
+
+//   QKXTM_Vector_Kepler<double> *vec = new QKXTM_Vector_Kepler<double>(BOTH,VECTOR);
+
+//   for(int i=0;i<arpackInfo.nEv;i++){
+//     memset(vec_in ,0,bytes_total_length_per_NeV);
+//     memset(vec_out,0,bytes_total_length_per_NeV);
+//     deflation->copyEigenVectorToQKXTM_Vector_Kepler(i,vec_in);
+
+//     vec->unpackVector(vec_in);
+//     memcpy(vec_in,vec->H_elem(),bytes_total_length_per_NeV);
+//     deflation->ApplyFullOp_6(vec_out,vec_in,param);
+     
+//     for(int k=0;k<240;k++){
+//       fprintf(ptr_evecs,"i = %04d , k = %04d: %+e  %+e     %+e  %+e     %+e  %+e\n",i,k,vec_out[2*k],vec_out[2*k+1],vec_in[2*k],vec_in[2*k+1],
+// 		 vec_out[2*k]/(deflation->EigenValues()[2*i]*vec_in[2*k]),vec_out[2*k+1]/(deflation->EigenValues()[2*i]*vec_in[2*k+1]));
+//     }
+
+//     fprintf(ptr_evecs,"\n\n");
+//   }
+//   fclose(ptr_evecs);
+
+
+//   //-Test 7
+//   sprintf(filename,"eigenvecs_applyOp_test7.txt");
+//   if( (ptr_evecs=fopen(filename,"w"))==NULL ) errorQuda("Cannot open filename for test 7\n");
+
+//   QKXTM_Vector_Kepler<double> *vec2 = new QKXTM_Vector_Kepler<double>(BOTH,VECTOR);
+
+//   for(int i=0;i<arpackInfo.nEv;i++){
+//     memset(vec_in ,0,bytes_total_length_per_NeV);
+//     memset(vec_out,0,bytes_total_length_per_NeV);
+//     deflation->copyEigenVectorToQKXTM_Vector_Kepler(i,vec_in);
+
+//     vec2->unpackVector(vec_in);
+//     memcpy(vec_in,vec2->H_elem(),bytes_total_length_per_NeV);
+//     deflation->ApplyFullOp_4(vec_out,vec_in,param);
+     
+//     for(int k=0;k<240;k++){
+//       fprintf(ptr_evecs,"i = %04d , k = %04d: %+e  %+e     %+e  %+e     %+e  %+e\n",i,k,vec_out[2*k],vec_out[2*k+1],vec_in[2*k],vec_in[2*k+1],
+// 		 vec_out[2*k]/(deflation->EigenValues()[2*i]*vec_in[2*k]),vec_out[2*k+1]/(deflation->EigenValues()[2*i]*vec_in[2*k+1]));
+//     }
+
+//     fprintf(ptr_evecs,"\n\n");
+//   }
+//   fclose(ptr_evecs);

@@ -1596,8 +1596,8 @@ int Nstoch = 1;
 char latfile_smeared[257] = "";
 double csw = 1.57551;
 
-char pathListRun2pt3pt[257] = "listrun2pt3pt.txt";
-char run2pt3pt[257] = "all";
+char pathListRun3pt[257] = "listrun3pt.txt";
+char run3pt[257] = "all";
 
 int numSourcePositions = 1;
 char pathListSourcePositions[257] = "listSourcePositions.txt";
@@ -1618,7 +1618,7 @@ char *spectrumPart; // for which part of the spectrum we want to solve
 bool isACC = true;
 double tolArpack = 1.0e-5;
 int maxIterArpack = 100000;
-char arpack_logfile[257] = "arpack.log";
+char arpack_logfile[512] = "arpack.log";
 double amin = 3.0e-4;
 double amax = 3.5;
 bool isEven = false;
@@ -1680,8 +1680,8 @@ void usage(char** argv )
   printf("    --z_source                                # Source position in z direction (default 0)\n");
   printf("    --t_source                                # Source position in t direction (default 0)\n");
   printf("    --pathListSinkSource                      # Path to find the list of the sink-source separations (default \" list_tsinksource.txt \")\n");
-  printf("    --pathListRun2pt3pt                       # Path to find the list of which source positions to run for 2pt- and 3pt- functions (default \" listrun2pt3pt.txt \")\n");
-  printf("    --run2pt3pt                               # Option to choose whether to run for all (=all/ALL) source-positions or only some (=file/FILE, given in --pathListRun2pt3pt) (default \" all \")\n");
+  printf("    --pathListRun3pt                          # Path to find the list of which source positions to run for 2pt- and 3pt- functions (default \" listrun3pt.txt \")\n");
+  printf("    --run3pt                                  # Option to choose whether to run for all (=all/ALL) source-positions or only some (=file/FILE, given in --pathListRun3pt) (default \" all \")\n");
   printf("    --Ntsink                                  # Number of sink-source separations (default \" list_tsinksource.txt \")\n");
   printf("    --Q_sqMax                                 # The maximum Q^2 momentum (default 0)\n");
   printf("    --nsmearAPE                               # Number of APE smearing iterations (default 20)\n");
@@ -2107,21 +2107,21 @@ int process_command_line_option(int argc, char** argv, int* idx)
     goto out;
   }
 
-  if( strcmp(argv[i], "--pathListRun2pt3pt") == 0){
+  if( strcmp(argv[i], "--pathListRun3pt") == 0){
     if (i+1 >= argc){
       usage(argv);
     }     
-    strcpy(pathListRun2pt3pt, argv[i+1]);
+    strcpy(pathListRun3pt, argv[i+1]);
     i++;
     ret = 0;
     goto out;
   }
 
-  if( strcmp(argv[i], "--run2pt3pt") == 0){
+  if( strcmp(argv[i], "--run3pt") == 0){
     if (i+1 >= argc){
       usage(argv);
     }     
-    strcpy(run2pt3pt, argv[i+1]);
+    strcpy(run3pt, argv[i+1]);
     i++;
     ret = 0;
     goto out;

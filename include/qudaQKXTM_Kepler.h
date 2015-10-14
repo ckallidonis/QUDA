@@ -15,6 +15,8 @@
 #define QUDAQKXTM_DIM 4
 #define MAX_NSOURCES 1000
 #define MAX_NMOMENTA 1000
+#define MAX_TSINK 10
+
 
 #define LEXIC(it,iz,iy,ix,L) ( (it)*L[0]*L[1]*L[2] + (iz)*L[0]*L[1] + (iy)*L[0] + (ix) )
 #define LEXIC_TZY(it,iz,iy,L) ( (it)*L[1]*L[2] + (iz)*L[1] + (iy) )
@@ -37,8 +39,12 @@ namespace quda {
     int sourcePosition[MAX_NSOURCES][QUDAQKXTM_DIM];
     QudaPrecision Precision;
     int Q_sq;
-    int tsinkSource;
+    int Ntsink;
+    int tsinkSource[MAX_TSINK];
+    int run3pt_src[MAX_NSOURCES];
   } qudaQKXTMinfo_Kepler;
+
+
 
   enum WHICHSPECTRUM{SR,LR,SM,LM,SI,LI};
 
@@ -50,7 +56,7 @@ namespace quda {
     bool isACC;            
     double tolArpack;
     int maxIterArpack;
-    char arpack_logfile[257];
+    char arpack_logfile[512];
     double amin;
     double amax;
     bool isEven;
@@ -190,7 +196,10 @@ template<typename Float>
   ~QKXTM_Vector_Kepler(){;}                       // class destructor
 
     void packVector(Float *vector);
+    void unpackVector();
+    void unpackVector(Float *vector);
     void loadVector();
+    void unloadVector();
     void ghostToHost();
     void cpuExchangeGhost();
     void ghostToDevice();
@@ -293,6 +302,11 @@ void DeflateAndInvert_loop_w_One_Der_volumeSource(void **gaugeToPlaquette, QudaI
 void DeflateAndInvert_threepTwop(void **gaugeSmeared, void **gauge, QudaInvertParam *param ,QudaGaugeParam *gauge_param, char *filename_eigenValues_up, char *filename_eigenVectors_up, char *filename_eigenValues_down, char *filename_eigenVectors_down, char *filename_twop, char *filename_threep,int NeV, quda::qudaQKXTMinfo_Kepler info, quda::WHICHPARTICLE NUCLEON, quda::WHICHPROJECTOR PID );
 
 void calcEigenVectors(QudaInvertParam *param , quda::qudaQKXTM_arpackInfo arpackInfo);
+void calcEigenVectors_Check(QudaInvertParam *param , quda::qudaQKXTM_arpackInfo arpackInfo);
 
 void calcEigenVectorsAndInvert_threepTwop(void **gaugeSmeared, void **gauge, QudaInvertParam *param ,QudaGaugeParam *gauge_param, char *filename_twop, char *filename_threep, quda::qudaQKXTMinfo_Kepler info, quda::qudaQKXTM_arpackInfo arpackInfo, quda::WHICHPARTICLE NUCLEON, quda::WHICHPROJECTOR PID );
+
+void calcEigenVectors_threepTwop_FullOp(void **gaugeSmeared, void **gauge, QudaGaugeParam *gauge_param, QudaInvertParam *param, quda::qudaQKXTM_arpackInfo arpackInfo, quda::qudaQKXTMinfo_Kepler info,
+					char *filename_twop, char *filename_threep, quda::WHICHPARTICLE NUCLEON, quda::WHICHPROJECTOR PID );
+
 #endif

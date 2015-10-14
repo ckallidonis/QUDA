@@ -495,19 +495,79 @@ QKXTM_Vector_Kepler<Float>::QKXTM_Vector_Kepler(ALLOCATION_FLAG alloc_flag, CLAS
 
 template<typename Float>
 void QKXTM_Vector_Kepler<Float>::packVector(Float *vector){
-      for(int iv = 0 ; iv < GK_localVolume ; iv++)
-	for(int mu = 0 ; mu < GK_nSpin ; mu++)                // always work with format colors inside spins
-	  for(int c1 = 0 ; c1 < GK_nColor ; c1++)
-	    for(int part = 0 ; part < 2 ; part++){
-	      CC::h_elem[mu*GK_nColor*GK_localVolume*2 + c1*GK_localVolume*2 + iv*2 + part] = vector[iv*GK_nSpin*GK_nColor*2 + mu*GK_nColor*2 + c1*2 + part];
-	    }
+  for(int iv = 0 ; iv < GK_localVolume ; iv++)
+    for(int mu = 0 ; mu < GK_nSpin ; mu++)                // always work with format colors inside spins
+      for(int c1 = 0 ; c1 < GK_nColor ; c1++)
+	for(int part = 0 ; part < 2 ; part++){
+	  CC::h_elem[mu*GK_nColor*GK_localVolume*2 + c1*GK_localVolume*2 + iv*2 + part] = vector[iv*GK_nSpin*GK_nColor*2 + mu*GK_nColor*2 + c1*2 + part];
+	}
 }
+
+
+template<typename Float>
+void QKXTM_Vector_Kepler<Float>::unpackVector(){
+
+  Float *vector_tmp = (Float*) malloc( CC::bytes_total_length );
+  if(vector_tmp == NULL)errorQuda("Error in allocate memory of tmp vector in unpackVector\n");
+  
+  for(int iv = 0 ; iv < GK_localVolume ; iv++)
+    for(int mu = 0 ; mu < GK_nSpin ; mu++)                // always work with format colors inside spins
+      for(int c1 = 0 ; c1 < GK_nColor ; c1++)
+	for(int part = 0 ; part < 2 ; part++){
+	  vector_tmp[iv*GK_nSpin*GK_nColor*2 + mu*GK_nColor*2 + c1*2 + part] = CC::h_elem[mu*GK_nColor*GK_localVolume*2 + c1*GK_localVolume*2 + iv*2 + part];
+	}
+  
+  memcpy(h_elem,vector_tmp,bytes_total_length);
+  
+  free(vector_tmp);
+}
+
+template<typename Float>
+void QKXTM_Vector_Kepler<Float>::unpackVector(Float *vector){
+  
+  for(int iv = 0 ; iv < GK_localVolume ; iv++)
+    for(int mu = 0 ; mu < GK_nSpin ; mu++)                // always work with format colors inside spins
+      for(int c1 = 0 ; c1 < GK_nColor ; c1++)
+	for(int part = 0 ; part < 2 ; part++){
+	  CC::h_elem[iv*GK_nSpin*GK_nColor*2 + mu*GK_nColor*2 + c1*2 + part] = vector[mu*GK_nColor*GK_localVolume*2 + c1*GK_localVolume*2 + iv*2 + part];
+	}
+}
+
 
 template<typename Float>
 void QKXTM_Vector_Kepler<Float>::loadVector(){
   cudaMemcpy(CC::d_elem,CC::h_elem,CC::bytes_total_length, cudaMemcpyHostToDevice );
   checkCudaError();
 }
+
+template<typename Float>
+void QKXTM_Vector_Kepler<Float>::unloadVector(){
+  cudaMemcpy(CC::h_elem,CC::d_elem,bytes_total_length, cudaMemcpyDeviceToHost);
+  checkCudaError();
+}
+
+
+template<typename Float>
+void QKXTM_Vector_Kepler<Float>::download(){
+
+  cudaMemcpy(CC::h_elem,CC::d_elem,bytes_total_length, cudaMemcpyDeviceToHost);
+  checkCudaError();
+
+  Float *vector_tmp = (Float*) malloc( bytes_total_length );
+  if(vector_tmp == NULL)errorQuda("Error in allocate memory of tmp vector");
+
+      for(int iv = 0 ; iv < GK_localVolume ; iv++)
+	for(int mu = 0 ; mu < GK_nSpin ; mu++)                // always work with format colors inside spins
+	  for(int c1 = 0 ; c1 < GK_nColor ; c1++)
+	    for(int part = 0 ; part < 2 ; part++){
+	      vector_tmp[iv*GK_nSpin*GK_nColor*2 + mu*GK_nColor*2 + c1*2 + part] = CC::h_elem[mu*GK_nColor*GK_localVolume*2 + c1*GK_localVolume*2 + iv*2 + part];
+	    }
+
+      memcpy(h_elem,vector_tmp,bytes_total_length);
+
+  free(vector_tmp);
+}
+
 
 template<typename Float>
 void QKXTM_Vector_Kepler<Float>::castDoubleToFloat(QKXTM_Vector_Kepler<double> &vecIn){
@@ -687,26 +747,6 @@ void QKXTM_Vector_Kepler<Float>::ghostToDevice(){
   }
 }
 
-template<typename Float>
-void QKXTM_Vector_Kepler<Float>::download(){
-
-  cudaMemcpy(CC::h_elem,CC::d_elem,bytes_total_length, cudaMemcpyDeviceToHost);
-  checkCudaError();
-
-  Float *vector_tmp = (Float*) malloc( bytes_total_length );
-  if(vector_tmp == NULL)errorQuda("Error in allocate memory of tmp vector");
-
-      for(int iv = 0 ; iv < GK_localVolume ; iv++)
-	for(int mu = 0 ; mu < GK_nSpin ; mu++)                // always work with format colors inside spins
-	  for(int c1 = 0 ; c1 < GK_nColor ; c1++)
-	    for(int part = 0 ; part < 2 ; part++){
-	      vector_tmp[iv*GK_nSpin*GK_nColor*2 + mu*GK_nColor*2 + c1*2 + part] = CC::h_elem[mu*GK_nColor*GK_localVolume*2 + c1*GK_localVolume*2 + iv*2 + part];
-	    }
-
-      memcpy(h_elem,vector_tmp,bytes_total_length);
-
-  free(vector_tmp);
-}
 
 template<typename Float>
 void QKXTM_Vector_Kepler<Float>::gaussianSmearing(QKXTM_Vector_Kepler<Float> &vecIn,QKXTM_Gauge_Kepler<Float> &gaugeAPE){
@@ -1775,7 +1815,7 @@ private:
   bool isACC;
   double tolArpack;
   int maxIterArpack;
-  char *arpack_logfile;
+  char arpack_logfile[512];
   double amin;
   double amax;
   bool isEv;
@@ -1815,6 +1855,8 @@ public:
   void readEigenValues(char *filename);
   void deflateVector(QKXTM_Vector_Kepler<Float> &vec_defl, QKXTM_Vector_Kepler<Float> &vec_in);
   void ApplyFullOp(Float *vec_out, Float *vec_in, QudaInvertParam *param);
+  void MapEvenOddToFull();
+  void MapEvenOddToFull(int i);
   void copyEigenVectorToQKXTM_Vector_Kepler(int eigenVector_id, Float *vec);
   void copyEigenVectorFromQKXTM_Vector_Kepler(int eigenVector_id,Float *vec);
   void rotateFromChiralToUKQCD();
@@ -1867,7 +1909,7 @@ QKXTM_Deflation_Kepler<Float>::QKXTM_Deflation_Kepler(QudaInvertParam *param, qu
   isACC = arpackInfo.isACC;
   tolArpack = arpackInfo.tolArpack;
   maxIterArpack = arpackInfo.maxIterArpack;
-  arpack_logfile = arpackInfo.arpack_logfile;
+  strcpy(arpack_logfile,arpackInfo.arpack_logfile);
   amin = arpackInfo.amin;
   amax = arpackInfo.amax;
   isEv = arpackInfo.isEven;
@@ -1921,55 +1963,148 @@ QKXTM_Deflation_Kepler<Float>::~QKXTM_Deflation_Kepler(){
 
 template<typename Float>
 void QKXTM_Deflation_Kepler<Float>::printInfo(){
-  printfQuda("Number of EigenVectors is %d in precision %d\n",NeV,(int) sizeof(Float));
+  printfQuda("\n======= DEFLATION INFO =======\n"); 
   if(isFullOp){
-    printfQuda("The EigenVectors are for the Full operator\n");
+    printfQuda("  The EigenVectors are for the Full operator\n");
   }
   else{
-    if(isEv == true) printfQuda("The EigenVectors are for the even-even operator\n");
-    if(isEv == false) printfQuda("The EigenVectors are for the odd-odd operator\n");
+    if(isEv == true)  printfQuda("  Will calculate EigenVectors for the even-even operator\n");
+    if(isEv == false) printfQuda("  Will calculate EigenVectors for the odd-odd operator\n");
   }
 
-  printfQuda("Allocated Gb for the eigenVectors space for each node are %lf and the pointer is %p\n",NeV * ( (double)bytes_total_length_per_NeV/((double) 1024.*1024.*1024.) ),h_elem);
-}
+  printfQuda("  Number of requested EigenVectors is %d in precision %d\n",NeV,(int) sizeof(Float));
+  printfQuda("  The Size of Krylov space is %d\n",NkV);
 
+  printfQuda("  Allocated Gb for the eigenVectors space for each node are %lf and the pointer is %p\n",NeV * ( (double)bytes_total_length_per_NeV/((double) 1024.*1024.*1024.) ),h_elem);
+
+  printfQuda("==============================\n");
+}
+//==================================================
 
 template<typename Float>
 void QKXTM_Deflation_Kepler<Float>::ApplyFullOp(Float *vec_out, Float *vec_in, QudaInvertParam *param){
-  if(!isFullOp)
-    errorQuda("ApplyFullOp function only works with the full Operator. Hint: Check your QKXTM_Deflation_Kepler object initialization.\n");
+  if(!isFullOp){
+    errorQuda("ApplyFullOp: This function only works with the full Operator. Hint: Check your QKXTM_Deflation_Kepler object initialization.\n");
+  }
 
   bool use_pc = (!isFullOp);
+
+  //  printfQuda("### Use of preconditioning is %s\n", use_pc ? "true" : "false");
 
   cudaColorSpinorField *in    = NULL;
   cudaColorSpinorField *out   = NULL;
   cpuColorSpinorField  *h_in  = NULL;
-  cpuColorSpinorField  *h_out = NULL;
+  
+  QKXTM_Vector_Kepler<double> *Kvec = new QKXTM_Vector_Kepler<double>(BOTH,VECTOR);
 
   ColorSpinorParam cpuParam((void*)vec_in,*param,GK_localL,use_pc);
   h_in = new cpuColorSpinorField(cpuParam);
-  cpuParam.v = vec_out;
-  h_out = new cpuColorSpinorField(cpuParam);
 
   ColorSpinorParam cudaParam(cpuParam, *param);
-  cudaParam.create = QUDA_COPY_FIELD_CREATE;
-  in  = new cudaColorSpinorField(h_in,cudaParam);
+  cudaParam.create = QUDA_ZERO_FIELD_CREATE;
+  in  = new cudaColorSpinorField(cudaParam);
   out = new cudaColorSpinorField(cudaParam);
 
-  //(*matDiracOp)(*out,*in);
+  Kvec->packVector(vec_in);
+  Kvec->loadVector();
+  Kvec->uploadToCuda(in,use_pc);
+
   diracOp->MdagM(*out,*in);
 
-
-  QKXTM_Vector_Kepler<double> *Kvec = new QKXTM_Vector_Kepler<double>(BOTH,VECTOR);
-
   Kvec->downloadFromCuda(out,use_pc);
-  Kvec->download();
+  Kvec->unloadVector();
+  Kvec->unpackVector();
 
   memcpy(vec_out,Kvec->H_elem(),bytes_total_length_per_NeV);
 
-  printQuda("Application of Full Operator completed successfully\n");
+  delete in;
+  delete out;
+  delete h_in;
+
+  printfQuda("ApplyFyllOp: Completed successfully\n");
+}
+//==================================================
+
+template<typename Float>
+void QKXTM_Deflation_Kepler<Float>::MapEvenOddToFull(){
+
+  if(!isFullOp) errorQuda("MapEvenOddToFull: This function only works with the Full Operator\n");
+
+  size_t bytes_eo = bytes_total_length_per_NeV/2;
+  int size_eo = total_length_per_NeV/2;
+
+  int site_size = 4*3*2;
+  size_t bytes_per_site = site_size*sizeof(Float);
+
+  if((bytes_eo%2)!=0) errorQuda("MapEvenOddToFull: Invalid bytes for eo vector\n");
+  if((size_eo%2)!=0) errorQuda("MapEvenOddToFull: Invalid size for eo vector\n");
+
+  Float *vec_odd = (Float*) malloc(bytes_eo);
+  Float *vec_evn = (Float*) malloc(bytes_eo);
+
+  if(vec_odd==NULL) errorQuda("MapEvenOddToFull: Check allocation of vec_odd\n");
+  if(vec_evn==NULL) errorQuda("MapEvenOddToFull: Check allocation of vec_evn\n");
+
+  printfQuda("MapEvenOddToFull: Vecs allocated\n");
+
+  for(int i=0;i<NeV;i++){
+    memcpy(vec_evn,&(h_elem[i*total_length_per_NeV]),bytes_eo); // Save the even half of the eigenvector
+    memcpy(vec_odd,&(h_elem[i*total_length_per_NeV+size_eo]),bytes_eo); // Save the odd half of the eigenvector
+
+    int k=0;
+    for(int t=0; t<GK_localL[3];t++)
+      for(int z=0; z<GK_localL[2];z++)
+	for(int y=0; y<GK_localL[1];y++)
+	  for(int x=0; x<GK_localL[0];x++){
+	    int oddBit     = (x+y+z+t) & 1;
+	    if(oddBit) memcpy(&(h_elem[i*total_length_per_NeV+site_size*k]),&(vec_odd[site_size*(k/2)]),bytes_per_site);
+	    else       memcpy(&(h_elem[i*total_length_per_NeV+site_size*k]),&(vec_evn[site_size*(k/2)]),bytes_per_site);
+	    k++;
+	  }	  
+  }
+
+  printfQuda("MapEvenOddToFull: Completed successfully\n");
 }
 
+//-For a single vector
+template<typename Float>
+void QKXTM_Deflation_Kepler<Float>::MapEvenOddToFull(int i){
+
+  if(!isFullOp) errorQuda("MapEvenOddToFull: This function only works with the Full Operator\n");
+
+  size_t bytes_eo = bytes_total_length_per_NeV/2;
+  int size_eo = total_length_per_NeV/2;
+
+  int site_size = 4*3*2;
+  size_t bytes_per_site = site_size*sizeof(Float);
+
+  if((bytes_eo%2)!=0) errorQuda("MapEvenOddToFull: Invalid bytes for eo vector\n");
+  if((size_eo%2)!=0) errorQuda("MapEvenOddToFull: Invalid size for eo vector\n");
+
+  Float *vec_odd = (Float*) malloc(bytes_eo);
+  Float *vec_evn = (Float*) malloc(bytes_eo);
+
+  if(vec_odd==NULL) errorQuda("MapEvenOddToFull: Check allocation of vec_odd\n");
+  if(vec_evn==NULL) errorQuda("MapEvenOddToFull: Check allocation of vec_evn\n");
+
+  printfQuda("MapEvenOddToFull: Vecs allocated\n");
+
+  memcpy(vec_evn,&(h_elem[i*total_length_per_NeV]),bytes_eo); // Save the even half of the eigenvector
+  memcpy(vec_odd,&(h_elem[i*total_length_per_NeV+size_eo]),bytes_eo); // Save the odd half of the eigenvector
+
+  int k=0;
+  for(int t=0; t<GK_localL[3];t++)
+    for(int z=0; z<GK_localL[2];z++)
+      for(int y=0; y<GK_localL[1];y++)
+	for(int x=0; x<GK_localL[0];x++){
+	  int oddBit     = (x+y+z+t) & 1;
+	  if(oddBit) memcpy(&(h_elem[i*total_length_per_NeV+site_size*k]),&(vec_odd[site_size*(k/2)]),bytes_per_site);
+	  else       memcpy(&(h_elem[i*total_length_per_NeV+site_size*k]),&(vec_evn[site_size*(k/2)]),bytes_per_site);
+	  k++;
+	}	  
+  
+  printfQuda("MapEvenOddToFull: Vector %d completed successfully\n",i);
+}
 
 
 template<typename Float>
@@ -1977,6 +2112,7 @@ void QKXTM_Deflation_Kepler<Float>::copyEigenVectorToQKXTM_Vector_Kepler(int eig
   if(NeV == 0)return;
 
   if(!isFullOp){
+    printfQuda("Copying elements of Eigenvector %d according to %s Operator format\n", eigenVector_id, isEv ? "even-even" : "odd-odd");
     for(int t=0; t<GK_localL[3];t++)
       for(int z=0; z<GK_localL[2];z++)
 	for(int y=0; y<GK_localL[1];y++)
@@ -1984,7 +2120,7 @@ void QKXTM_Deflation_Kepler<Float>::copyEigenVectorToQKXTM_Vector_Kepler(int eig
 	    for(int mu=0; mu<4; mu++)
 	      for(int c1=0; c1<3; c1++)
 		{
-		  int oddBit     = (x+y+z+t) & 1;
+ 		  int oddBit     = (x+y+z+t) & 1;
 		  if(oddBit){
 		    if(isEv == false){
 		      vec[t*GK_localL[2]*GK_localL[1]*GK_localL[0]*4*3*2 + z*GK_localL[1]*GK_localL[0]*4*3*2 + y*GK_localL[0]*4*3*2 + x*4*3*2 + mu*3*2 + c1*2 + 0] = h_elem[eigenVector_id*total_length_per_NeV + ((t*GK_localL[2]*GK_localL[1]*GK_localL[0] + z*GK_localL[1]*GK_localL[0] + y*GK_localL[0] + x)/2)*4*3*2 + mu*3*2 + c1*2 + 0];
@@ -2008,6 +2144,7 @@ void QKXTM_Deflation_Kepler<Float>::copyEigenVectorToQKXTM_Vector_Kepler(int eig
 		}
   }//-isFullOp check
   else if(isFullOp){
+    printfQuda("Copying elements of Eigenvector %d according to Full Operator format\n",eigenVector_id);
     memcpy(vec,&(h_elem[eigenVector_id*total_length_per_NeV]),bytes_total_length_per_NeV);
   }
 
@@ -2163,6 +2300,8 @@ void QKXTM_Deflation_Kepler<Float>::deflateVector(QKXTM_Vector_Kepler<Float> &ve
   free(tmp_vec);
   free(tmp_vec_lex);
 
+  printfQuda("### deflateVector: Deflation of the initial guess completed succesfully\n");
+
 }
 
 
@@ -2172,10 +2311,12 @@ void QKXTM_Deflation_Kepler<Float>::writeEigenVectors_ASCII(char *prefix_path){
   char filename[257];
   if(comm_rank() != 0) return;
   FILE *fid;
+  //int n_elem_write = 240;
+  int n_elem_write = (GK_localVolume/fullorHalf)*4*3;
   for(int nev = 0 ; nev < NeV ; nev++){
-    sprintf(filename,"%s.%05d.txt",prefix_path,nev);
+    sprintf(filename,"%s.%04d.txt",prefix_path,nev);
     fid = fopen(filename,"w");		  
-    for(int ir = 0 ; ir < (GK_localVolume/fullorHalf)*4*3 ; ir++)
+    for(int ir = 0 ; ir < n_elem_write ; ir++)
       fprintf(fid,"%+e %+e\n",h_elem[nev*total_length_per_NeV + ir*2 + 0], h_elem[nev*total_length_per_NeV + ir*2 + 1]);
 		
     
@@ -2267,7 +2408,7 @@ void QKXTM_Deflation_Kepler<Float>::eigenSolver(){
   else if (spectrumPart==SI) which_evals_req = strdup("SI");
   else if (spectrumPart==LI) which_evals_req = strdup("LI");
   else{    
-    errorQuda("Error: Option for spectrumPart is suspicious\n");
+    errorQuda("eigenSolver: Option for spectrumPart is suspicious\n");
     exit(-1);
   }
   
@@ -2290,8 +2431,8 @@ void QKXTM_Deflation_Kepler<Float>::eigenSolver(){
     else if (spectrumPart==LI) which_evals = strdup("LI");    
   }
 
-  printfQuda("Input to eigenSolver ARPACK\n");
-  printfQuda("===========================\n");
+  printfQuda("\neigenSolver: Input to eigenSolver ARPACK\n");
+  printfQuda("========================================\n");
   printfQuda("Number of Ritz eigenvalues requested: %d\n", NeV);
   printfQuda("Size of Krylov space is: %d\n", NkV);
   printfQuda("Part of the spectrum requested: %s\n", which_evals_req);
@@ -2300,6 +2441,7 @@ void QKXTM_Deflation_Kepler<Float>::eigenSolver(){
   if(isACC) printfQuda("Chebyshev polynomial paramaters: Degree = %d, amin = %+e, amax = %+e\n",PolyDeg,amin,amax); 
   printfQuda("The convergence criterion is %+e\n", tolArpack);
   printfQuda("Maximum number of iterations for ARPACK is %d\n",maxIterArpack);
+  printfQuda("========================================\n");
   //------------------------------------------------------------------------------------------------   
 
   
@@ -2320,7 +2462,7 @@ void QKXTM_Deflation_Kepler<Float>::eigenSolver(){
   LDV = (GK_localVolume/fullorHalf)*4*3;
   N   = (GK_localVolume/fullorHalf)*4*3;
 
-  printfQuda("LDV = %d\n",LDV);
+  printfQuda("eigenSolver: Number of complex elements: %d\n",LDV);
 
   //- Define all the necessary pointers
   std::complex<Float> *helem_cplx = NULL;
@@ -2347,11 +2489,11 @@ void QKXTM_Deflation_Kepler<Float>::eigenSolver(){
   std::complex<Float> *workev = (std::complex<Float> *) malloc(2*NkV *sizeof(std::complex<Float>));
   std::complex<Float> sigma;
 
-  if(resid == NULL)  errorQuda("Error: not enough memory for resid allocation in eigenSolver.\n");
-  if(iparam == NULL) errorQuda("Error: not enough memory for iparam allocation in eigenSolver.\n");
+  if(resid == NULL)  errorQuda("eigenSolver: not enough memory for resid allocation in eigenSolver.\n");
+  if(iparam == NULL) errorQuda("eigenSolver: not enough memory for iparam allocation in eigenSolver.\n");
 
   if((ipntr == NULL) || (workd==NULL) || (workl==NULL) || (rwork==NULL) || (select==NULL) || (workev==NULL) || (sorted_evals==NULL) || (sorted_evals_index==NULL)){
-    errorQuda("Error: not enough memory for ipntr,workd,workl,rwork,select,workev,sorted_evals,sorted_evals_index in eigenSolver.\n");
+    errorQuda("eigenSolver: not enough memory for ipntr,workd,workl,rwork,select,workev,sorted_evals,sorted_evals_index in eigenSolver.\n");
   }
 
   iparam[0] = 1;  //use exact shifts
@@ -2390,10 +2532,10 @@ void QKXTM_Deflation_Kepler<Float>::eigenSolver(){
 		      &msglvl0,           /*mcgets*/
 		      &msglvl3            /*mceupd*/);
     
-    printfQuda("*** ARPACK verbosity set to mcaup2=3 mcaupd=3 mceupd=3; \n"
-	       "*** output is directed to '%s';\n"
-	       "*** if you don't see output, your memory may be corrupted\n",
-	       arpack_logfile);
+    printfQuda("eigenSolver: Log info:\n");
+    printfQuda("  ARPACK verbosity set to mcaup2=3 mcaupd=3 mceupd=3; \n");
+    printfQuda("  output is directed to '%s'\n",arpack_logfile);
+    printfQuda("  * if you don't see output, your memory may be corrupted *\n");
   }
 #else  
   if ( NULL != arpack_logfile && (comm_rank() == 0) ) {
@@ -2414,10 +2556,10 @@ void QKXTM_Deflation_Kepler<Float>::eigenSolver(){
 		       &msglvl0,           /*mcgets*/
 		       &msglvl3            /*mceupd*/);
     
-    printfQuda("*** ARPACK verbosity set to mcaup2=3 mcaupd=3 mceupd=3; \n"
-	       "*** output is directed to '%s';\n"
-	       "*** if you don't see output, your memory may be corrupted\n",
-	       arpack_logfile);
+    printfQuda("eigenSolver: Log info:\n");
+    printfQuda("  ARPACK verbosity set to mcaup2=3 mcaupd=3 mceupd=3; \n");
+    printfQuda("  output is directed to '%s'\n",arpack_logfile);
+    printfQuda("  * if you don't see output, your memory may be corrupted *\n");
   }
 #endif   
 
@@ -2476,17 +2618,15 @@ void QKXTM_Deflation_Kepler<Float>::eigenSolver(){
 
   } while (ido != 99);
   
-  fprintf(stderr,"OK after ido loop, ido=%d\n",ido);
-   
   /*
     Check for convergence 
   */
   if ( (info) < 0 ){
-    printfQuda("Error with _naupd, info = %d\n", info);
+    printfQuda("eigenSolver: Error with _naupd, info = %d\n", info);
   }
   else{ 
     nconv = iparam[4];
-    printfQuda("Number of converged eigenvectors: %d\n", nconv);
+    printfQuda("eigenSolver: Number of converged eigenvectors: %d\n", nconv);
 
     //compute eigenvectors 
 #ifndef MPI_COMMS
@@ -2502,8 +2642,8 @@ void QKXTM_Deflation_Kepler<Float>::eigenSolver(){
 #endif
 
     if( (info)!=0){
-      printfQuda("Error with _neupd, info = %d \n",(info));
-      printfQuda("Check the documentation of _neupd. \n");
+      printfQuda("eigenSolver: Error with _neupd, info = %d \n",(info));
+      printfQuda("eigenSolver: Check the documentation of _neupd. \n");
     }
     else{ //report eiegnvalues and their residuals
       printfQuda("Ritz Values and their errors\n");
@@ -2581,6 +2721,31 @@ void QKXTM_Deflation_Kepler<Float>::eigenSolver(){
     delete h_v3;
   }
 
+  
+  //  FILE *evec_ptr;
+  //  char evec_fname[257];
+//   for(int i = 0;i<NeV;i++){
+//     //    sprintf(evec_fname,"evec2.%04d.txt",i);
+//     //    if( (evec_ptr=fopen(evec_fname,"w"))==NULL ) errorQuda("Cannot open evec file for writing\n");
+    
+//     for(int k=0;k<240;k++){
+//       printfQuda("EIGENSOLVER: i = %04d, k = %04d: %+e  %+e    %+e  %+e      %+e  %+e\n",i,k,real(helem_cplx[i*LDV+k]),imag(helem_cplx[i*LDV+k]),
+// 		 h_elem[2*(LDV*i+k)],h_elem[2*(LDV*i+k)+1],
+// 		 real(helem_cplx[i*LDV+k])/h_elem[2*(LDV*i+k)],imag(helem_cplx[i*LDV+k])/h_elem[2*(LDV*i+k)+1]);
+//     }
+//     printfQuda("\n\n");
+//     //    fclose(evec_ptr);
+//   }
+
+//   FILE *eval_ptr;
+//   char eval_fname[257];
+//   sprintf(eval_fname,"evals.txt");
+//   if( (eval_ptr=fopen(eval_fname,"w"))==NULL ) errorQuda("Cannot open eval file for writing\n");
+//   for(int i = 0;i<NeV;i++){
+//     fprintf(eval_ptr,"%05d: %+e  %+e    %+e  %+e      %+e  %+e\n",i,real(evals_cplx[i]),imag(evals_cplx[i]),eigenValues[2*i],eigenValues[2*i+1],
+// 	       real(evals_cplx[i])/eigenValues[2*i],imag(evals_cplx[i])/eigenValues[2*i+1]);
+//   }
+
 
   //free memory
   free(resid);
@@ -2594,7 +2759,6 @@ void QKXTM_Deflation_Kepler<Float>::eigenSolver(){
   //free(zv);
   free(select);
   free(workev);
-     
 
   delete h_v;
   delete h_v2;
@@ -3564,3 +3728,220 @@ void dumpLoop_oneD_v2(void *cn, const char *Pref,int accumLevel, int Q_sq, int m
 //     for(int i = 0 ; i < NeV ; i++)
 //       cblas_zaxpy(NN,&(out_vec_reduce[2*i]),H_elem()[i],incx,ptr_elem,incy);
 //   }
+
+
+
+// template<typename Float>
+// void QKXTM_Deflation_Kepler<Float>::ApplyFullOp_2(Float *vec_out, Float *vec_in, QudaInvertParam *param){
+//   if(!isFullOp)
+//     errorQuda("ApplyFullOp function only works with the full Operator. Hint: Check your QKXTM_Deflation_Kepler object initialization.\n");
+
+//   bool use_pc = (!isFullOp);
+
+//   printfQuda("### Use of preconditioning is %s\n", use_pc ? "true" : "false");
+
+//   cudaColorSpinorField *in    = NULL;
+//   cudaColorSpinorField *out   = NULL;
+//   cpuColorSpinorField  *h_in  = NULL;
+  
+//   QKXTM_Vector_Kepler<double> *Kvec = new QKXTM_Vector_Kepler<double>(BOTH,VECTOR);
+
+//   ColorSpinorParam cpuParam((void*)vec_in,*param,GK_localL,use_pc);
+//   h_in = new cpuColorSpinorField(cpuParam);
+
+//   ColorSpinorParam cudaParam(cpuParam, *param);
+//   cudaParam.create = QUDA_ZERO_FIELD_CREATE;
+//   in  = new cudaColorSpinorField(cudaParam);
+//   out = new cudaColorSpinorField(cudaParam);
+
+//   //  memcpy(Kvec->H_elem(),vec_in,bytes_total_length_per_NeV);
+//   Kvec->packVector(vec_in);
+//   Kvec->loadVector();
+//   Kvec->uploadToCuda(in,use_pc);
+
+//   diracOp->MdagM(*out,*in);
+
+//   Kvec->downloadFromCuda(out,use_pc);
+//   Kvec->unloadVector();
+
+//   //  Kvec->download();
+
+//   memcpy(vec_out,Kvec->H_elem(),bytes_total_length_per_NeV);
+
+//   delete in;
+//   delete out;
+//   delete h_in;
+
+//   printfQuda("### Application of Full Operator 2nd version completed successfully\n");
+// }
+// //==================================================
+
+
+// template<typename Float>
+// void QKXTM_Deflation_Kepler<Float>::ApplyFullOp_3(Float *vec_out, Float *vec_in, QudaInvertParam *param){
+//   if(!isFullOp)
+//     errorQuda("ApplyFullOp function only works with the full Operator. Hint: Check your QKXTM_Deflation_Kepler object initialization.\n");
+
+//   bool use_pc = (!isFullOp);
+
+//   cudaColorSpinorField *in   = NULL;
+//   cudaColorSpinorField *out  = NULL;
+//   cpuColorSpinorField *h_in  = NULL;
+
+//   QKXTM_Vector_Kepler<double> *Kvec = new QKXTM_Vector_Kepler<double>(BOTH,VECTOR);
+
+//   ColorSpinorParam cpuParam(vec_in,*param,GK_localL,!isFullOp);
+
+//   ColorSpinorParam cudaParam(cpuParam, *param);
+//   cudaParam.create = QUDA_ZERO_FIELD_CREATE;
+//   in  = new cudaColorSpinorField(cudaParam);
+//   out = new cudaColorSpinorField(cudaParam);
+ 
+//   cpuParam.v = vec_in;
+//   h_in = new cpuColorSpinorField(cpuParam);
+//   *in = *h_in;
+
+//   diracOp->MdagM(*out,*in);
+
+//   Kvec->downloadFromCuda(out,use_pc);
+//   //Kvec->unloadVector();
+//   Kvec->download();
+
+//   memcpy(vec_out,Kvec->H_elem(),bytes_total_length_per_NeV);
+
+//   delete in;
+//   delete out;
+//   delete h_in;
+
+//   printfQuda("### Application of Full Operator 3rd version completed successfully\n");
+// }
+// //==================================================
+
+// template<typename Float>
+// void QKXTM_Deflation_Kepler<Float>::ApplyFullOp_4(Float *vec_out, Float *vec_in, QudaInvertParam *param){
+//   if(!isFullOp)
+//     errorQuda("ApplyFullOp function only works with the full Operator. Hint: Check your QKXTM_Deflation_Kepler object initialization.\n");
+
+//   bool use_pc = (!isFullOp);
+
+//   printfQuda("### Use of preconditioning is %s\n", use_pc ? "true" : "false");
+
+//   cudaColorSpinorField *in    = NULL;
+//   cudaColorSpinorField *out   = NULL;
+//   cpuColorSpinorField  *h_in  = NULL;
+  
+//   QKXTM_Vector_Kepler<double> *Kvec = new QKXTM_Vector_Kepler<double>(BOTH,VECTOR);
+
+//   ColorSpinorParam cpuParam((void*)vec_in,*param,GK_localL,use_pc);
+//   h_in = new cpuColorSpinorField(cpuParam);
+
+//   ColorSpinorParam cudaParam(cpuParam, *param);
+//   cudaParam.create = QUDA_COPY_FIELD_CREATE;
+//   in  = new cudaColorSpinorField(*h_in,cudaParam);
+//   cudaParam.create = QUDA_ZERO_FIELD_CREATE;
+//   out = new cudaColorSpinorField(cudaParam);
+
+//   //  Kvec->unpackVector(vec_in);
+//   //  Kvec->loadVector();
+//   //  Kvec->uploadToCuda(in,use_pc);
+
+//   diracOp->MdagM(*out,*in);
+
+//   Kvec->downloadFromCuda(out,use_pc);
+//   Kvec->download();
+
+//   memcpy(vec_out,Kvec->H_elem(),bytes_total_length_per_NeV);
+
+//   delete in;
+//   delete out;
+//   delete h_in;
+
+//   printfQuda("### Application of Full Operator 4th version completed successfully\n");
+// }
+// //==================================================
+
+// template<typename Float>
+// void QKXTM_Deflation_Kepler<Float>::ApplyFullOp_5(Float *vec_out, Float *vec_in, QudaInvertParam *param){
+//   if(!isFullOp)
+//     errorQuda("ApplyFullOp function only works with the full Operator. Hint: Check your QKXTM_Deflation_Kepler object initialization.\n");
+
+//   bool use_pc = (!isFullOp);
+
+//   printfQuda("### Use of preconditioning is %s\n", use_pc ? "true" : "false");
+
+//   cudaColorSpinorField *in    = NULL;
+//   cudaColorSpinorField *out   = NULL;
+//   cpuColorSpinorField  *h_in  = NULL;
+  
+//   QKXTM_Vector_Kepler<double> *Kvec = new QKXTM_Vector_Kepler<double>(BOTH,VECTOR);
+
+//   ColorSpinorParam cpuParam((void*)vec_in,*param,GK_localL,use_pc);
+//   h_in = new cpuColorSpinorField(cpuParam);
+
+//   ColorSpinorParam cudaParam(cpuParam, *param);
+//   cudaParam.create = QUDA_ZERO_FIELD_CREATE;
+//   in  = new cudaColorSpinorField(cudaParam);
+//   out = new cudaColorSpinorField(cudaParam);
+
+//   Kvec->packVector(vec_in);
+//   Kvec->loadVector();
+//   Kvec->uploadToCuda(in,use_pc);
+
+//   diracOp->MdagM(*out,*in);
+
+//   Kvec->downloadFromCuda(out,use_pc);
+//   //Kvec->unloadVector();
+//   Kvec->download();
+
+//   memcpy(vec_out,Kvec->H_elem(),bytes_total_length_per_NeV);
+
+//   delete in;
+//   delete out;
+//   delete h_in;
+
+//   printfQuda("### Application of Full Operator 5th version completed successfully\n");
+// }
+// //==================================================
+
+// template<typename Float>
+// void QKXTM_Deflation_Kepler<Float>::ApplyFullOp_6(Float *vec_out, Float *vec_in, QudaInvertParam *param){
+//   if(!isFullOp)
+//     errorQuda("ApplyFullOp function only works with the full Operator. Hint: Check your QKXTM_Deflation_Kepler object initialization.\n");
+
+//   bool use_pc = (!isFullOp);
+
+//   printfQuda("### Use of preconditioning is %s\n", use_pc ? "true" : "false");
+
+//   cudaColorSpinorField *in    = NULL;
+//   cudaColorSpinorField *out   = NULL;
+//   cpuColorSpinorField  *h_in  = NULL;
+  
+//   QKXTM_Vector_Kepler<double> *Kvec = new QKXTM_Vector_Kepler<double>(BOTH,VECTOR);
+
+//   ColorSpinorParam cpuParam((void*)vec_in,*param,GK_localL,use_pc);
+//   h_in = new cpuColorSpinorField(cpuParam);
+
+//   ColorSpinorParam cudaParam(cpuParam, *param);
+//   cudaParam.create = QUDA_COPY_FIELD_CREATE;
+//   in  = new cudaColorSpinorField(*h_in,cudaParam);
+//   cudaParam.create = QUDA_ZERO_FIELD_CREATE;
+//   out = new cudaColorSpinorField(cudaParam);
+
+//   //  Kvec->unpackVector(vec_in);
+//   //  Kvec->loadVector();
+//   //  Kvec->uploadToCuda(in,use_pc);
+
+//   diracOp->MdagM(*out,*in);
+
+//   Kvec->downloadFromCuda(out,use_pc);
+//   //  Kvec->download();
+
+//   memcpy(vec_out,Kvec->H_elem(),bytes_total_length_per_NeV);
+
+//   delete in;
+//   delete out;
+//   delete h_in;
+
+//   printfQuda("### Application of Full Operator 6th version completed successfully\n");
+// }
+// //==================================================
