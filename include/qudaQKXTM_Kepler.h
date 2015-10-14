@@ -63,6 +63,13 @@ namespace quda {
     bool isFullOp;
   }qudaQKXTM_arpackInfo;
 
+  typedef struct{
+    int Nstoch;
+    unsigned long int seed;
+    int Ndump;
+    char loop_fname[512];
+  }qudaQKXTM_loopInfo;
+
 
   // forward declaration
 template<typename Float>  class QKXTM_Field_Kepler;
@@ -304,7 +311,9 @@ void DeflateAndInvert_threepTwop(void **gaugeSmeared, void **gauge, QudaInvertPa
 void calcEigenVectors(QudaInvertParam *param , quda::qudaQKXTM_arpackInfo arpackInfo);
 void calcEigenVectors_Check(QudaInvertParam *param , quda::qudaQKXTM_arpackInfo arpackInfo);
 
-void calcEigenVectorsAndInvert_threepTwop(void **gaugeSmeared, void **gauge, QudaInvertParam *param ,QudaGaugeParam *gauge_param, char *filename_twop, char *filename_threep, quda::qudaQKXTMinfo_Kepler info, quda::qudaQKXTM_arpackInfo arpackInfo, quda::WHICHPARTICLE NUCLEON, quda::WHICHPROJECTOR PID );
+void calcEigenVectors_loop_wOneD_FullOp(void **gaugeToPlaquette, QudaInvertParam *param ,QudaGaugeParam *gauge_param,  quda::qudaQKXTM_arpackInfo arpackInfo, quda::qudaQKXTM_loopInfo loopInfo, quda::qudaQKXTMinfo_Kepler info);
+
+//void calcEigenVectorsAndInvert_threepTwop(void **gaugeSmeared, void **gauge, QudaInvertParam *param ,QudaGaugeParam *gauge_param, char *filename_twop, char *filename_threep, quda::qudaQKXTMinfo_Kepler info, quda::qudaQKXTM_arpackInfo arpackInfo, quda::WHICHPARTICLE NUCLEON, quda::WHICHPROJECTOR PID );
 
 void calcEigenVectors_threepTwop_FullOp(void **gaugeSmeared, void **gauge, QudaGaugeParam *gauge_param, QudaInvertParam *param, quda::qudaQKXTM_arpackInfo arpackInfo, quda::qudaQKXTMinfo_Kepler info,
 					char *filename_twop, char *filename_threep, quda::WHICHPARTICLE NUCLEON, quda::WHICHPROJECTOR PID );

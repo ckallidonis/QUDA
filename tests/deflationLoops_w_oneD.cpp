@@ -76,8 +76,8 @@ extern char pathEigenVectorsUp[];
 extern char pathEigenVectorsDown[];
 extern char pathEigenValuesUp[];
 extern char pathEigenValuesDown[];
-extern char loop_filename[];
-extern int NdumpStep;
+extern char loop_fname[];
+extern int Ndump;
 void
 display_test_info()
 {
@@ -380,7 +380,7 @@ int main(int argc, char **argv)
   if (dslash_type == QUDA_TWISTED_CLOVER_DSLASH) loadCloverQuda(NULL, NULL, &inv_param);
   //if (dslash_type == QUDA_TWISTED_CLOVER_DSLASH) loadCloverQuda(clover,clover_inv, &inv_param);
 
-  DeflateAndInvert_loop_w_One_Der(gauge_Plaq,&inv_param,&gauge_param,pathEigenValuesDown,pathEigenVectorsDown,loop_filename,NeV,Nstoch,seed,NdumpStep,info);
+  DeflateAndInvert_loop_w_One_Der(gauge_Plaq,&inv_param,&gauge_param,pathEigenValuesDown,pathEigenVectorsDown,loop_fname,NeV,Nstoch,seed,Ndump,info);
   
   freeGaugeQuda();
   if (dslash_type == QUDA_CLOVER_WILSON_DSLASH || dslash_type == QUDA_TWISTED_CLOVER_DSLASH) freeCloverQuda();

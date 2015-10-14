@@ -75,8 +75,8 @@ extern char pathEigenVectorsUp[];
 extern char pathEigenVectorsDown[];
 extern char pathEigenValuesUp[];
 extern char pathEigenValuesDown[];
-extern char loop_filename[];
-extern int NdumpStep;
+extern char loop_fname[];
+extern int Ndump;
 void
 display_test_info()
 {
@@ -410,7 +410,7 @@ int main(int argc, char **argv)
   // char pathEigenVectors_down[] = "/users/krikitos/test_deflation/8to4/tm_periodic/csw1p57551/theta1/dn/ev.0000";
   //char pathOut[] = "/users/krikitos/test_deflation/8to4/tm_periodic/csw1p57551/theta1/twop";
 
-  DeflateAndInvert_loop(gauge_Plaq,&inv_param,&gauge_param,pathEigenValuesDown,pathEigenVectorsDown,loop_filename,NeV,Nstoch,seed,NdumpStep,info);
+  DeflateAndInvert_loop(gauge_Plaq,&inv_param,&gauge_param,pathEigenValuesDown,pathEigenVectorsDown,loop_fname,NeV,Nstoch,seed,Ndump,info);
   
   freeGaugeQuda();
   if (dslash_type == QUDA_CLOVER_WILSON_DSLASH || dslash_type == QUDA_TWISTED_CLOVER_DSLASH) freeCloverQuda();

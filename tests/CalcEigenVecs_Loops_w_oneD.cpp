@@ -53,31 +53,35 @@ extern char latfile_smeared[];
 
 extern void usage(char** );
 
-extern int src[];
-extern int t_sink;
 extern int Q_sq;
-extern int nsmearAPE;
-extern int nsmearGauss;
-extern double alphaAPE;
-extern double alphaGauss;
-extern char twop_filename[];
-extern char threep_filename[];
 extern double muValue;
 extern double kappa;
 extern char prop_path[];
 extern double csw;
 
+//-C.K. Loop parameters
 extern int Nstoch;
 extern unsigned long int seed;
-extern int numSourcePositions;
-extern char pathListSourcePositions[];
-extern int NeV;
-extern char pathEigenVectorsUp[];
-extern char pathEigenVectorsDown[];
-extern char pathEigenValuesUp[];
-extern char pathEigenValuesDown[];
 extern char loop_fname[];
 extern int Ndump;
+
+
+//-C.K. ARPACK Parameters
+extern int PolyDeg;
+extern int nEv;
+extern int nKv;
+extern char *spectrumPart;
+extern bool isACC;
+extern double tolArpack;
+extern int maxIterArpack;
+extern char arpack_logfile[];
+extern double amin;
+extern double amax;
+extern bool isEven;
+extern bool isFullOp;
+
+
+
 void
 display_test_info()
 {
@@ -146,16 +150,47 @@ int main(int argc, char **argv)
   QudaPrecision cuda_prec_sloppy = prec_sloppy;
   QudaPrecision cuda_prec_precondition = QUDA_HALF_PRECISION;
 
-  QudaGaugeParam gauge_param = newQudaGaugeParam();
-  QudaInvertParam inv_param = newQudaInvertParam();
- 
 
+  //-C.K. Pass ARPACK parameters to arpackInfo
+  qudaQKXTM_arpackInfo arpackInfo;
+
+  arpackInfo.PolyDeg = PolyDeg;
+  arpackInfo.nEv = nEv;
+  arpackInfo.nKv = nKv;
+  arpackInfo.isACC = isACC;
+  arpackInfo.tolArpack = tolArpack;
+  arpackInfo.maxIterArpack = maxIterArpack;
+  strcpy(arpackInfo.arpack_logfile,arpack_logfile);
+  arpackInfo.amin = amin;
+  arpackInfo.amax = amax;
+  arpackInfo.isEven = isEven;
+  arpackInfo.isFullOp = isFullOp;
+
+  if(strcmp(spectrumPart,"SR")==0) arpackInfo.spectrumPart = SR;
+  else if(strcmp(spectrumPart,"LR")==0) arpackInfo.spectrumPart = LR;
+  else if(strcmp(spectrumPart,"SM")==0) arpackInfo.spectrumPart = SM;
+  else if(strcmp(spectrumPart,"LM")==0) arpackInfo.spectrumPart = LM;
+  else if(strcmp(spectrumPart,"SI")==0) arpackInfo.spectrumPart = SI;
+  else if(strcmp(spectrumPart,"LI")==0) arpackInfo.spectrumPart = LI;
+  else errorQuda("Error: Your spectrumPart option is suspicious\n");
+  //-----------------------------------------------------------------------------------------
+
+
+  //C.K. Pass loop parameters to loopInfo
+  qudaQKXTM_loopInfo loopInfo;
+
+  loopInfo.Nstoch = Nstoch;
+  loopInfo.seed = seed;
+  loopInfo.Ndump = Ndump;
+  strcpy(loopInfo.loop_fname,loop_fname);
+  //-----------------------------------------------------------------------------------------
+
+  QudaGaugeParam gauge_param = newQudaGaugeParam();
 
   gauge_param.X[0] = xdim;
   gauge_param.X[1] = ydim;
   gauge_param.X[2] = zdim;
   gauge_param.X[3] = tdim;
-  inv_param.Ls = 1;
 
   gauge_param.anisotropy = 1.0;
   gauge_param.type = QUDA_WILSON_LINKS;
@@ -171,12 +206,18 @@ int main(int argc, char **argv)
   gauge_param.cuda_prec_precondition = cuda_prec_precondition;
   gauge_param.reconstruct_precondition = link_recon_sloppy;
   gauge_param.gauge_fix = QUDA_GAUGE_FIXED_NO;
+  gauge_param.ga_pad = 0; // 24*24*24/2;
+  //-----------------------------------------------------------------------------------------
+
+  QudaInvertParam inv_param = newQudaInvertParam();
+
+  inv_param.Ls = 1;
 
   inv_param.dslash_type = dslash_type;
   inv_param.kappa = kappa;
   inv_param.mu=muValue;
   inv_param.epsilon = 0.;
-  inv_param.twist_flavor = QUDA_TWIST_MINUS;
+  inv_param.twist_flavor = QUDA_TWIST_PLUS;
 
   double kappa5 = 1.;
 
@@ -186,15 +227,19 @@ int main(int argc, char **argv)
   for (int i=0; i<inv_param.num_offset; i++) inv_param.offset[i] = offset[i];
 
   inv_param.inv_type = inv_type;
-  inv_param.matpc_type = QUDA_MATPC_ODD_ODD_ASYMMETRIC;
-  //  inv_param.matpc_type = QUDA_MATPC_EVEN_EVEN_ASYMMETRIC;
 
-  inv_param.solution_type = QUDA_MAT_SOLUTION;
+  if(isEven) inv_param.matpc_type = QUDA_MATPC_EVEN_EVEN_ASYMMETRIC;
+  else inv_param.matpc_type = QUDA_MATPC_ODD_ODD_ASYMMETRIC;
+
+  if(isFullOp) inv_param.solution_type = QUDA_MAT_SOLUTION;
+  else inv_param.solution_type = QUDA_MATPC_SOLUTION;
+
+  if(isFullOp) inv_param.solve_type = QUDA_NORMOP_SOLVE;
+  inv_param.solve_type = QUDA_NORMOP_PC_SOLVE;
+
   inv_param.dagger = QUDA_DAG_NO;
   inv_param.mass_normalization = QUDA_MASS_NORMALIZATION;
   inv_param.solver_normalization = QUDA_DEFAULT_NORMALIZATION;
-
-  inv_param.solve_type = QUDA_NORMOP_PC_SOLVE;
 
   inv_param.pipeline = 0;
 
@@ -203,7 +248,7 @@ int main(int argc, char **argv)
   inv_param.Nsteps = 2;
   inv_param.gcrNkrylov = 10;
   inv_param.tol = precision;
-  inv_param.tol_restart = 1e-3; //now theoretical background for this parameter... 
+  inv_param.tol_restart = 1e-3; //now theoretical background for this parameter...
 
 #if __COMPUTE_CAPABILITY__ >= 200
   // require both L2 relative and heavy quark residual to determine convergence
@@ -276,12 +321,10 @@ int main(int argc, char **argv)
   // declare the dimensions of the communication grid
   initCommsGridQuda(4, gridsize_from_cmdline, NULL, NULL);
 
-
   // *** Everything between here and the call to initQuda() is
   // *** application-specific.
 
   // set parameters for the reference Dslash, and prepare fields to be loaded
-
 
   setDims(gauge_param.X);
   setSpinorSiteSize(24);
@@ -310,13 +353,12 @@ int main(int argc, char **argv)
     construct_gauge_field(gauge, 1, gauge_param.cpu_prec, &gauge_param);
   }
 
-  if (strcmp(latfile_smeared,"")) {
+  //  if (strcmp(latfile_smeared,"")) {
     //readLimeGaugeSmeared(gauge_APE, latfile_smeared, &gauge_param, &inv_param, gridsize_from_cmdline);        // first read gauge field without apply BC
     //mapEvenOddToNormalGauge(gauge_APE,gauge_param,xdim,ydim,zdim,tdim);
-  } else { // else generate a random SU(3) field
+  //} else { // else generate a random SU(3) field
     // construct_gauge_field(gauge_APE, 1, gauge_param.cpu_prec, &gauge_param);
-  }
-
+  //}
 
 
   if (dslash_type == QUDA_CLOVER_WILSON_DSLASH || dslash_type == QUDA_TWISTED_CLOVER_DSLASH) {
@@ -326,7 +368,6 @@ int main(int argc, char **argv)
     size_t cSize = (inv_param.clover_cpu_prec == QUDA_DOUBLE_PRECISION) ? sizeof(double) : sizeof(float);
     clover_inv = malloc(V*cloverSiteSize*cSize);
     construct_clover_field(clover_inv, norm, diag, inv_param.clover_cpu_prec);
-  
 
 
     // The uninverted clover term is only needed when solving the unpreconditioned
@@ -380,7 +421,9 @@ int main(int argc, char **argv)
   if (dslash_type == QUDA_TWISTED_CLOVER_DSLASH) loadCloverQuda(NULL, NULL, &inv_param);
   //if (dslash_type == QUDA_TWISTED_CLOVER_DSLASH) loadCloverQuda(clover,clover_inv, &inv_param);
 
-  DeflateAndInvert_loop_w_One_Der_volumeSource(gauge_Plaq,&inv_param,&gauge_param,pathEigenValuesUp,pathEigenVectorsUp,pathEigenValuesDown,pathEigenVectorsDown,loop_fname,NeV,Nstoch,seed,Ndump,info);
+  calcEigenVectors_loop_wOneD_FullOp(gauge_Plaq, &inv_param, &gauge_param, arpackInfo, loopInfo, info);
+
+  //  DeflateAndInvert_loop_w_One_Der(gauge_Plaq,&inv_param,&gauge_param,pathEigenValuesDown,pathEigenVectorsDown,loop_filename,NeV,Nstoch,seed,NdumpStep,info);
   
   freeGaugeQuda();
   if (dslash_type == QUDA_CLOVER_WILSON_DSLASH || dslash_type == QUDA_TWISTED_CLOVER_DSLASH) freeCloverQuda();

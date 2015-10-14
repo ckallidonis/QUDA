@@ -1591,8 +1591,6 @@ char prop_path[257] = "prop";
 double muValue = 0.0085;
 double kappa = 0.161231;
 
-unsigned long int seed = 12345;
-int Nstoch = 1;
 char latfile_smeared[257] = "";
 double csw = 1.57551;
 
@@ -1606,9 +1604,6 @@ char pathEigenVectorsUp[257] = "ev_u.0000";
 char pathEigenVectorsDown[257] = "ev_d.0000";
 char pathEigenValuesUp[257] = "evals_u.dat";
 char pathEigenValuesDown[257] = "evals_d.dat";
-char loop_filename[257] = "loop";
-int NdumpStep = 1;
-
 
 //-C.K. ARPACK Parameters
 int PolyDeg = 100;     // degree of the Chebysev polynomial
@@ -1623,6 +1618,13 @@ double amin = 3.0e-4;
 double amax = 3.5;
 bool isEven = false;
 bool isFullOp = true;
+
+
+//-C.K. loop Parameters
+int Nstoch = 100;     // Number of stochastic noise vectors
+unsigned long int seed   = 100;     // The seed for the stochastic noise vector generation
+int Ndump  = 10;      // Write the loop every Ndump stoch. vectors
+char loop_fname[512] = "loop";
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -1693,8 +1695,8 @@ void usage(char** argv )
   printf("    --twop_filename                           # File name to save twopoint function (default \"twop\")\n");
   printf("    --threep_filename                         # File name to save threepoint function (default \"threep\")\n");
   printf("    --prop_path                               # File name to save propagators is (default \"prop_path\")\n");
-  printf("    --seed                                    # Seed for ranlux random number generator (default 12345)\n");
-  printf("    --Nstoch                                  # Number of stochastic noise vectors for loop (default 1)\n");
+  printf("    --seed                                    # Seed for ranlux random number generator (default 100)\n");
+  printf("    --Nstoch                                  # Number of stochastic noise vectors for loop (default 100)\n");
   printf("    --csw                                     # Clover csw coefficient (default 1.57551)\n");
 
   // new
@@ -1706,7 +1708,7 @@ void usage(char** argv )
   printf("    --pathEigenValuesUp                      # Path where the eigenVectors for up flavor are (default evals_u.dat)\n");
   printf("    --pathEigenValuesDown                      # Path where the eigenVectors for up flavor are (default evals_d.dat)\n");
   printf("    --loop_filename                           # File name to save loops (default \"loop\")\n");
-  printf("    --NdumpStep                           # Every how many noise vectors it will dump the data (default 1)\n");
+  printf("    --NdumpStep                           # Every how many noise vectors it will dump the data (default 10)\n");
 
 
   // ARPACK
@@ -2141,7 +2143,7 @@ int process_command_line_option(int argc, char** argv, int* idx)
     if(i+1 >= argc){
       usage(argv);
     }
-    NdumpStep = atoi(argv[i+1]);
+    Ndump = atoi(argv[i+1]);
     i++;
     ret = 0;
     goto out;
@@ -2191,7 +2193,7 @@ int process_command_line_option(int argc, char** argv, int* idx)
     if (i+1 >= argc){
       usage(argv);
     }     
-    strcpy(loop_filename, argv[i+1]);
+    strcpy(loop_fname, argv[i+1]);
     i++;
     ret = 0;
     goto out;

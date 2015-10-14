@@ -3,6 +3,8 @@
 *.mod
 *.a
 *~
+tests/*~
+lib/*~
 tests/*_test
 make.inc
 milc_interface/*
@@ -13,6 +15,7 @@ tests/deflationLoops_w_oneD_volumeSource
 tests/deflationTwopThreep
 tests/CalcEigenVecs_2pt3pt
 tests/CalcEigenVecs
+tests/CalcEigenVecs_Loops_w_oneD
 tests/createWritePropsSLReadApeGauge
 tests/test_plaquette
 *orig*
