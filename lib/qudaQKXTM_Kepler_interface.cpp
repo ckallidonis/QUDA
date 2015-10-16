@@ -2532,53 +2532,154 @@ void calcEigenVectors_Check(QudaInvertParam *param , qudaQKXTM_arpackInfo arpack
 void calcEigenVectors_loop_wOneD_FullOp(void **gaugeToPlaquette, QudaInvertParam *param ,QudaGaugeParam *gauge_param,  qudaQKXTM_arpackInfo arpackInfo, qudaQKXTM_loopInfo loopInfo, qudaQKXTMinfo_Kepler info){
 
   double t1,t2;
-    
+  
   profileInvert.Start(QUDA_PROFILE_TOTAL);
   if( (!arpackInfo.isFullOp) || (param->solve_type != QUDA_NORMOP_SOLVE) || (param->solution_type != QUDA_MAT_SOLUTION) ) errorQuda("calcEigenVectors_loop_wOneD_FullOp: This function works only with the Full Operator\n");
   printfQuda("calcEigenVectors_loop_wOneD_FullOp: Solving for the FULL operator\n");
-    
+  
   if(param->inv_type != QUDA_CG_INVERTER) errorQuda("calcEigenVectors_loop_wOneD_FullOp: This function works only with CG method");
-
+  
   if(param->gamma_basis != QUDA_UKQCD_GAMMA_BASIS) errorQuda("calcEigenVectors_loop_wOneD_FullOp: This function works only with ukqcd gamma basis\n");
   if(param->dirac_order != QUDA_DIRAC_ORDER) errorQuda("calcEigenVectors_loop_wOneD_FullOp: This function works only with color-inside-spin\n");
-
+  
+  if (!initialized) errorQuda("calcEigenVectors_loop_wOneD_FullOp: QUDA not initialized");
+  pushVerbosity(param->verbosity);
+  if (getVerbosity() >= QUDA_DEBUG_VERBOSE) printQudaInvertParam(param);
+  
   bool pc_solve = !arpackInfo.isFullOp;
   bool mat_solution = (param->solution_type == QUDA_MAT_SOLUTION) || (param->solution_type ==  QUDA_MATPC_SOLUTION);
   bool direct_solve = false;
-
+  
   int NeV = arpackInfo.nEv;  
   int Nstoch = loopInfo.Nstoch;
   unsigned long int seed = loopInfo.seed;
   int Ndump = loopInfo.Ndump;
   
-  char loop_fname[512];
-  strcpy(loop_fname,loopInfo.loop_fname);
-
+  char loop_exact_fname[512];
+  char loop_stoch_fname[512];
+  
   printfQuda("Loop Calculation Info\n");
   printfQuda("=====================\n");
   printfQuda("No. of noise vectors: %d\n",Nstoch);
   printfQuda("The seed is: %ld\n",seed);
   printfQuda("Will dump every %d noise vectors\n",Ndump);
-  printfQuda("The loop base name is %s\n",loop_fname);
+  printfQuda("The loop base name is %s\n",loopInfo.loop_fname);
   printfQuda("=====================\n");
+  
+  //- Allocate memory for local loops
+  void *std_uloc;
+  void *gen_uloc;
+  void *tmp_loop;
+  
+  if((cudaHostAlloc(&std_uloc, sizeof(double)*2*16*GK_localVolume, cudaHostAllocMapped)) != cudaSuccess)
+    errorQuda("calcEigenVectors_loop_wOneD_FullOp: Error allocating memory std_uloc\n");
+  if((cudaHostAlloc(&gen_uloc, sizeof(double)*2*16*GK_localVolume, cudaHostAllocMapped)) != cudaSuccess)
+    errorQuda("calcEigenVectors_loop_wOneD_FullOp: Error allocating memory gen_uloc\n");
+  if((cudaHostAlloc(&tmp_loop, sizeof(double)*2*16*GK_localVolume, cudaHostAllocMapped)) != cudaSuccess)
+    errorQuda("calcEigenVectors_loop_wOneD_FullOp: Error allocating memory tmp_loop\n");
+  
+  cudaMemset(std_uloc, 0, sizeof(double)*2*16*GK_localVolume);
+  cudaMemset(gen_uloc, 0, sizeof(double)*2*16*GK_localVolume);
+  cudaMemset(tmp_loop, 0, sizeof(double)*2*16*GK_localVolume);
+  cudaDeviceSynchronize();
+  //------------------------------------------------------------------------------------------------
 
+  //- Allocate memory for one-Derivative and conserved current loops
+  void **std_oneD;
+  void **gen_oneD;
+  void **std_csvC;
+  void **gen_csvC;
+  
+  std_oneD = (void**) malloc(4*sizeof(double*));
+  gen_oneD = (void**) malloc(4*sizeof(double*));
+  std_csvC = (void**) malloc(4*sizeof(double*));
+  gen_csvC = (void**) malloc(4*sizeof(double*));
+
+  if(gen_oneD == NULL) errorQuda("calcEigenVectors_loop_wOneD_FullOp: Error allocating memory gen_oneD higher level\n");
+  if(std_oneD == NULL) errorQuda("calcEigenVectors_loop_wOneD_FullOp: Error allocating memory std_oneD higher level\n");
+  if(gen_csvC == NULL) errorQuda("calcEigenVectors_loop_wOneD_FullOp: Error allocating memory gen_csvC higher level\n");
+  if(std_csvC == NULL) errorQuda("calcEigenVectors_loop_wOneD_FullOp: Error allocating memory std_csvC higher level\n");
+  cudaDeviceSynchronize();
+  
+  for(int mu = 0; mu < 4 ; mu++){
+    if((cudaHostAlloc(&(std_oneD[mu]), sizeof(double)*2*16*GK_localVolume, cudaHostAllocMapped)) != cudaSuccess)
+      errorQuda("calcEigenVectors_loop_wOneD_FullOp: Error allocating memory std_oneD\n");
+    if((cudaHostAlloc(&(gen_oneD[mu]), sizeof(double)*2*16*GK_localVolume, cudaHostAllocMapped)) != cudaSuccess)
+      errorQuda("calcEigenVectors_loop_wOneD_FullOp: Error allocating memory gen_oneD\n");
+    if((cudaHostAlloc(&(std_csvC[mu]), sizeof(double)*2*16*GK_localVolume, cudaHostAllocMapped)) != cudaSuccess)
+      errorQuda("calcEigenVectors_loop_wOneD_FullOp: Error allocating memory std_csvC\n");
+    if((cudaHostAlloc(&(gen_csvC[mu]), sizeof(double)*2*16*GK_localVolume, cudaHostAllocMapped)) != cudaSuccess)
+      errorQuda("calcEigenVectors_loop_wOneD_FullOp: Error allocating memory gen_csvC\n");
+    
+    cudaMemset(std_oneD[mu], 0, sizeof(double)*2*16*GK_localVolume);
+    cudaMemset(gen_oneD[mu], 0, sizeof(double)*2*16*GK_localVolume);
+    cudaMemset(std_csvC[mu], 0, sizeof(double)*2*16*GK_localVolume);
+    cudaMemset(gen_csvC[mu], 0, sizeof(double)*2*16*GK_localVolume);
+  }
+  cudaDeviceSynchronize();
+  //------------------------------------------------------------------------------------------------
+
+  //=========================================================================================//
+  //=================================  E X A C T   P A R T  =================================//
+  //=========================================================================================//
 
   QKXTM_Deflation_Kepler<double> *deflation = new QKXTM_Deflation_Kepler<double>(param,arpackInfo);
   deflation->printInfo();
-
+  
   // Calculate the eigenVectors
   t1 = MPI_Wtime();
+  
   deflation->eigenSolver();
+  deflation->MapEvenOddToFull();
+  
   t2 = MPI_Wtime();
+  printfQuda("calcEigenVectors_loop_wOneD_FullOp TIME REPORT: EigenVector Calculation: %f sec\n",t2-t1);
   //---------------------------
+  
+  //- Perform the one-end trick
 
-#ifdef TIMING_REPORT
-  printfQuda("TIME REPORT: EigenVector Calculation: %f sec\n",t2-t1);
-#endif
 
-  if (!initialized) errorQuda("QUDA not initialized");
-  pushVerbosity(param->verbosity);
-  if (getVerbosity() >= QUDA_DEBUG_VERBOSE) printQudaInvertParam(param);
+
+  for(int n=0;n<NeV;n++){
+    t1 = MPI_Wtime();
+    deflation->oneEndTrick_w_One_Der_FullOp_Exact(n, param, gen_uloc, std_uloc, gen_oneD, std_oneD, gen_csvC, std_csvC);
+    t2 = MPI_Wtime();
+    printfQuda("calcEigenVectors_loop_wOneD_FullOp TIME REPORT: One-end trick for EigenVector %d: %f sec\n",n,t2-t1);
+  }  
+  
+  //- Do the FFT and dump the exact part
+  sprintf(loop_exact_fname,"%s_exact_NeV%d",loopInfo.loop_fname,NeV);
+  t1 = MPI_Wtime();
+
+  doCudaFFT_v2<double>(std_uloc,tmp_loop);
+  //dumpLoop_ultraLocal_FullOp<double>(tmp_loop,loop_exact_fname,is+1,info.Q_sq,0); // Std. Ultra-local - Scalar
+  
+  doCudaFFT_v2<double>(gen_uloc,tmp_loop);
+  //dumpLoop_ultraLocal_FullOp<double>(tmp_loop,loop_exact_fname,is+1,info.Q_sq,1); // Gen. Ultra-local - dOp
+  
+  for(int mu = 0 ; mu < 4 ; mu++){
+    doCudaFFT_v2<double>(std_oneD[mu],tmp_loop);
+    //dumpLoop_oneD_FullOp<double>(tmp_loop,loop_exact_fname,is+1,info.Q_sq,mu,0); // Std. oneD - Loops
+    
+    doCudaFFT_v2<double>(gen_oneD[mu],tmp_loop);
+    //dumpLoop_oneD_FullOp<double>(tmp_loop,loop_exact_fname,is+1,info.Q_sq,mu,1); // Gen. oneD - LpsDw
+    
+    doCudaFFT_v2<double>(std_csvC[mu],tmp_loop);
+    //dumpLoop_oneD_FullOp<double>(tmp_loop,loop_exact_fname,is+1,info.Q_sq,mu,2); // Std. Conserved current - LoopsCv
+    
+    doCudaFFT_v2<double>(gen_csvC[mu],tmp_loop);
+    //dumpLoop_oneD_FullOp<double>(tmp_loop,loop_exact_fname,is+1,info.Q_sq,mu,3); // Gen. Conserved current - LpsDwCv
+  }
+
+  t2 = MPI_Wtime();
+  printfQuda("calcEigenVectors_loop_wOneD_FullOp TIME REPORT: FFT and writing exact part: %f sec\n",t2-t1);
+
+
+  //=========================================================================================//
+  //============================  S T O C H A S T I C   P A R T  ============================//
+  //=========================================================================================//
+
+  sprintf(loop_stoch_fname,"%s_stoch",loopInfo.loop_fname);
 
   cudaGaugeField *cudaGauge = checkGauge(param);
   checkInvertParam(param);
@@ -2599,11 +2700,11 @@ void calcEigenVectors_loop_wOneD_FullOp(void **gaugeToPlaquette, QudaInvertParam
   param->secs = 0;
   param->gflops = 0;
   param->iter = 0;
-  
+
+  // create the dirac operator                                                                                                                                      
   Dirac *d = NULL;
   Dirac *dSloppy = NULL;
   Dirac *dPre = NULL;
-  // create the dirac operator                                                                                                                                      
   createDirac(d, dSloppy, dPre, *param, pc_solve);
   Dirac &dirac = *d;
   Dirac &diracSloppy = *dSloppy;
@@ -2611,23 +2712,20 @@ void calcEigenVectors_loop_wOneD_FullOp(void **gaugeToPlaquette, QudaInvertParam
   profileInvert.Start(QUDA_PROFILE_H2D);
 
 
-  cudaColorSpinorField *b = NULL;
-  cudaColorSpinorField *x = NULL;
-  cudaColorSpinorField *in = NULL;
-  cudaColorSpinorField *out = NULL;
-  cudaColorSpinorField *tmp3 = NULL;
-  cudaColorSpinorField *tmp4 = NULL;
+  cudaColorSpinorField *b     = NULL;
+  cudaColorSpinorField *x     = NULL;
+  cudaColorSpinorField *in    = NULL;
+  cudaColorSpinorField *out   = NULL;
+  cudaColorSpinorField *tmp3  = NULL;
+  cudaColorSpinorField *tmp4  = NULL;
 
+  void *input_vector  = malloc(GK_localL[0]*GK_localL[1]*GK_localL[2]*GK_localL[3]*spinorSiteSize*sizeof(double));
+  void *output_vector = malloc(GK_localL[0]*GK_localL[1]*GK_localL[2]*GK_localL[3]*spinorSiteSize*sizeof(double));
 
-  const int *X = cudaGauge->X();
+  memset(input_vector ,0,GK_localL[0]*GK_localL[1]*GK_localL[2]*GK_localL[3]*spinorSiteSize*sizeof(double));
+  memset(output_vector,0,GK_localL[0]*GK_localL[1]*GK_localL[2]*GK_localL[3]*spinorSiteSize*sizeof(double));
 
-  void *input_vector = malloc(X[0]*X[1]*X[2]*X[3]*spinorSiteSize*sizeof(double));
-  void *output_vector = malloc(X[0]*X[1]*X[2]*X[3]*spinorSiteSize*sizeof(double));
-
-  memset(input_vector,0,X[0]*X[1]*X[2]*X[3]*spinorSiteSize*sizeof(double));
-  memset(output_vector,0,X[0]*X[1]*X[2]*X[3]*spinorSiteSize*sizeof(double));
-
-  ColorSpinorParam cpuParam(input_vector,*param,X,pc_solve);
+  ColorSpinorParam cpuParam(input_vector,*param,GK_localL,pc_solve);
   ColorSpinorField *h_b = (param->input_location == QUDA_CPU_FIELD_LOCATION) ?
     static_cast<ColorSpinorField*>(new cpuColorSpinorField(cpuParam)) :
     static_cast<ColorSpinorField*>(new cudaColorSpinorField(cpuParam));
@@ -2640,9 +2738,8 @@ void calcEigenVectors_loop_wOneD_FullOp(void **gaugeToPlaquette, QudaInvertParam
 
   ColorSpinorParam cudaParam(cpuParam, *param);
   cudaParam.create = QUDA_ZERO_FIELD_CREATE;
-  b = new cudaColorSpinorField( cudaParam);
-  cudaParam.create = QUDA_ZERO_FIELD_CREATE;
   x = new cudaColorSpinorField(cudaParam);
+  b = new cudaColorSpinorField(cudaParam);
 
   tmp3 = new cudaColorSpinorField(cudaParam);
   tmp4 = new cudaColorSpinorField(cudaParam);
@@ -2658,60 +2755,25 @@ void calcEigenVectors_loop_wOneD_FullOp(void **gaugeToPlaquette, QudaInvertParam
   QKXTM_Vector_Kepler<double> *K_vector = new QKXTM_Vector_Kepler<double>(BOTH,VECTOR);
   QKXTM_Vector_Kepler<double> *K_guess = new QKXTM_Vector_Kepler<double>(BOTH,VECTOR);
 
-  ////////////////////////// Allocate memory for local
-  void    *cnRes_vv;
-  void    *cnRes_gv;
-
-  void    *cnTmp;
-
-  if((cudaHostAlloc(&cnRes_vv, sizeof(double)*2*16*GK_localVolume, cudaHostAllocMapped)) != cudaSuccess)
-    errorQuda("Error allocating memory cnRes_vv\n");
-  if((cudaHostAlloc(&cnRes_gv, sizeof(double)*2*16*GK_localVolume, cudaHostAllocMapped)) != cudaSuccess)
-    errorQuda("Error allocating memory cnRes_gv\n");
-
-  cudaMemset      (cnRes_vv, 0, sizeof(double)*2*16*GK_localVolume);
-  cudaMemset      (cnRes_gv, 0, sizeof(double)*2*16*GK_localVolume);
-
-  if((cudaHostAlloc(&cnTmp, sizeof(double)*2*16*GK_localVolume, cudaHostAllocMapped)) != cudaSuccess)
-    errorQuda("Error allocating memory cnTmp\n");
-
-  cudaMemset      (cnTmp, 0, sizeof(double)*2*16*GK_localVolume);
-  ///////////////////////////////////////////////////
-  //////////// Allocate memory for one-Der and conserved current
-  void    **cnD_vv;
-  void    **cnD_gv;
-  void    **cnC_vv;
-  void    **cnC_gv;
-
-  cnD_vv   = (void**) malloc(sizeof(double*)*2*4);
-  cnD_gv   = (void**) malloc(sizeof(double*)*2*4);
-  cnC_vv   = (void**) malloc(sizeof(double*)*2*4);
-  cnC_gv   = (void**) malloc(sizeof(double*)*2*4);
-
-  if(cnD_gv == NULL)errorQuda("Error allocating memory cnD_gv higher level\n");
-  if(cnD_vv == NULL)errorQuda("Error allocating memory cnD_vv higher level\n");
-  if(cnC_gv == NULL)errorQuda("Error allocating memory cnC_gv higher level\n");
-  if(cnC_vv == NULL)errorQuda("Error allocating memory cnC_vv higher level\n");
-  cudaDeviceSynchronize();
+  //- Prepare the loops for the stochastic part
+  cudaMemset(std_uloc, 0, sizeof(double)*2*16*GK_localVolume);
+  cudaMemset(gen_uloc, 0, sizeof(double)*2*16*GK_localVolume);
+  cudaMemset(tmp_loop, 0, sizeof(double)*2*16*GK_localVolume);
 
   for(int mu = 0; mu < 4 ; mu++){
-    if((cudaHostAlloc(&(cnD_vv[mu]), sizeof(double)*2*16*GK_localVolume, cudaHostAllocMapped)) != cudaSuccess)
-      errorQuda("Error allocating memory cnD_vv\n");
-    if((cudaHostAlloc(&(cnD_gv[mu]), sizeof(double)*2*16*GK_localVolume, cudaHostAllocMapped)) != cudaSuccess)
-      errorQuda("Error allocating memory cnD_gv\n");
-    if((cudaHostAlloc(&(cnC_vv[mu]), sizeof(double)*2*16*GK_localVolume, cudaHostAllocMapped)) != cudaSuccess)
-      errorQuda("Error allocating memory cnC_vv\n");
-    if((cudaHostAlloc(&(cnC_gv[mu]), sizeof(double)*2*16*GK_localVolume, cudaHostAllocMapped)) != cudaSuccess)
-      errorQuda("Error allocating memory cnC_gv\n");
+    cudaMemset(std_oneD[mu], 0, sizeof(double)*2*16*GK_localVolume);
+    cudaMemset(gen_oneD[mu], 0, sizeof(double)*2*16*GK_localVolume);
+    cudaMemset(std_csvC[mu], 0, sizeof(double)*2*16*GK_localVolume);
+    cudaMemset(gen_csvC[mu], 0, sizeof(double)*2*16*GK_localVolume);
   }
-  cudaDeviceSynchronize();
-  ///////////////////////////////////////////////////
+  //----------------
+
   gsl_rng *rNum = gsl_rng_alloc(gsl_rng_ranlux);
   gsl_rng_set(rNum, seed + comm_rank()*seed);
 
   for(int is = 0 ; is < Nstoch ; is++){
     t1 = MPI_Wtime();
-    memset(input_vector,0,X[0]*X[1]*X[2]*X[3]*spinorSiteSize*sizeof(double));
+    memset(input_vector,0,GK_localL[0]*GK_localL[1]*GK_localL[2]*GK_localL[3]*spinorSiteSize*sizeof(double));
     getStochasticRandomSource<double>(input_vector,rNum);
     K_vector->packVector((double*) input_vector);
     K_vector->loadVector();
@@ -2730,49 +2792,55 @@ void calcEigenVectors_loop_wOneD_FullOp(void **gaugeToPlaquette, QudaInvertParam
     //  zeroCuda(*out); // remove it later , just for test
     (*solve)(*out,*in);
     dirac.reconstruct(*x,*b,param->solution_type);
-    oneEndTrick_w_One_Der<double>(*x,*tmp3,*tmp4,param,cnRes_gv,cnRes_vv,cnD_gv,cnD_vv,cnC_gv,cnC_vv);
+    oneEndTrick_w_One_Der<double>(*x,*tmp3,*tmp4,param, gen_uloc, std_uloc, gen_oneD, std_oneD, gen_csvC, std_csvC);
     t2 = MPI_Wtime();
     printfQuda("Stoch %d finished in %f sec\n",is,t2-t1);
+
+    //-Dump the loop
     if( (is+1)%Ndump == 0){
-      doCudaFFT_v2<double>(cnRes_vv,cnTmp);
-      dumpLoop_ultraLocal<double>(cnTmp,loop_fname,is+1,info.Q_sq,0); // Scalar
-      doCudaFFT_v2<double>(cnRes_gv,cnTmp);
-      dumpLoop_ultraLocal<double>(cnTmp,loop_fname,is+1,info.Q_sq,1); // dOp
+      doCudaFFT_v2<double>(std_uloc,tmp_loop);
+      dumpLoop_ultraLocal<double>(tmp_loop,loop_stoch_fname,is+1,info.Q_sq,0); // Std. Ultra-local - Scalar
+
+      doCudaFFT_v2<double>(gen_uloc,tmp_loop);
+      dumpLoop_ultraLocal<double>(tmp_loop,loop_stoch_fname,is+1,info.Q_sq,1); // Gen. Ultra-local - dOp
+
       for(int mu = 0 ; mu < 4 ; mu++){
-	doCudaFFT_v2<double>(cnD_vv[mu],cnTmp);
-	dumpLoop_oneD<double>(cnTmp,loop_fname,is+1,info.Q_sq,mu,0); // Loops
-	doCudaFFT_v2<double>(cnD_gv[mu],cnTmp);
-	dumpLoop_oneD<double>(cnTmp,loop_fname,is+1,info.Q_sq,mu,1); // LpsDw
+	doCudaFFT_v2<double>(std_oneD[mu],tmp_loop);
+	dumpLoop_oneD<double>(tmp_loop,loop_stoch_fname,is+1,info.Q_sq,mu,0); // Std. oneD - Loops
 
-	doCudaFFT_v2<double>(cnC_vv[mu],cnTmp);
-	dumpLoop_oneD<double>(cnTmp,loop_fname,is+1,info.Q_sq,mu,2); // LpsDw noether
-	doCudaFFT_v2<double>(cnC_gv[mu],cnTmp);
-	dumpLoop_oneD<double>(cnTmp,loop_fname,is+1,info.Q_sq,mu,3); // LpsDw noether
+	doCudaFFT_v2<double>(gen_oneD[mu],tmp_loop);
+	dumpLoop_oneD<double>(tmp_loop,loop_stoch_fname,is+1,info.Q_sq,mu,1); // Gen. oneD - LpsDw
+
+	doCudaFFT_v2<double>(std_csvC[mu],tmp_loop);
+	dumpLoop_oneD<double>(tmp_loop,loop_stoch_fname,is+1,info.Q_sq,mu,2); // Std. Conserved current - LoopsCv
+
+	doCudaFFT_v2<double>(gen_csvC[mu],tmp_loop);
+	dumpLoop_oneD<double>(tmp_loop,loop_stoch_fname,is+1,info.Q_sq,mu,3); // Gen. Conserved current - LpsDwCv
       }
-    } // close loop for dump loops
+    }
 
-  } // close loop over source positions
+  } // close loop over noise vectors
 
-  cudaFreeHost(cnRes_gv);
-  cudaFreeHost(cnRes_vv);
-
-  cudaFreeHost(cnTmp);
+  cudaFreeHost(std_uloc);
+  cudaFreeHost(gen_uloc);
+  cudaFreeHost(tmp_loop);
 
   for(int mu = 0 ; mu < 4 ; mu++){
-    cudaFreeHost(cnD_vv[mu]);
-    cudaFreeHost(cnD_gv[mu]);
-    cudaFreeHost(cnC_vv[mu]);
-    cudaFreeHost(cnC_gv[mu]);
+    cudaFreeHost(std_oneD[mu]);
+    cudaFreeHost(gen_oneD[mu]);
+    cudaFreeHost(std_csvC[mu]);
+    cudaFreeHost(gen_csvC[mu]);
   }
-  
-  free(cnD_vv);
-  free(cnD_gv);
-  free(cnC_vv);
-  free(cnC_gv);
+  free(std_oneD);
+  free(gen_oneD);
+  free(std_csvC);
+  free(gen_csvC);
 
   free(input_vector);
   free(output_vector);
+
   gsl_rng_free(rNum);
+
   delete solve;
   delete d;
   delete dSloppy;
@@ -2787,11 +2855,11 @@ void calcEigenVectors_loop_wOneD_FullOp(void **gaugeToPlaquette, QudaInvertParam
   delete b;
   delete tmp3;
   delete tmp4;
+
   popVerbosity();
   saveTuneCache(getVerbosity());
   profileInvert.Stop(QUDA_PROFILE_TOTAL);
 }
-
 
 
 

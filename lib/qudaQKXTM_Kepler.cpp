@@ -1864,6 +1864,7 @@ public:
   // for QUDA conventions
   void polynomialOperator(cudaColorSpinorField &out, const cudaColorSpinorField &in);
   void eigenSolver();
+  void oneEndTrick_w_One_Der_FullOp_Exact(int n, QudaInvertParam *param, void *gen_uloc,void *std_uloc, void **gen_oneD, void **std_oneD, void **gen_csvC, void **std_csvC);
 };
 
 
@@ -1993,22 +1994,21 @@ void QKXTM_Deflation_Kepler<Float>::ApplyFullOp(Float *vec_out, Float *vec_in, Q
 
   cudaColorSpinorField *in    = NULL;
   cudaColorSpinorField *out   = NULL;
-  cpuColorSpinorField  *h_in  = NULL;
   
   QKXTM_Vector_Kepler<double> *Kvec = new QKXTM_Vector_Kepler<double>(BOTH,VECTOR);
 
   ColorSpinorParam cpuParam((void*)vec_in,*param,GK_localL,use_pc);
-  h_in = new cpuColorSpinorField(cpuParam);
 
   ColorSpinorParam cudaParam(cpuParam, *param);
+
   cudaParam.create = QUDA_ZERO_FIELD_CREATE;
   in  = new cudaColorSpinorField(cudaParam);
   out = new cudaColorSpinorField(cudaParam);
-
+  
   Kvec->packVector(vec_in);
   Kvec->loadVector();
   Kvec->uploadToCuda(in,use_pc);
-
+  
   diracOp->MdagM(*out,*in);
 
   Kvec->downloadFromCuda(out,use_pc);
@@ -2019,7 +2019,6 @@ void QKXTM_Deflation_Kepler<Float>::ApplyFullOp(Float *vec_out, Float *vec_in, Q
 
   delete in;
   delete out;
-  delete h_in;
 
   printfQuda("ApplyFyllOp: Completed successfully\n");
 }
@@ -3730,218 +3729,174 @@ void dumpLoop_oneD_v2(void *cn, const char *Pref,int accumLevel, int Q_sq, int m
 //   }
 
 
+template<typename Float>
+void QKXTM_Deflation_Kepler<Float>::oneEndTrick_w_One_Der_FullOp_Exact(int n, QudaInvertParam *param, void *gen_uloc,void *std_uloc, void **gen_oneD, void **std_oneD, void **gen_csvC, void **std_csvC){
 
-// template<typename Float>
-// void QKXTM_Deflation_Kepler<Float>::ApplyFullOp_2(Float *vec_out, Float *vec_in, QudaInvertParam *param){
-//   if(!isFullOp)
-//     errorQuda("ApplyFullOp function only works with the full Operator. Hint: Check your QKXTM_Deflation_Kepler object initialization.\n");
+  if(!isFullOp) errorQuda("oneEndTrick_w_One_Der_FullOp_Exact: This function only works with the full operator\n");
 
-//   bool use_pc = (!isFullOp);
+  void *h_ctrn, *ctrnS, *ctrnC;
 
-//   printfQuda("### Use of preconditioning is %s\n", use_pc ? "true" : "false");
+  if((cudaMallocHost(&h_ctrn, sizeof(Float)*32*GK_localL[0]*GK_localL[1]*GK_localL[2]*GK_localL[3])) == cudaErrorMemoryAllocation)
+    errorQuda("oneEndTrick_w_One_Der_FullOp_Exact: Error allocating memory for contraction results in CPU.\n");
+  cudaMemset(h_ctrn, 0, sizeof(Float)*32*GK_localL[0]*GK_localL[1]*GK_localL[2]*GK_localL[3]);
 
-//   cudaColorSpinorField *in    = NULL;
-//   cudaColorSpinorField *out   = NULL;
-//   cpuColorSpinorField  *h_in  = NULL;
+  if((cudaMalloc(&ctrnS, sizeof(Float)*32*GK_localL[0]*GK_localL[1]*GK_localL[2]*GK_localL[3])) == cudaErrorMemoryAllocation)
+    errorQuda("oneEndTrick_w_One_Der_FullOp_Exact: Error allocating memory for contraction results in GPU.\n");
+  cudaMemset(ctrnS, 0, sizeof(Float)*32*GK_localL[0]*GK_localL[1]*GK_localL[2]*GK_localL[3]);
+
+  if((cudaMalloc(&ctrnC, sizeof(Float)*32*GK_localL[0]*GK_localL[1]*GK_localL[2]*GK_localL[3])) == cudaErrorMemoryAllocation)
+    errorQuda("oneEndTrick_w_One_Der_FullOp_Exact: Error allocating memory for contraction results in GPU.\n");
+  cudaMemset(ctrnC, 0, sizeof(Float)*32*GK_localL[0]*GK_localL[1]*GK_localL[2]*GK_localL[3]);
+
+  checkCudaError();
+
+  //- Set the eigenvector into cudaColorSpinorField format and save to x
+  bool pc_solve = false;
+  cudaColorSpinorField *x1 = NULL;
+
+  double *eigVec = (double*) malloc(bytes_total_length_per_NeV);
+  memcpy(eigVec,&(h_elem[n*total_length_per_NeV]),bytes_total_length_per_NeV);
+
+  QKXTM_Vector_Kepler<double> *Kvec = new QKXTM_Vector_Kepler<double>(BOTH,VECTOR);
+
+  ColorSpinorParam cpuParam((void*)eigVec,*param,GK_localL,pc_solve);
+  ColorSpinorParam cudaParam(cpuParam, *param);
+  cudaParam.create = QUDA_ZERO_FIELD_CREATE;
+  x1 = new cudaColorSpinorField(cudaParam);
+
+  Kvec->packVector(eigVec);
+  Kvec->loadVector();
+  Kvec->uploadToCuda(x1,pc_solve);
+
+  double eVal = eigenValues[2*n];
+
+  cudaColorSpinorField *tmp1 = NULL;
+  cudaColorSpinorField *tmp2 = NULL;
+  cudaParam.create = QUDA_ZERO_FIELD_CREATE;
+  tmp1 = new cudaColorSpinorField(cudaParam);
+  tmp2 = new cudaColorSpinorField(cudaParam);
+
+  cudaColorSpinorField &tmp3 = *tmp1;
+  cudaColorSpinorField &tmp4 = *tmp2;
+  cudaColorSpinorField &x = *x1;
+  //------------------------------------------------------------------------
   
-//   QKXTM_Vector_Kepler<double> *Kvec = new QKXTM_Vector_Kepler<double>(BOTH,VECTOR);
+  DiracParam dWParam;
+  dWParam.matpcType = QUDA_MATPC_EVEN_EVEN;
+  dWParam.dagger    = QUDA_DAG_NO;
+  dWParam.gauge     = gaugePrecise;
+  dWParam.kappa     = param->kappa;
+  dWParam.mass      = 1./(2.*param->kappa) - 4.;
+  dWParam.m5        = 0.;
+  dWParam.mu        = 0.;
+  for(int i=0; i<4; i++)
+    dWParam.commDim[i] = 1;
 
-//   ColorSpinorParam cpuParam((void*)vec_in,*param,GK_localL,use_pc);
-//   h_in = new cpuColorSpinorField(cpuParam);
+  if(param->dslash_type == QUDA_TWISTED_CLOVER_DSLASH){
+    dWParam.type = QUDA_CLOVER_DIRAC;
+    dWParam.clover = cloverPrecise;
+    DiracClover *dW = new DiracClover(dWParam);
+    dW->M(tmp4,x);
+    delete dW;
+  } 
+  else if (param->dslash_type == QUDA_TWISTED_MASS_DSLASH){
+    dWParam.type = QUDA_WILSON_DIRAC;
+    DiracWilson *dW = new DiracWilson(dWParam);
+    dW->M(tmp4,x);
+    delete dW;
+  }
+  else{
+    errorQuda("oneEndTrick_w_One_Der_FullOp_Exact: One end trick works only for twisted mass fermions\n");
+  }
+  checkCudaError();
 
-//   ColorSpinorParam cudaParam(cpuParam, *param);
-//   cudaParam.create = QUDA_ZERO_FIELD_CREATE;
-//   in  = new cudaColorSpinorField(cudaParam);
-//   out = new cudaColorSpinorField(cudaParam);
+  gamma5Cuda(&(tmp3.Even()), &(tmp4.Even()));
+  gamma5Cuda(&(tmp3.Odd()),  &(tmp4.Odd()));
 
-//   //  memcpy(Kvec->H_elem(),vec_in,bytes_total_length_per_NeV);
-//   Kvec->packVector(vec_in);
-//   Kvec->loadVector();
-//   Kvec->uploadToCuda(in,use_pc);
+  long int sizeBuffer;
+  sizeBuffer = sizeof(Float)*32*GK_localL[0]*GK_localL[1]*GK_localL[2]*GK_localL[3];
+  CovD *cov = new CovD(gaugePrecise, profileCovDev);
 
-//   diracOp->MdagM(*out,*in);
+  // ULTRA-LOCAL Generalized one-end trick
+  contract(x, tmp3, ctrnS, QUDA_CONTRACT_GAMMA5);
+  cudaMemcpy(h_ctrn, ctrnS, sizeBuffer, cudaMemcpyDeviceToHost);
 
-//   Kvec->downloadFromCuda(out,use_pc);
-//   Kvec->unloadVector();
+  for(int ix=0; ix < 32*GK_localL[0]*GK_localL[1]*GK_localL[2]*GK_localL[3]; ix++)
+    ((Float*) gen_uloc)[ix] += ((Float*)h_ctrn)[ix]/(Float)eVal;
+  //------------------------------------------------
 
-//   //  Kvec->download();
+  // ULTRA-LOCAL Standard one-end trick
+  contract(x, x, ctrnS, QUDA_CONTRACT_GAMMA5);
+  cudaMemcpy(h_ctrn, ctrnS, sizeBuffer, cudaMemcpyDeviceToHost);
 
-//   memcpy(vec_out,Kvec->H_elem(),bytes_total_length_per_NeV);
+  for(int ix=0; ix < 32*GK_localL[0]*GK_localL[1]*GK_localL[2]*GK_localL[3]; ix++)
+    ((Float*) std_uloc)[ix] -= ((Float*)h_ctrn)[ix]/(Float)eVal;
+  cudaDeviceSynchronize();
+  //------------------------------------------------
 
-//   delete in;
-//   delete out;
-//   delete h_in;
+  // ONE-DERIVATIVE Generalized one-end trick
+  for(int mu=0; mu<4; mu++){
+    cov->M(tmp4,tmp3,mu);
+    contract(x, tmp4, ctrnS, QUDA_CONTRACT_GAMMA5); // Term 0
+    
+    cov->M  (tmp4, x,  mu+4);
+    contract(tmp4, tmp3, ctrnS, QUDA_CONTRACT_GAMMA5_PLUS);               // Term 0 + Term 3
+    cudaMemcpy(ctrnC, ctrnS, sizeBuffer, cudaMemcpyDeviceToDevice);
+    
+    cov->M  (tmp4, x, mu);
+    contract(tmp4, tmp3, ctrnC, QUDA_CONTRACT_GAMMA5_PLUS);               // Term 0 + Term 3 + Term 2 (C Sum)                                                             
+    contract(tmp4, tmp3, ctrnS, QUDA_CONTRACT_GAMMA5_MINUS);              // Term 0 + Term 3 - Term 2 (D Dif)  
+    
+    cov->M  (tmp4, tmp3,  mu+4);
+    contract(x, tmp4, ctrnC, QUDA_CONTRACT_GAMMA5_PLUS);                  // Term 0 + Term 3 + Term 2 + Term 1 (C Sum)                                                 
+    contract(x, tmp4, ctrnS, QUDA_CONTRACT_GAMMA5_MINUS);                 // Term 0 + Term 3 - Term 2 - Term 1 (D Dif)                                                             
+    cudaMemcpy(h_ctrn, ctrnS, sizeBuffer, cudaMemcpyDeviceToHost);
+    
+    for(int ix=0; ix < 32*GK_localL[0]*GK_localL[1]*GK_localL[2]*GK_localL[3]; ix++)
+      ((Float *) gen_oneD[mu])[ix] += ((Float*)h_ctrn)[ix]/(Float)eVal;
+    
+    cudaMemcpy(h_ctrn, ctrnC, sizeBuffer, cudaMemcpyDeviceToHost);
+    
+    for(int ix=0; ix < 32*GK_localL[0]*GK_localL[1]*GK_localL[2]*GK_localL[3]; ix++)
+      ((Float *) gen_csvC[mu])[ix] += ((Float*)h_ctrn)[ix]/(Float)eVal;
+  }
+  //------------------------------------------------
 
-//   printfQuda("### Application of Full Operator 2nd version completed successfully\n");
-// }
-// //==================================================
+  // ONE-DERIVATIVE Standard one-end trick
+  for(int mu=0; mu<4; mu++){
+    cov->M  (tmp4, x,  mu);
+    cov->M  (tmp3, x,  mu+4);
+    
+    contract(x, tmp4, ctrnS, QUDA_CONTRACT_GAMMA5);                       // Term 0                                                                     
+    contract(tmp3, x, ctrnS, QUDA_CONTRACT_GAMMA5_PLUS);                  // Term 0 + Term 3                                                                     
+    cudaMemcpy(ctrnC, ctrnS, sizeBuffer, cudaMemcpyDeviceToDevice);
+    
+    contract(tmp4, x, ctrnC, QUDA_CONTRACT_GAMMA5_PLUS);                  // Term 0 + Term 3 + Term 2 (C Sum)                                                             
+    contract(tmp4, x, ctrnS, QUDA_CONTRACT_GAMMA5_MINUS);                 // Term 0 + Term 3 - Term 2 (D Dif)                                                             
+    contract(x, tmp3, ctrnC, QUDA_CONTRACT_GAMMA5_PLUS);                  // Term 0 + Term 3 + Term 2 + Term 1 (C Sum)                                                    
+    contract(x, tmp3, ctrnS, QUDA_CONTRACT_GAMMA5_MINUS);                 // Term 0 + Term 3 - Term 2 - Term 1 (D Dif)                                                     
+    
+    cudaMemcpy(h_ctrn, ctrnS, sizeBuffer, cudaMemcpyDeviceToHost);
+    
+    for(int ix=0; ix < 32*GK_localL[0]*GK_localL[1]*GK_localL[2]*GK_localL[3]; ix++)
+      ((Float *) std_oneD[mu])[ix]  -= ((Float*)h_ctrn)[ix]/(Float)eVal;
+    
+    cudaMemcpy(h_ctrn, ctrnC, sizeBuffer, cudaMemcpyDeviceToHost);
+    
+    for(int ix=0; ix < 32*GK_localL[0]*GK_localL[1]*GK_localL[2]*GK_localL[3]; ix++)
+      ((Float *) std_csvC[mu])[ix] -= ((Float*)h_ctrn)[ix]/(Float)eVal;      
+  }
 
 
-// template<typename Float>
-// void QKXTM_Deflation_Kepler<Float>::ApplyFullOp_3(Float *vec_out, Float *vec_in, QudaInvertParam *param){
-//   if(!isFullOp)
-//     errorQuda("ApplyFullOp function only works with the full Operator. Hint: Check your QKXTM_Deflation_Kepler object initialization.\n");
+  delete Kvec;
+  delete x1;
+  delete tmp1;
+  delete tmp2;
+  free(eigVec);
 
-//   bool use_pc = (!isFullOp);
-
-//   cudaColorSpinorField *in   = NULL;
-//   cudaColorSpinorField *out  = NULL;
-//   cpuColorSpinorField *h_in  = NULL;
-
-//   QKXTM_Vector_Kepler<double> *Kvec = new QKXTM_Vector_Kepler<double>(BOTH,VECTOR);
-
-//   ColorSpinorParam cpuParam(vec_in,*param,GK_localL,!isFullOp);
-
-//   ColorSpinorParam cudaParam(cpuParam, *param);
-//   cudaParam.create = QUDA_ZERO_FIELD_CREATE;
-//   in  = new cudaColorSpinorField(cudaParam);
-//   out = new cudaColorSpinorField(cudaParam);
- 
-//   cpuParam.v = vec_in;
-//   h_in = new cpuColorSpinorField(cpuParam);
-//   *in = *h_in;
-
-//   diracOp->MdagM(*out,*in);
-
-//   Kvec->downloadFromCuda(out,use_pc);
-//   //Kvec->unloadVector();
-//   Kvec->download();
-
-//   memcpy(vec_out,Kvec->H_elem(),bytes_total_length_per_NeV);
-
-//   delete in;
-//   delete out;
-//   delete h_in;
-
-//   printfQuda("### Application of Full Operator 3rd version completed successfully\n");
-// }
-// //==================================================
-
-// template<typename Float>
-// void QKXTM_Deflation_Kepler<Float>::ApplyFullOp_4(Float *vec_out, Float *vec_in, QudaInvertParam *param){
-//   if(!isFullOp)
-//     errorQuda("ApplyFullOp function only works with the full Operator. Hint: Check your QKXTM_Deflation_Kepler object initialization.\n");
-
-//   bool use_pc = (!isFullOp);
-
-//   printfQuda("### Use of preconditioning is %s\n", use_pc ? "true" : "false");
-
-//   cudaColorSpinorField *in    = NULL;
-//   cudaColorSpinorField *out   = NULL;
-//   cpuColorSpinorField  *h_in  = NULL;
-  
-//   QKXTM_Vector_Kepler<double> *Kvec = new QKXTM_Vector_Kepler<double>(BOTH,VECTOR);
-
-//   ColorSpinorParam cpuParam((void*)vec_in,*param,GK_localL,use_pc);
-//   h_in = new cpuColorSpinorField(cpuParam);
-
-//   ColorSpinorParam cudaParam(cpuParam, *param);
-//   cudaParam.create = QUDA_COPY_FIELD_CREATE;
-//   in  = new cudaColorSpinorField(*h_in,cudaParam);
-//   cudaParam.create = QUDA_ZERO_FIELD_CREATE;
-//   out = new cudaColorSpinorField(cudaParam);
-
-//   //  Kvec->unpackVector(vec_in);
-//   //  Kvec->loadVector();
-//   //  Kvec->uploadToCuda(in,use_pc);
-
-//   diracOp->MdagM(*out,*in);
-
-//   Kvec->downloadFromCuda(out,use_pc);
-//   Kvec->download();
-
-//   memcpy(vec_out,Kvec->H_elem(),bytes_total_length_per_NeV);
-
-//   delete in;
-//   delete out;
-//   delete h_in;
-
-//   printfQuda("### Application of Full Operator 4th version completed successfully\n");
-// }
-// //==================================================
-
-// template<typename Float>
-// void QKXTM_Deflation_Kepler<Float>::ApplyFullOp_5(Float *vec_out, Float *vec_in, QudaInvertParam *param){
-//   if(!isFullOp)
-//     errorQuda("ApplyFullOp function only works with the full Operator. Hint: Check your QKXTM_Deflation_Kepler object initialization.\n");
-
-//   bool use_pc = (!isFullOp);
-
-//   printfQuda("### Use of preconditioning is %s\n", use_pc ? "true" : "false");
-
-//   cudaColorSpinorField *in    = NULL;
-//   cudaColorSpinorField *out   = NULL;
-//   cpuColorSpinorField  *h_in  = NULL;
-  
-//   QKXTM_Vector_Kepler<double> *Kvec = new QKXTM_Vector_Kepler<double>(BOTH,VECTOR);
-
-//   ColorSpinorParam cpuParam((void*)vec_in,*param,GK_localL,use_pc);
-//   h_in = new cpuColorSpinorField(cpuParam);
-
-//   ColorSpinorParam cudaParam(cpuParam, *param);
-//   cudaParam.create = QUDA_ZERO_FIELD_CREATE;
-//   in  = new cudaColorSpinorField(cudaParam);
-//   out = new cudaColorSpinorField(cudaParam);
-
-//   Kvec->packVector(vec_in);
-//   Kvec->loadVector();
-//   Kvec->uploadToCuda(in,use_pc);
-
-//   diracOp->MdagM(*out,*in);
-
-//   Kvec->downloadFromCuda(out,use_pc);
-//   //Kvec->unloadVector();
-//   Kvec->download();
-
-//   memcpy(vec_out,Kvec->H_elem(),bytes_total_length_per_NeV);
-
-//   delete in;
-//   delete out;
-//   delete h_in;
-
-//   printfQuda("### Application of Full Operator 5th version completed successfully\n");
-// }
-// //==================================================
-
-// template<typename Float>
-// void QKXTM_Deflation_Kepler<Float>::ApplyFullOp_6(Float *vec_out, Float *vec_in, QudaInvertParam *param){
-//   if(!isFullOp)
-//     errorQuda("ApplyFullOp function only works with the full Operator. Hint: Check your QKXTM_Deflation_Kepler object initialization.\n");
-
-//   bool use_pc = (!isFullOp);
-
-//   printfQuda("### Use of preconditioning is %s\n", use_pc ? "true" : "false");
-
-//   cudaColorSpinorField *in    = NULL;
-//   cudaColorSpinorField *out   = NULL;
-//   cpuColorSpinorField  *h_in  = NULL;
-  
-//   QKXTM_Vector_Kepler<double> *Kvec = new QKXTM_Vector_Kepler<double>(BOTH,VECTOR);
-
-//   ColorSpinorParam cpuParam((void*)vec_in,*param,GK_localL,use_pc);
-//   h_in = new cpuColorSpinorField(cpuParam);
-
-//   ColorSpinorParam cudaParam(cpuParam, *param);
-//   cudaParam.create = QUDA_COPY_FIELD_CREATE;
-//   in  = new cudaColorSpinorField(*h_in,cudaParam);
-//   cudaParam.create = QUDA_ZERO_FIELD_CREATE;
-//   out = new cudaColorSpinorField(cudaParam);
-
-//   //  Kvec->unpackVector(vec_in);
-//   //  Kvec->loadVector();
-//   //  Kvec->uploadToCuda(in,use_pc);
-
-//   diracOp->MdagM(*out,*in);
-
-//   Kvec->downloadFromCuda(out,use_pc);
-//   //  Kvec->download();
-
-//   memcpy(vec_out,Kvec->H_elem(),bytes_total_length_per_NeV);
-
-//   delete in;
-//   delete out;
-//   delete h_in;
-
-//   printfQuda("### Application of Full Operator 6th version completed successfully\n");
-// }
-// //==================================================
+  delete cov;
+  cudaFreeHost(h_ctrn);
+  cudaFree(ctrnS);
+  cudaFree(ctrnC);
+  checkCudaError();
+}
