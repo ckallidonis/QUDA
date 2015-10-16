@@ -3706,45 +3706,41 @@ void QKXTM_Deflation_Kepler<Float>::deflateSrcVec(QKXTM_Vector_Kepler<Float> &ve
   if(!isFullOp) errorQuda("deflateSrcVec: This function only works with the Full Operator\n");
   
   Float *tmp_vec = (Float*) calloc((GK_localVolume)*4*3*2,sizeof(Float)) ;
-  Float *tmp_vec_fin = (Float*) calloc((GK_localVolume)*4*3*2,sizeof(Float)) ;
   Float *out_vec = (Float*) calloc(NeV*2,sizeof(Float)) ;
   Float *out_vec_reduce = (Float*) calloc(NeV*2,sizeof(Float)) ;
   
-  if(tmp_vec == NULL || tmp_vec_fin == NULL || out_vec == NULL || out_vec_reduce == NULL)errorQuda("Error with memory allocation in deflation method\n");
+  if(tmp_vec == NULL || out_vec == NULL || out_vec_reduce == NULL)errorQuda("deflateSrcVec: Error with memory allocation\n");
   
   Float alpha[2] = {1.,0.};
   Float beta[2] = {0.,0.};
+  Float al[2] = {-1.0,0.0};
   int incx = 1;
   int incy = 1;
   long int NN = (GK_localVolume/fullorHalf)*4*3;
 
   Float *ptr_elem = (Float*) calloc((GK_localVolume)*4*3*2,sizeof(Float)) ;
   
-  memcpy(tmp_vec,vec_in.H_elem(),bytes_total_length_per_NeV);
+  memcpy(tmp_vec,vec_in.H_elem(),bytes_total_length_per_NeV); //-C.K. tmp_vec = vec_in
 
   if( typeid(Float) == typeid(float) ){
-    cblas_cgemv(CblasColMajor, CblasConjTrans, NN, NeV, (void*) alpha, (void*) h_elem, NN, tmp_vec, incx, (void*) beta, out_vec, incy ); //-C.K: out_vec = h_elem^dag * tmp_vec -> U^dag * vec_in
-    memset(ptr_elem,0,NN*2*sizeof(Float)); //-C.K_CHECK: This might not be needed
-    MPI_Allreduce(out_vec,out_vec_reduce,NeV*2,MPI_FLOAT,MPI_SUM,MPI_COMM_WORLD);
-    cblas_cgemv(CblasColMajor, CblasNoTrans, NN, NeV, (void*) alpha, (void*) h_elem, NN, out_vec_reduce, incx, (void*) beta, ptr_elem, incy ); //-C.K: ptr_elem = h_elem * out_vec_reduce -> ptr_elem = UU^dag * vec_in
+    cblas_cgemv(CblasColMajor, CblasConjTrans, NN, NeV, (void*) alpha, (void*) h_elem, NN, tmp_vec, incx, (void*) beta, out_vec, incy );       
+    memset(ptr_elem,0,NN*2*sizeof(Float));
+    MPI_Allreduce(out_vec,out_vec_reduce,NeV*2,MPI_FLOAT,MPI_SUM,MPI_COMM_WORLD);                                                              //-C.K: out_vec_reduce = h_elem^dag * tmp_vec -> U^dag * vec_in 
+    cblas_cgemv(CblasColMajor, CblasNoTrans, NN, NeV, (void*) alpha, (void*) h_elem, NN, out_vec_reduce, incx, (void*) beta, ptr_elem, incy ); //-C.K: ptr_elem = h_elem * out_vec_reduce -> ptr_elem = U*U^dag * vec_in
+    cblas_caxpy (NN, (void*) al, (void*) ptr_elem, incx, (void*) tmp_vec, incy);                                                               //-C.K. tmp_vec = -1.0*ptr_elem + tmp_vec -> tmp_vec = vec_in - U*U^dag * vec_in
   }
   else if( typeid(Float) == typeid(double) ){
     cblas_zgemv(CblasColMajor, CblasConjTrans, NN, NeV, (void*) alpha, (void*) h_elem, NN, tmp_vec, incx, (void*) beta, out_vec, incy );
-    memset(ptr_elem,0,NN*2*sizeof(Float)); //-C.K_CHECK: This might not be needed
+    memset(ptr_elem,0,NN*2*sizeof(Float));
     MPI_Allreduce(out_vec,out_vec_reduce,NeV*2,MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);
     cblas_zgemv(CblasColMajor, CblasNoTrans, NN, NeV, (void*) alpha, (void*) h_elem, NN, out_vec_reduce, incx, (void*) beta, ptr_elem, incy );    
+    cblas_zaxpy (NN, (void*) al, (void*) ptr_elem, incx, (void*) tmp_vec, incy);
   }
   
-  for(int v=0;v<NN;v++){
-    tmp_vec_fin[2*NN+0] = tmp_vec[2*NN+0] - ptr_elem[2*NN+0];  //
-    tmp_vec_fin[2*NN+1] = tmp_vec[2*NN+1] - ptr_elem[2*NN+1];  //-C.K: tmp_vec_fin = tmp_vec - ptr_elem -> tmp_vec_fin = vec_in - UU^dag * vec_in
-  }
-
-  vec_defl.packVector((Float*) tmp_vec_fin);
+  vec_defl.packVector((Float*) tmp_vec);
   vec_defl.loadVector();
 
   free(tmp_vec);
-  free(tmp_vec_fin);
   free(out_vec);
   free(out_vec_reduce);
 
