@@ -1865,6 +1865,7 @@ public:
   void polynomialOperator(cudaColorSpinorField &out, const cudaColorSpinorField &in);
   void eigenSolver();
   void Loop_w_One_Der_FullOp_Exact(int n, QudaInvertParam *param, void *gen_uloc,void *std_uloc, void **gen_oneD, void **std_oneD, void **gen_csvC, void **std_csvC);
+  void deflateSrcVec(QKXTM_Vector_Kepler<Float> &vec_defl, QKXTM_Vector_Kepler<Float> &vec_in);
 };
 
 
@@ -3692,9 +3693,68 @@ void dumpLoop_oneD_v2(void *cn, const char *Pref,int accumLevel, int Q_sq, int m
 }
 
 
-//--------------------------------------------------------------------------------------//
-//-C.K. Functions to perform and write the one-end trick for the exact part of the loop-//
-//--------------------------------------------------------------------------------------//
+
+
+//-C.K: This member function performs the operation vec_defl = vec_in - (U U^dag) vec_in
+template <typename Float>
+void QKXTM_Deflation_Kepler<Float>::deflateSrcVec(QKXTM_Vector_Kepler<Float> &vec_defl, QKXTM_Vector_Kepler<Float> &vec_in){
+
+  if(NeV == 0){
+    vec_defl.zero_device();
+    return;
+  }
+  if(!isFullOp) errorQuda("deflateSrcVec: This function only works with the Full Operator\n");
+  
+  Float *tmp_vec = (Float*) calloc((GK_localVolume)*4*3*2,sizeof(Float)) ;
+  Float *tmp_vec_fin = (Float*) calloc((GK_localVolume)*4*3*2,sizeof(Float)) ;
+  Float *out_vec = (Float*) calloc(NeV*2,sizeof(Float)) ;
+  Float *out_vec_reduce = (Float*) calloc(NeV*2,sizeof(Float)) ;
+  
+  if(tmp_vec == NULL || tmp_vec_fin == NULL || out_vec == NULL || out_vec_reduce == NULL)errorQuda("Error with memory allocation in deflation method\n");
+  
+  Float alpha[2] = {1.,0.};
+  Float beta[2] = {0.,0.};
+  int incx = 1;
+  int incy = 1;
+  long int NN = (GK_localVolume/fullorHalf)*4*3;
+
+  Float *ptr_elem = (Float*) calloc((GK_localVolume)*4*3*2,sizeof(Float)) ;
+  
+  memcpy(tmp_vec,vec_in.H_elem(),bytes_total_length_per_NeV);
+
+  if( typeid(Float) == typeid(float) ){
+    cblas_cgemv(CblasColMajor, CblasConjTrans, NN, NeV, (void*) alpha, (void*) h_elem, NN, tmp_vec, incx, (void*) beta, out_vec, incy ); //-C.K: out_vec = h_elem^dag * tmp_vec -> U^dag * vec_in
+    memset(ptr_elem,0,NN*2*sizeof(Float)); //-C.K_CHECK: This might not be needed
+    MPI_Allreduce(out_vec,out_vec_reduce,NeV*2,MPI_FLOAT,MPI_SUM,MPI_COMM_WORLD);
+    cblas_cgemv(CblasColMajor, CblasNoTrans, NN, NeV, (void*) alpha, (void*) h_elem, NN, out_vec_reduce, incx, (void*) beta, ptr_elem, incy ); //-C.K: ptr_elem = h_elem * out_vec_reduce -> ptr_elem = UU^dag * vec_in
+  }
+  else if( typeid(Float) == typeid(double) ){
+    cblas_zgemv(CblasColMajor, CblasConjTrans, NN, NeV, (void*) alpha, (void*) h_elem, NN, tmp_vec, incx, (void*) beta, out_vec, incy );
+    memset(ptr_elem,0,NN*2*sizeof(Float)); //-C.K_CHECK: This might not be needed
+    MPI_Allreduce(out_vec,out_vec_reduce,NeV*2,MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);
+    cblas_zgemv(CblasColMajor, CblasNoTrans, NN, NeV, (void*) alpha, (void*) h_elem, NN, out_vec_reduce, incx, (void*) beta, ptr_elem, incy );    
+  }
+  
+  for(int v=0;v<NN;v++){
+    tmp_vec_fin[2*NN+0] = tmp_vec[2*NN+0] - ptr_elem[2*NN+0];  //
+    tmp_vec_fin[2*NN+1] = tmp_vec[2*NN+1] - ptr_elem[2*NN+1];  //-C.K: tmp_vec_fin = tmp_vec - ptr_elem -> tmp_vec_fin = vec_in - UU^dag * vec_in
+  }
+
+  vec_defl.packVector((Float*) tmp_vec_fin);
+  vec_defl.loadVector();
+
+  free(tmp_vec);
+  free(tmp_vec_fin);
+  free(out_vec);
+  free(out_vec_reduce);
+
+  printfQuda("deflateSrcVec: Deflation of the source vector completed succesfully\n");
+}
+
+
+//------------------------------------------------------------------//
+//- C.K. Functions to perform and write the exact part of the loop -//
+//------------------------------------------------------------------//
 
 template<typename Float>
 void QKXTM_Deflation_Kepler<Float>::Loop_w_One_Der_FullOp_Exact(int n, QudaInvertParam *param, void *gen_uloc,void *std_uloc, void **gen_oneD, void **std_oneD, void **gen_csvC, void **std_csvC){

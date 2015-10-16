@@ -2582,7 +2582,6 @@ void calcEigenVectors_loop_wOneD_FullOp(void **gaugeToPlaquette, QudaInvertParam
   cudaMemset(gen_uloc, 0, sizeof(double)*2*16*GK_localVolume);
   cudaMemset(tmp_loop, 0, sizeof(double)*2*16*GK_localVolume);
   cudaDeviceSynchronize();
-  //------------------------------------------------------------------------------------------------
 
   //- Allocate memory for one-Derivative and conserved current loops
   void **std_oneD;
@@ -2619,6 +2618,7 @@ void calcEigenVectors_loop_wOneD_FullOp(void **gaugeToPlaquette, QudaInvertParam
   cudaDeviceSynchronize();
   //------------------------------------------------------------------------------------------------
 
+
   //=========================================================================================//
   //=================================  E X A C T   P A R T  =================================//
   //=========================================================================================//
@@ -2626,17 +2626,14 @@ void calcEigenVectors_loop_wOneD_FullOp(void **gaugeToPlaquette, QudaInvertParam
   QKXTM_Deflation_Kepler<double> *deflation = new QKXTM_Deflation_Kepler<double>(param,arpackInfo);
   deflation->printInfo();
   
-  // Calculate the eigenVectors
-  t1 = MPI_Wtime();
-  
+  //- Calculate the eigenVectors
+  t1 = MPI_Wtime(); 
   deflation->eigenSolver();
   deflation->MapEvenOddToFull();
-  
   t2 = MPI_Wtime();
   printfQuda("calcEigenVectors_loop_wOneD_FullOp TIME REPORT: EigenVector Calculation: %f sec\n",t2-t1);
-  //---------------------------
   
-  //- Perform the one-end trick for the exact part
+  //- Calculate the exact part of the loop
   for(int n=0;n<NeV;n++){
     t1 = MPI_Wtime();
     deflation->Loop_w_One_Der_FullOp_Exact(n, param, gen_uloc, std_uloc, gen_oneD, std_oneD, gen_csvC, std_csvC);
@@ -2750,7 +2747,7 @@ void calcEigenVectors_loop_wOneD_FullOp(void **gaugeToPlaquette, QudaInvertParam
   SolverParam solverParam(*param);
   Solver *solve = Solver::create(solverParam, m, mSloppy, mPre, profileInvert);
   QKXTM_Vector_Kepler<double> *K_vector = new QKXTM_Vector_Kepler<double>(BOTH,VECTOR);
-  QKXTM_Vector_Kepler<double> *K_guess = new QKXTM_Vector_Kepler<double>(BOTH,VECTOR);
+  QKXTM_Vector_Kepler<double> *K_srcdef = new QKXTM_Vector_Kepler<double>(BOTH,VECTOR);
 
   //- Prepare the loops for the stochastic part
   cudaMemset(std_uloc, 0, sizeof(double)*2*16*GK_localVolume);
@@ -2779,14 +2776,20 @@ void calcEigenVectors_loop_wOneD_FullOp(void **gaugeToPlaquette, QudaInvertParam
     // in is reference to the b but for a parity sinlet
     // out is reference to the x but for a parity sinlet
     cudaColorSpinorField *tmp_up = new cudaColorSpinorField(*in);
-    dirac.Mdag(*in, *tmp_up);
+    dirac.Mdag(*in, *tmp_up);  // in = M^dag b
     delete tmp_up;
-    // now the the source vector b is ready to perform deflation and find the initial guess
+    // now the the source vector b is ready for deflation
     K_vector->downloadFromCuda(in,pc_solve);
     K_vector->download();
-    deflation->deflateVector(*K_guess,*K_vector);
-    K_guess->uploadToCuda(out,pc_solve); // initial guess is ready
-    //  zeroCuda(*out); // remove it later , just for test
+
+    // Deflate the source vector
+    deflation->deflateSrcVec(*K_srcdef,*K_vector);  
+    K_srcdef->uploadToCuda(in,pc_solve); // Source Vector is deflated and put into "in", in = M^dag b - UU^dag M^dag b
+
+    //    deflation->deflateVector(*K_srcdef,*K_vector);
+    //    K_srcdef->uploadToCuda(out,pc_solve); // initial guess is ready
+
+    zeroCuda(*out); // Set the initial guess to zero!
     (*solve)(*out,*in);
     dirac.reconstruct(*x,*b,param->solution_type);
     oneEndTrick_w_One_Der<double>(*x,*tmp3,*tmp4,param, gen_uloc, std_uloc, gen_oneD, std_oneD, gen_csvC, std_csvC);
@@ -2842,7 +2845,7 @@ void calcEigenVectors_loop_wOneD_FullOp(void **gaugeToPlaquette, QudaInvertParam
   delete d;
   delete dSloppy;
   delete dPre;
-  delete K_guess;
+  delete K_srcdef;
   delete K_vector;
   delete K_gauge;
   delete deflation;
