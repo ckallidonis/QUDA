@@ -2639,9 +2639,9 @@ void calcEigenVectors_loop_wOneD_FullOp(void **gaugeToPlaquette, QudaInvertParam
   //- Perform the one-end trick for the exact part
   for(int n=0;n<NeV;n++){
     t1 = MPI_Wtime();
-    deflation->oneEndTrick_w_One_Der_FullOp_Exact(n, param, gen_uloc, std_uloc, gen_oneD, std_oneD, gen_csvC, std_csvC);
+    deflation->Loop_w_One_Der_FullOp_Exact(n, param, gen_uloc, std_uloc, gen_oneD, std_oneD, gen_csvC, std_csvC);
     t2 = MPI_Wtime();
-    printfQuda("calcEigenVectors_loop_wOneD_FullOp TIME REPORT: One-end trick for EigenVector %d: %f sec\n",n,t2-t1);
+    printfQuda("calcEigenVectors_loop_wOneD_FullOp TIME REPORT: Exact part for eigenvector %d done in: %f sec\n",n,t2-t1);
   }  
   
   //- Do the FFT and dump the exact part

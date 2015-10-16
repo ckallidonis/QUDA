@@ -1864,7 +1864,7 @@ public:
   // for QUDA conventions
   void polynomialOperator(cudaColorSpinorField &out, const cudaColorSpinorField &in);
   void eigenSolver();
-  void oneEndTrick_w_One_Der_FullOp_Exact(int n, QudaInvertParam *param, void *gen_uloc,void *std_uloc, void **gen_oneD, void **std_oneD, void **gen_csvC, void **std_csvC);
+  void Loop_w_One_Der_FullOp_Exact(int n, QudaInvertParam *param, void *gen_uloc,void *std_uloc, void **gen_oneD, void **std_oneD, void **gen_csvC, void **std_csvC);
 };
 
 
@@ -3697,7 +3697,7 @@ void dumpLoop_oneD_v2(void *cn, const char *Pref,int accumLevel, int Q_sq, int m
 //--------------------------------------------------------------------------------------//
 
 template<typename Float>
-void QKXTM_Deflation_Kepler<Float>::oneEndTrick_w_One_Der_FullOp_Exact(int n, QudaInvertParam *param, void *gen_uloc,void *std_uloc, void **gen_oneD, void **std_oneD, void **gen_csvC, void **std_csvC){
+void QKXTM_Deflation_Kepler<Float>::Loop_w_One_Der_FullOp_Exact(int n, QudaInvertParam *param, void *gen_uloc,void *std_uloc, void **gen_oneD, void **std_oneD, void **gen_csvC, void **std_csvC){
 
   if(!isFullOp) errorQuda("oneEndTrick_w_One_Der_FullOp_Exact: This function only works with the full operator\n");
 
