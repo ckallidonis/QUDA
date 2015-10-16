@@ -2767,7 +2767,6 @@ void QKXTM_Deflation_Kepler<Float>::eigenSolver(){
   return;
 }
 
-
 template<typename Float>
 void QKXTM_Deflation_Kepler<Float>::rotateFromChiralToUKQCD(){
   if(NeV == 0) return;
@@ -3693,41 +3692,9 @@ void dumpLoop_oneD_v2(void *cn, const char *Pref,int accumLevel, int Q_sq, int m
 }
 
 
-//  _part of DeflateVector Function, was right after defining "ptr_elem"
-//   if( typeid(Float) == typeid(float) ){
-
-//     //    for(int i = 0 ; i < NeV ; i++)
-//     //      cblas_cdotc_sub(NN,H_elem()[i],incx,ptr_elem,incy,&(out_vec[2*i]));
-//     cblas_cgemv(CblasColMajor, 'C', NN, NeV, (void*)alpha, (void *)h_elem, NN, ptr_elem, incx, (void *)beta, out_vec, incy); // 
-
-//     MPI_Allreduce(out_vec,out_vec_reduce,NeV*2,MPI_FLOAT,MPI_SUM,MPI_COMM_WORLD);
-//     for(int i = 0 ; i < NeV ; i++){
-//       out_vec_reduce[i*2+0] /= eigenValues[i];
-//       out_vec_reduce[i*2+1] /= eigenValues[i];
-//     }
-
-//     memset(ptr_elem,0,(GK_localVolume/2)*4*3*2*sizeof(Float));
-    
-//     for(int i = 0 ; i < NeV ; i++)
-//       cblas_caxpy(NN,&(out_vec_reduce[2*i]),H_elem()[i],incx,ptr_elem,incy);
-//   }
-//   else if ( typeid(Float) == typeid(double) ){
-
-//     for(int i = 0 ; i < NeV ; i++)
-//       cblas_zdotc_sub(NN,H_elem()[i],incx,ptr_elem,incy,&(out_vec[2*i]));
-
-//     MPI_Allreduce(out_vec,out_vec_reduce,NeV*2,MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);
-//     for(int i = 0 ; i < NeV ; i++){
-//       out_vec_reduce[i*2+0] /= eigenValues[i];
-//       out_vec_reduce[i*2+1] /= eigenValues[i];
-//     }
-
-//     memset(ptr_elem,0,(GK_localVolume/2)*4*3*2*sizeof(Float));
-
-//     for(int i = 0 ; i < NeV ; i++)
-//       cblas_zaxpy(NN,&(out_vec_reduce[2*i]),H_elem()[i],incx,ptr_elem,incy);
-//   }
-
+//--------------------------------------------------------------------------------------//
+//-C.K. Functions to perform and write the one-end trick for the exact part of the loop-//
+//--------------------------------------------------------------------------------------//
 
 template<typename Float>
 void QKXTM_Deflation_Kepler<Float>::oneEndTrick_w_One_Der_FullOp_Exact(int n, QudaInvertParam *param, void *gen_uloc,void *std_uloc, void **gen_oneD, void **std_oneD, void **gen_csvC, void **std_csvC){
@@ -3900,3 +3867,123 @@ void QKXTM_Deflation_Kepler<Float>::oneEndTrick_w_One_Der_FullOp_Exact(int n, Qu
   cudaFree(ctrnC);
   checkCudaError();
 }
+
+
+template<typename Float>
+void dumpLoop_ultraLocal_Exact(void *cn, const char *Pref, int Q_sq, int flag){
+  int **mom = allocateMomMatrix(Q_sq);
+  FILE *ptr;
+  char file_name[257];
+  
+  switch(flag){
+  case 0:
+    sprintf(file_name, "%s_Scalar.loop.%d_%d",Pref,comm_size(), comm_rank());
+    break;
+  case 1:
+    sprintf(file_name, "%s_dOp.loop.%d_%d",Pref,comm_size(), comm_rank());
+    break;
+  }
+  ptr = fopen(file_name,"w");
+  
+  if(ptr == NULL) errorQuda("Error open files to write loops\n");
+  long int Vol = GK_localL[0]*GK_localL[1]*GK_localL[2];
+  for(int ip=0; ip < Vol; ip++)
+    for(int lt=0; lt < GK_localL[3]; lt++){
+      if ((mom[ip][0]*mom[ip][0] + mom[ip][1]*mom[ip][1] + mom[ip][2]*mom[ip][2]) <= Q_sq){
+	int t = lt+comm_coords(default_topo)[3]*GK_localL[3];
+	for(int gm=0; gm<16; gm++){                                                             
+	  fprintf(ptr, "%02d %02d %+d %+d %+d %+16.15e %+16.15e\n",t, gm, mom[ip][0], mom[ip][1], mom[ip][2],
+		  ((Float*)cn)[0+2*ip+2*Vol*lt+2*Vol*GK_localL[3]*gm], ((Float*)cn)[1+2*ip+2*Vol*lt+2*Vol*GK_localL[3]*gm]);
+	}
+      }
+    }
+
+  fclose(ptr);
+  for(int ip=0; ip<Vol; ip++)
+    free(mom[ip]);
+  free(mom);
+}
+
+
+template<typename Float>
+void dumpLoop_oneD_Exact(void *cn, const char *Pref, int Q_sq, int muDir, int flag){
+  int **mom = allocateMomMatrix(Q_sq);
+  FILE *ptr;
+  char file_name[257];
+  
+  switch(flag){
+  case 0:
+    sprintf(file_name, "%s_Loops.loop.%d_%d",Pref,comm_size(), comm_rank());
+    break;
+  case 1:
+    sprintf(file_name, "%s_LpsDw.loop.%d_%d",Pref,comm_size(), comm_rank());
+    break;
+  case 2:
+    sprintf(file_name, "%s_LoopsCv.loop.%d_%d",Pref,comm_size(), comm_rank());
+    break;
+  case 3:
+    sprintf(file_name, "%s_LpsDwCv.loop.%d_%d",Pref,comm_size(), comm_rank());
+    break;
+  }
+  if(muDir == 0)
+    ptr = fopen(file_name,"w");
+  else
+    ptr = fopen(file_name,"a");
+  
+  if(ptr == NULL) errorQuda("Error open files to write loops\n");
+  long int Vol = GK_localL[0]*GK_localL[1]*GK_localL[2];
+  for(int ip=0; ip < Vol; ip++)
+    for(int lt=0; lt < GK_localL[3]; lt++){
+      if ((mom[ip][0]*mom[ip][0] + mom[ip][1]*mom[ip][1] + mom[ip][2]*mom[ip][2]) <= Q_sq){
+	int t  = lt+comm_coords(default_topo)[3]*GK_localL[3];
+	for(int gm=0; gm<16; gm++){                                                             
+	  fprintf(ptr, "%02d %02d %02d %+d %+d %+d %+16.15e %+16.15e\n",t, gm, muDir ,mom[ip][0], mom[ip][1], mom[ip][2],
+		  0.25*(((Float*)cn)[0+2*ip+2*Vol*lt+2*Vol*GK_localL[3]*gm]), 0.25*(((Float*)cn)[1+2*ip+2*Vol*lt+2*Vol*GK_localL[3]*gm]));
+	}
+      }
+    }
+
+  fclose(ptr);
+  for(int ip=0; ip<Vol; ip++)
+    free(mom[ip]);
+  free(mom);
+}
+
+
+
+//  _part of DeflateVector Function, was right after defining "ptr_elem"
+//   if( typeid(Float) == typeid(float) ){
+
+//     //    for(int i = 0 ; i < NeV ; i++)
+//     //      cblas_cdotc_sub(NN,H_elem()[i],incx,ptr_elem,incy,&(out_vec[2*i]));
+//     cblas_cgemv(CblasColMajor, 'C', NN, NeV, (void*)alpha, (void *)h_elem, NN, ptr_elem, incx, (void *)beta, out_vec, incy); // 
+
+//     MPI_Allreduce(out_vec,out_vec_reduce,NeV*2,MPI_FLOAT,MPI_SUM,MPI_COMM_WORLD);
+//     for(int i = 0 ; i < NeV ; i++){
+//       out_vec_reduce[i*2+0] /= eigenValues[i];
+//       out_vec_reduce[i*2+1] /= eigenValues[i];
+//     }
+
+//     memset(ptr_elem,0,(GK_localVolume/2)*4*3*2*sizeof(Float));
+    
+//     for(int i = 0 ; i < NeV ; i++)
+//       cblas_caxpy(NN,&(out_vec_reduce[2*i]),H_elem()[i],incx,ptr_elem,incy);
+//   }
+//   else if ( typeid(Float) == typeid(double) ){
+
+//     for(int i = 0 ; i < NeV ; i++)
+//       cblas_zdotc_sub(NN,H_elem()[i],incx,ptr_elem,incy,&(out_vec[2*i]));
+
+//     MPI_Allreduce(out_vec,out_vec_reduce,NeV*2,MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);
+//     for(int i = 0 ; i < NeV ; i++){
+//       out_vec_reduce[i*2+0] /= eigenValues[i];
+//       out_vec_reduce[i*2+1] /= eigenValues[i];
+//     }
+
+//     memset(ptr_elem,0,(GK_localVolume/2)*4*3*2*sizeof(Float));
+
+//     for(int i = 0 ; i < NeV ; i++)
+//       cblas_zaxpy(NN,&(out_vec_reduce[2*i]),H_elem()[i],incx,ptr_elem,incy);
+//   }
+
+

@@ -2636,10 +2636,7 @@ void calcEigenVectors_loop_wOneD_FullOp(void **gaugeToPlaquette, QudaInvertParam
   printfQuda("calcEigenVectors_loop_wOneD_FullOp TIME REPORT: EigenVector Calculation: %f sec\n",t2-t1);
   //---------------------------
   
-  //- Perform the one-end trick
-
-
-
+  //- Perform the one-end trick for the exact part
   for(int n=0;n<NeV;n++){
     t1 = MPI_Wtime();
     deflation->oneEndTrick_w_One_Der_FullOp_Exact(n, param, gen_uloc, std_uloc, gen_oneD, std_oneD, gen_csvC, std_csvC);
@@ -2652,23 +2649,23 @@ void calcEigenVectors_loop_wOneD_FullOp(void **gaugeToPlaquette, QudaInvertParam
   t1 = MPI_Wtime();
 
   doCudaFFT_v2<double>(std_uloc,tmp_loop);
-  //dumpLoop_ultraLocal_FullOp<double>(tmp_loop,loop_exact_fname,is+1,info.Q_sq,0); // Std. Ultra-local - Scalar
+  dumpLoop_ultraLocal_Exact<double>(tmp_loop,loop_exact_fname,info.Q_sq,0); // Std. Ultra-local - Scalar
   
   doCudaFFT_v2<double>(gen_uloc,tmp_loop);
-  //dumpLoop_ultraLocal_FullOp<double>(tmp_loop,loop_exact_fname,is+1,info.Q_sq,1); // Gen. Ultra-local - dOp
+  dumpLoop_ultraLocal_Exact<double>(tmp_loop,loop_exact_fname,info.Q_sq,1); // Gen. Ultra-local - dOp
   
   for(int mu = 0 ; mu < 4 ; mu++){
     doCudaFFT_v2<double>(std_oneD[mu],tmp_loop);
-    //dumpLoop_oneD_FullOp<double>(tmp_loop,loop_exact_fname,is+1,info.Q_sq,mu,0); // Std. oneD - Loops
+    dumpLoop_oneD_Exact<double>(tmp_loop,loop_exact_fname,info.Q_sq,mu,0); // Std. oneD - Loops
     
     doCudaFFT_v2<double>(gen_oneD[mu],tmp_loop);
-    //dumpLoop_oneD_FullOp<double>(tmp_loop,loop_exact_fname,is+1,info.Q_sq,mu,1); // Gen. oneD - LpsDw
+    dumpLoop_oneD_Exact<double>(tmp_loop,loop_exact_fname,info.Q_sq,mu,1); // Gen. oneD - LpsDw
     
     doCudaFFT_v2<double>(std_csvC[mu],tmp_loop);
-    //dumpLoop_oneD_FullOp<double>(tmp_loop,loop_exact_fname,is+1,info.Q_sq,mu,2); // Std. Conserved current - LoopsCv
+    dumpLoop_oneD_Exact<double>(tmp_loop,loop_exact_fname,info.Q_sq,mu,2); // Std. Conserved current - LoopsCv
     
     doCudaFFT_v2<double>(gen_csvC[mu],tmp_loop);
-    //dumpLoop_oneD_FullOp<double>(tmp_loop,loop_exact_fname,is+1,info.Q_sq,mu,3); // Gen. Conserved current - LpsDwCv
+    dumpLoop_oneD_Exact<double>(tmp_loop,loop_exact_fname,info.Q_sq,mu,3); // Gen. Conserved current - LpsDwCv
   }
 
   t2 = MPI_Wtime();
