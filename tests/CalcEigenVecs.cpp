@@ -229,15 +229,20 @@ int main(int argc, char **argv)
   if(isEven) inv_param.matpc_type = QUDA_MATPC_EVEN_EVEN_ASYMMETRIC;
   else inv_param.matpc_type = QUDA_MATPC_ODD_ODD_ASYMMETRIC;
 
-  if(isFullOp) inv_param.solution_type = QUDA_MAT_SOLUTION;
-  else inv_param.solution_type = QUDA_MATPC_SOLUTION;
-  
+  if(isFullOp){
+    inv_param.solution_type = QUDA_MAT_SOLUTION;
+    inv_param.solve_type = QUDA_NORMOP_SOLVE;
+  }
+  else{
+    inv_param.solution_type = QUDA_MATPC_SOLUTION;
+    inv_param.solve_type = QUDA_NORMOP_PC_SOLVE;
+  }  
 
   inv_param.dagger = QUDA_DAG_NO;
   inv_param.mass_normalization = QUDA_MASS_NORMALIZATION;
   inv_param.solver_normalization = QUDA_DEFAULT_NORMALIZATION;
 
-  inv_param.solve_type = QUDA_NORMOP_SOLVE;
+  
 
   inv_param.pipeline = 0;
 

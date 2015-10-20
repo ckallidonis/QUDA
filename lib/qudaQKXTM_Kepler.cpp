@@ -1846,6 +1846,8 @@ public:
   Float* EigenValues() const { return eigenValues; }
   size_t Bytes() const { return bytes_total_length; }
   size_t Bytes_Per_NeV() const { return bytes_total_length_per_NeV; }
+  long int Length() const { return total_length; }
+  long int Length_Per_NeV() const { return total_length_per_NeV; }
   int NeVs() const { return NeV;}
   void printInfo();
 
@@ -1854,7 +1856,7 @@ public:
   void writeEigenVectors_ASCII(char *filename);
   void readEigenValues(char *filename);
   void deflateVector(QKXTM_Vector_Kepler<Float> &vec_defl, QKXTM_Vector_Kepler<Float> &vec_in);
-  void ApplyFullOp(Float *vec_out, Float *vec_in, QudaInvertParam *param);
+  void ApplyOp(Float *vec_out, Float *vec_in, QudaInvertParam *param);
   void MapEvenOddToFull();
   void MapEvenOddToFull(int i);
   void copyEigenVectorToQKXTM_Vector_Kepler(int eigenVector_id, Float *vec);
@@ -1945,8 +1947,6 @@ QKXTM_Deflation_Kepler<Float>::QKXTM_Deflation_Kepler(QudaInvertParam *param, qu
   DiracParam diracParam;
   setDiracParam(diracParam,param,!isFullOp);
   diracOp = Dirac::create(diracParam);
-  //  Dirac *diracOp = Dirac::create(diracParam);
-  //  matDiracOp = new DiracMdagM(diracMat);
 }
 
 template<typename Float>
@@ -1955,12 +1955,7 @@ QKXTM_Deflation_Kepler<Float>::~QKXTM_Deflation_Kepler(){
 
   free(h_elem);
   free(eigenValues);
-  eigenValues=NULL;
-  h_elem=NULL;
-  if(isFullOp){
-    delete diracOp;
-    //    delete matDiracOp;
-  }
+  delete diracOp;
 }
 
 template<typename Float>
@@ -1978,50 +1973,96 @@ void QKXTM_Deflation_Kepler<Float>::printInfo(){
   printfQuda("  The Size of Krylov space is %d\n",NkV);
 
   printfQuda("  Allocated Gb for the eigenVectors space for each node are %lf and the pointer is %p\n",NeV * ( (double)bytes_total_length_per_NeV/((double) 1024.*1024.*1024.) ),h_elem);
-
   printfQuda("==============================\n");
 }
 //==================================================
 
 template<typename Float>
-void QKXTM_Deflation_Kepler<Float>::ApplyFullOp(Float *vec_out, Float *vec_in, QudaInvertParam *param){
-  if(!isFullOp){
-    errorQuda("ApplyFullOp: This function only works with the full Operator. Hint: Check your QKXTM_Deflation_Kepler object initialization.\n");
+void QKXTM_Deflation_Kepler<Float>::ApplyOp(Float *vec_out, Float *vec_in, QudaInvertParam *param){
+
+  bool opFlag;
+
+  if(isFullOp){
+    printfQuda("Applying the Full Operator\n");
+    opFlag = false;
+
+    cudaColorSpinorField *in    = NULL;
+    cudaColorSpinorField *out   = NULL;
+    
+    QKXTM_Vector_Kepler<double> *Kvec = new QKXTM_Vector_Kepler<double>(BOTH,VECTOR);
+
+    ColorSpinorParam cpuParam((void*)vec_in,*param,GK_localL,opFlag);
+    ColorSpinorParam cudaParam(cpuParam, *param);
+
+    cudaParam.create = QUDA_ZERO_FIELD_CREATE;
+    in  = new cudaColorSpinorField(cudaParam);
+    out = new cudaColorSpinorField(cudaParam);
+    
+    Kvec->packVector(vec_in);
+    Kvec->loadVector();
+    Kvec->uploadToCuda(in,opFlag);
+    
+    diracOp->MdagM(*out,*in);
+    
+    Kvec->downloadFromCuda(out,opFlag);
+    Kvec->unloadVector();
+    Kvec->unpackVector();
+    
+    memcpy(vec_out,Kvec->H_elem(),bytes_total_length_per_NeV);
+
+    delete in;
+    delete out;
+    delete Kvec;
+  }
+  else{
+    printfQuda("Applying the %s Operator\n",isEv ? "Even-Even" : "Odd-Odd");
+
+    cudaColorSpinorField *in = NULL;
+    cudaColorSpinorField *out = NULL;
+
+    opFlag = isEv;
+    bool pc_solution = (param->solution_type == QUDA_MATPC_SOLUTION) ||
+      (param->solution_type == QUDA_MATPCDAG_MATPC_SOLUTION);
+
+    ColorSpinorParam cpuParam((void*)vec_in,*param,GK_localL,pc_solution);
+
+    ColorSpinorField *h_b = (param->input_location == QUDA_CPU_FIELD_LOCATION) ?
+      static_cast<ColorSpinorField*>(new cpuColorSpinorField(cpuParam)) :
+      static_cast<ColorSpinorField*>(new cudaColorSpinorField(cpuParam));
+
+    cpuParam.v = vec_out;
+    ColorSpinorField *h_x = (param->output_location == QUDA_CPU_FIELD_LOCATION) ?
+      static_cast<ColorSpinorField*>(new cpuColorSpinorField(cpuParam)) :
+      static_cast<ColorSpinorField*>(new cudaColorSpinorField(cpuParam));
+
+    ColorSpinorParam cudaParam(cpuParam, *param);
+    cudaParam.create = QUDA_COPY_FIELD_CREATE;
+    in = new cudaColorSpinorField(*h_b, cudaParam);
+    cudaParam.create = QUDA_ZERO_FIELD_CREATE;
+    out = new cudaColorSpinorField(cudaParam);
+
+    QKXTM_Vector_Kepler<double> *Kvec = new QKXTM_Vector_Kepler<double>(BOTH,VECTOR);
+
+    Kvec->packVector(vec_in);
+    Kvec->loadVector();
+    Kvec->uploadToCuda(in,opFlag);
+    
+    diracOp->MdagM(*out,*in);
+    
+    Kvec->downloadFromCuda(out,opFlag);
+    Kvec->unloadVector();
+    Kvec->unpackVector();
+    
+    memcpy(vec_out,Kvec->H_elem(),bytes_total_length_per_NeV);
+
+    delete in;
+    delete out;
+    delete h_b;
+    delete h_x;
+    delete Kvec;
   }
 
-  bool use_pc = (!isFullOp);
-
-  //  printfQuda("### Use of preconditioning is %s\n", use_pc ? "true" : "false");
-
-  cudaColorSpinorField *in    = NULL;
-  cudaColorSpinorField *out   = NULL;
-  
-  QKXTM_Vector_Kepler<double> *Kvec = new QKXTM_Vector_Kepler<double>(BOTH,VECTOR);
-
-  ColorSpinorParam cpuParam((void*)vec_in,*param,GK_localL,use_pc);
-
-  ColorSpinorParam cudaParam(cpuParam, *param);
-
-  cudaParam.create = QUDA_ZERO_FIELD_CREATE;
-  in  = new cudaColorSpinorField(cudaParam);
-  out = new cudaColorSpinorField(cudaParam);
-  
-  Kvec->packVector(vec_in);
-  Kvec->loadVector();
-  Kvec->uploadToCuda(in,use_pc);
-  
-  diracOp->MdagM(*out,*in);
-
-  Kvec->downloadFromCuda(out,use_pc);
-  Kvec->unloadVector();
-  Kvec->unpackVector();
-
-  memcpy(vec_out,Kvec->H_elem(),bytes_total_length_per_NeV);
-
-  delete in;
-  delete out;
-
-  printfQuda("ApplyFyllOp: Completed successfully\n");
+  printfQuda("ApplyOp: Completed successfully\n");
 }
 //==================================================
 
@@ -2318,8 +2359,7 @@ void QKXTM_Deflation_Kepler<Float>::writeEigenVectors_ASCII(char *prefix_path){
     fid = fopen(filename,"w");		  
     for(int ir = 0 ; ir < n_elem_write ; ir++)
       fprintf(fid,"%+e %+e\n",h_elem[nev*total_length_per_NeV + ir*2 + 0], h_elem[nev*total_length_per_NeV + ir*2 + 1]);
-		
-    
+
     fclose(fid);
   }
 }
@@ -3744,7 +3784,7 @@ void QKXTM_Deflation_Kepler<Float>::deflateSrcVec(QKXTM_Vector_Kepler<Float> &ve
   free(out_vec);
   free(out_vec_reduce);
 
-  printfQuda("deflateSrcVec: Deflation of the source vector completed succesfully\n");
+  //  printfQuda("deflateSrcVec: Deflation of the source vector completed succesfully\n");
 }
 
 

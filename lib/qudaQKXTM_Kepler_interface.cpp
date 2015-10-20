@@ -2448,9 +2448,9 @@ void DeflateAndInvert_threepTwop(void **gaugeSmeared, void **gauge, QudaInvertPa
 }
 
 
-//=================================================================================================//
-//========================= F U L L   O P E R A T O R   F U N C T I O N S =========================//
-//=================================================================================================//
+//=============================================================================================//
+//========================= E I G E N S O L V E R   F U N C T I O N S =========================//
+//=============================================================================================//
 
 
 void calcEigenVectors(QudaInvertParam *param , qudaQKXTM_arpackInfo arpackInfo){
@@ -2471,48 +2471,47 @@ void calcEigenVectors_Check(QudaInvertParam *param , qudaQKXTM_arpackInfo arpack
 
   QKXTM_Deflation_Kepler<double> *deflation = new QKXTM_Deflation_Kepler<double>(param,arpackInfo);
 
-  int total_length_per_NeV = GK_localVolume*4*3*2;
-  int bytes_total_length_per_NeV = total_length_per_NeV*sizeof(double);
+  long int length_per_NeV = deflation->Length_Per_NeV();
+  size_t bytes_length_per_NeV = deflation->Bytes_Per_NeV();
 
-  double *vec_in = (double*) malloc(bytes_total_length_per_NeV);
-  double *vec_out = (double*) malloc(bytes_total_length_per_NeV);
+  double *vec_in  = (double*) malloc(bytes_length_per_NeV);
+  double *vec_out = (double*) malloc(bytes_length_per_NeV);
+
+  printfQuda("The pointer to vec in is %p\n",vec_in);
+  printfQuda("The pointer to vec out is %p\n",vec_out);
 
   FILE *ptr_evecs;
   char filename[257];
   char filename2[257];
 
-  int n_elem_write = GK_localVolume*4*3;
+  int n_elem_write = length_per_NeV/2;
 
   //-Calculate the eigenvectors
   deflation->printInfo();
   deflation->eigenSolver();
 
-  for(int i=0;i<arpackInfo.nEv;i++){
-    for(int k=0;k<240;k++){
-      printfQuda("BEFORE ANYTHING: i = %04d, k = %04d: %+e  %+e\n",i,k,deflation->H_elem()[i*total_length_per_NeV+2*k],deflation->H_elem()[i*total_length_per_NeV+2*k+1]);
-    }
-    printfQuda("\n\n");
-  }
+//   for(int i=0;i<arpackInfo.nEv;i++){
+//     for(int k=0;k<240;k++){
+//       printfQuda("BEFORE ANYTHING: i = %04d, k = %04d: %+e  %+e\n",i,k,deflation->H_elem()[i*length_per_NeV+2*k],deflation->H_elem()[i*length_per_NeV+2*k+1]);
+//     }
+//     printfQuda("\n\n");
+//   }
 
   sprintf(filename2,"h_elem_evenodd");
   deflation->writeEigenVectors_ASCII(filename2);
 
-  deflation->MapEvenOddToFull();
+  if(arpackInfo.isFullOp) deflation->MapEvenOddToFull();
 
   for(int i=0;i<arpackInfo.nEv;i++){
     sprintf(filename,"eigenvecs_applyOp.%04d.txt",i);
     if( (ptr_evecs=fopen(filename,"w"))==NULL ) errorQuda("Cannot open filename for test\n");
 
-    memset(vec_in ,0,bytes_total_length_per_NeV);
-    memset(vec_out,0,bytes_total_length_per_NeV);
+    memset(vec_in ,0,bytes_length_per_NeV);
+    memset(vec_out,0,bytes_length_per_NeV);
     deflation->copyEigenVectorToQKXTM_Vector_Kepler(i,vec_in);
 
-    deflation->ApplyFullOp(vec_out,vec_in,param);
+    deflation->ApplyOp(vec_out,vec_in,param);
 
-    //deflation->MapEvenOddToFull(i);
-    //    memset(vec_in ,0,bytes_total_length_per_NeV);
-    //    deflation->copyEigenVectorToQKXTM_Vector_Kepler(i,vec_in);
-     
     for(int k=0;k<n_elem_write;k++){
       fprintf(ptr_evecs,"i = %04d , k = %10d: %+e  %+e     %+e  %+e     %7.5f  %7.5f\n",i,k,vec_out[2*k],vec_out[2*k+1],vec_in[2*k],vec_in[2*k+1],
 	      vec_out[2*k]/(deflation->EigenValues()[2*i]*vec_in[2*k]),vec_out[2*k+1]/(deflation->EigenValues()[2*i]*vec_in[2*k+1]));
@@ -2523,11 +2522,17 @@ void calcEigenVectors_Check(QudaInvertParam *param , qudaQKXTM_arpackInfo arpack
   sprintf(filename2,"h_elem_full");
   deflation->writeEigenVectors_ASCII(filename2);
 
+  printfQuda("Calculation and Checking of EigenVectors completed succesfully 1\n");
+
   free(vec_in);
   free(vec_out);
-  delete deflation;
-}
 
+  printfQuda("Calculation and Checking of EigenVectors completed succesfully 2\n");
+
+  delete deflation;
+
+  printfQuda("Calculation and checking of EigenVectors completed succesfully\n");
+}
 
 void calcEigenVectors_loop_wOneD_FullOp(void **gaugeToPlaquette, QudaInvertParam *param ,QudaGaugeParam *gauge_param,  qudaQKXTM_arpackInfo arpackInfo, qudaQKXTM_loopInfo loopInfo, qudaQKXTMinfo_Kepler info){
 
@@ -2638,7 +2643,7 @@ void calcEigenVectors_loop_wOneD_FullOp(void **gaugeToPlaquette, QudaInvertParam
     t1 = MPI_Wtime();
     deflation->Loop_w_One_Der_FullOp_Exact(n, param, gen_uloc, std_uloc, gen_oneD, std_oneD, gen_csvC, std_csvC);
     t2 = MPI_Wtime();
-    printfQuda("calcEigenVectors_loop_wOneD_FullOp TIME REPORT: Exact part for eigenvector %d done in: %f sec\n",n,t2-t1);
+    printfQuda("TIME_REPORT: Exact part for eigenvector %d done in: %f sec\n",n,t2-t1);
   }  
   
   //- Do the FFT and dump the exact part
@@ -2779,22 +2784,32 @@ void calcEigenVectors_loop_wOneD_FullOp(void **gaugeToPlaquette, QudaInvertParam
     dirac.Mdag(*in, *tmp_up);  // in = M^dag b
     delete tmp_up;
     // now the the source vector b is ready for deflation
-    K_vector->downloadFromCuda(in,pc_solve);
-    K_vector->download();
+    //K_vector->downloadFromCuda(in,pc_solve);
+    //K_vector->download();
 
     // Deflate the source vector
-    deflation->deflateSrcVec(*K_srcdef,*K_vector);  
-    K_srcdef->uploadToCuda(in,pc_solve); // Source Vector is deflated and put into "in", in = M^dag b - UU^dag M^dag b
-
-    //    deflation->deflateVector(*K_srcdef,*K_vector);
-    //    K_srcdef->uploadToCuda(out,pc_solve); // initial guess is ready
-
+    //deflation->deflateSrcVec(*K_srcdef,*K_vector);  
+    //K_srcdef->uploadToCuda(in,pc_solve); // Source Vector is deflated and put into "in", in = M^dag b - UU^dag M^dag b
     zeroCuda(*out); // Set the initial guess to zero!
+
+    // Deflate the initial guess
+    //deflation->deflateVector(*K_srcdef,*K_vector);
+    //K_srcdef->uploadToCuda(out,pc_solve); // initial guess is ready
+
+    t2 = MPI_Wtime();
+    printfQuda("TIME_REPORT: Prep-time for %04d is %f sec\n",is,t2-t1);
+
+    t1 = MPI_Wtime();
     (*solve)(*out,*in);
+    t2 = MPI_Wtime();
+    printfQuda("TIME REPORT: Inversion for %04d done in %f sec\n",is,t2-t1);
+
     dirac.reconstruct(*x,*b,param->solution_type);
+
+    t1 = MPI_Wtime();
     oneEndTrick_w_One_Der<double>(*x,*tmp3,*tmp4,param, gen_uloc, std_uloc, gen_oneD, std_oneD, gen_csvC, std_csvC);
     t2 = MPI_Wtime();
-    printfQuda("Stoch %d finished in %f sec\n",is,t2-t1);
+    printfQuda("TIME_REPORT: One-end trick for %04d finished in %f sec\n",is,t2-t1);
 
     //-Dump the loop
     if( (is+1)%Ndump == 0){
@@ -3305,142 +3320,3 @@ void calcEigenVectors_threepTwop_FullOp(void **gaugeSmeared, void **gauge, QudaG
   profileInvert.Stop(QUDA_PROFILE_TOTAL);
 
 }
-
-
-
-//   This piece of code belongs to the CalcEigenvecs_Check function
-//   //-Test 2
-//   sprintf(filename,"eigenvecs_applyOp_test2.txt");
-//   if( (ptr_evecs=fopen(filename,"w"))==NULL ) errorQuda("Cannot open filename for test 2\n");
-
-//   for(int i=0;i<arpackInfo.nEv;i++){
-//     memset(vec_in ,0,bytes_total_length_per_NeV);
-//     memset(vec_out,0,bytes_total_length_per_NeV);
-//     deflation->copyEigenVectorToQKXTM_Vector_Kepler(i,vec_in);
-//     deflation->ApplyFullOp_2(vec_out,vec_in,param);
-     
-//     for(int k=0;k<240;k++){
-//       fprintf(ptr_evecs,"i = %04d , k = %04d: %+e  %+e     %+e  %+e     %+e  %+e\n",i,k,vec_out[2*k],vec_out[2*k+1],vec_in[2*k],vec_in[2*k+1],
-// 		 vec_out[2*k]/(deflation->EigenValues()[2*i]*vec_in[2*k]),vec_out[2*k+1]/(deflation->EigenValues()[2*i]*vec_in[2*k+1]));
-//     }
-
-//     fprintf(ptr_evecs,"\n\n");
-//   }
-//   fclose(ptr_evecs);
-
-
-//   //-Test 3
-//   sprintf(filename,"eigenvecs_applyOp_test3.txt");
-//   if( (ptr_evecs=fopen(filename,"w"))==NULL ) errorQuda("Cannot open filename for test 3\n");
-
-//   for(int i=0;i<arpackInfo.nEv;i++){
-//     memset(vec_in ,0,bytes_total_length_per_NeV);
-//     memset(vec_out,0,bytes_total_length_per_NeV);
-//     deflation->copyEigenVectorToQKXTM_Vector_Kepler(i,vec_in);
-//     deflation->ApplyFullOp_3(vec_out,vec_in,param);
-     
-//     for(int k=0;k<240;k++){
-//       fprintf(ptr_evecs,"i = %04d , k = %04d: %+e  %+e     %+e  %+e     %+e  %+e\n",i,k,vec_out[2*k],vec_out[2*k+1],vec_in[2*k],vec_in[2*k+1],
-// 		 vec_out[2*k]/(deflation->EigenValues()[2*i]*vec_in[2*k]),vec_out[2*k+1]/(deflation->EigenValues()[2*i]*vec_in[2*k+1]));
-//     }
-
-//     fprintf(ptr_evecs,"\n\n");
-//   }
-//   fclose(ptr_evecs);
-
-
-//   //-Test 4
-//   sprintf(filename,"eigenvecs_applyOp_test4.txt");
-//   if( (ptr_evecs=fopen(filename,"w"))==NULL ) errorQuda("Cannot open filename for test 4\n");
-
-//   for(int i=0;i<arpackInfo.nEv;i++){
-//     memset(vec_in ,0,bytes_total_length_per_NeV);
-//     memset(vec_out,0,bytes_total_length_per_NeV);
-//     deflation->copyEigenVectorToQKXTM_Vector_Kepler(i,vec_in);
-
-//     for(int k=0;k<240;k++){
-//       printfQuda("TEST 4 BEFORE APPLY: i = %04d, k = %04d: %+e  %+e\n",i,k,vec_in[2*k],vec_in[2*k+1]);
-//     }
-//     printfQuda("\n\n");
-
-
-//     deflation->ApplyFullOp_4(vec_out,vec_in,param);
-     
-//     for(int k=0;k<240;k++){
-//       fprintf(ptr_evecs,"i = %04d , k = %04d: %+e  %+e     %+e  %+e     %+e  %+e\n",i,k,vec_out[2*k],vec_out[2*k+1],vec_in[2*k],vec_in[2*k+1],
-// 		 vec_out[2*k]/(deflation->EigenValues()[2*i]*vec_in[2*k]),vec_out[2*k+1]/(deflation->EigenValues()[2*i]*vec_in[2*k+1]));
-//     }
-
-//     fprintf(ptr_evecs,"\n\n");
-//   }
-//   fclose(ptr_evecs);
-
-
-//   //-Test 5
-//   sprintf(filename,"eigenvecs_applyOp_test5.txt");
-//   if( (ptr_evecs=fopen(filename,"w"))==NULL ) errorQuda("Cannot open filename for test 5\n");
-
-//   for(int i=0;i<arpackInfo.nEv;i++){
-//     memset(vec_in ,0,bytes_total_length_per_NeV);
-//     memset(vec_out,0,bytes_total_length_per_NeV);
-//     deflation->copyEigenVectorToQKXTM_Vector_Kepler(i,vec_in);
-//     deflation->ApplyFullOp_5(vec_out,vec_in,param);
-     
-//     for(int k=0;k<240;k++){
-//       fprintf(ptr_evecs,"i = %04d , k = %04d: %+e  %+e     %+e  %+e     %+e  %+e\n",i,k,vec_out[2*k],vec_out[2*k+1],vec_in[2*k],vec_in[2*k+1],
-// 		 vec_out[2*k]/(deflation->EigenValues()[2*i]*vec_in[2*k]),vec_out[2*k+1]/(deflation->EigenValues()[2*i]*vec_in[2*k+1]));
-//     }
-
-//     fprintf(ptr_evecs,"\n\n");
-//   }
-//   fclose(ptr_evecs);
-
-
-//   //-Test 6
-//   sprintf(filename,"eigenvecs_applyOp_test6.txt");
-//   if( (ptr_evecs=fopen(filename,"w"))==NULL ) errorQuda("Cannot open filename for test 6\n");
-
-//   QKXTM_Vector_Kepler<double> *vec = new QKXTM_Vector_Kepler<double>(BOTH,VECTOR);
-
-//   for(int i=0;i<arpackInfo.nEv;i++){
-//     memset(vec_in ,0,bytes_total_length_per_NeV);
-//     memset(vec_out,0,bytes_total_length_per_NeV);
-//     deflation->copyEigenVectorToQKXTM_Vector_Kepler(i,vec_in);
-
-//     vec->unpackVector(vec_in);
-//     memcpy(vec_in,vec->H_elem(),bytes_total_length_per_NeV);
-//     deflation->ApplyFullOp_6(vec_out,vec_in,param);
-     
-//     for(int k=0;k<240;k++){
-//       fprintf(ptr_evecs,"i = %04d , k = %04d: %+e  %+e     %+e  %+e     %+e  %+e\n",i,k,vec_out[2*k],vec_out[2*k+1],vec_in[2*k],vec_in[2*k+1],
-// 		 vec_out[2*k]/(deflation->EigenValues()[2*i]*vec_in[2*k]),vec_out[2*k+1]/(deflation->EigenValues()[2*i]*vec_in[2*k+1]));
-//     }
-
-//     fprintf(ptr_evecs,"\n\n");
-//   }
-//   fclose(ptr_evecs);
-
-
-//   //-Test 7
-//   sprintf(filename,"eigenvecs_applyOp_test7.txt");
-//   if( (ptr_evecs=fopen(filename,"w"))==NULL ) errorQuda("Cannot open filename for test 7\n");
-
-//   QKXTM_Vector_Kepler<double> *vec2 = new QKXTM_Vector_Kepler<double>(BOTH,VECTOR);
-
-//   for(int i=0;i<arpackInfo.nEv;i++){
-//     memset(vec_in ,0,bytes_total_length_per_NeV);
-//     memset(vec_out,0,bytes_total_length_per_NeV);
-//     deflation->copyEigenVectorToQKXTM_Vector_Kepler(i,vec_in);
-
-//     vec2->unpackVector(vec_in);
-//     memcpy(vec_in,vec2->H_elem(),bytes_total_length_per_NeV);
-//     deflation->ApplyFullOp_4(vec_out,vec_in,param);
-     
-//     for(int k=0;k<240;k++){
-//       fprintf(ptr_evecs,"i = %04d , k = %04d: %+e  %+e     %+e  %+e     %+e  %+e\n",i,k,vec_out[2*k],vec_out[2*k+1],vec_in[2*k],vec_in[2*k+1],
-// 		 vec_out[2*k]/(deflation->EigenValues()[2*i]*vec_in[2*k]),vec_out[2*k+1]/(deflation->EigenValues()[2*i]*vec_in[2*k+1]));
-//     }
-
-//     fprintf(ptr_evecs,"\n\n");
-//   }
-//   fclose(ptr_evecs);
