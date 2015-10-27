@@ -226,11 +226,17 @@ int main(int argc, char **argv)
   if(isEven) inv_param.matpc_type = QUDA_MATPC_EVEN_EVEN_ASYMMETRIC;
   else inv_param.matpc_type = QUDA_MATPC_ODD_ODD_ASYMMETRIC;
 
-  if(isFullOp) inv_param.solution_type = QUDA_MAT_SOLUTION;
-  else inv_param.solution_type = QUDA_MATPC_SOLUTION;
+  inv_param.solution_type = QUDA_MAT_SOLUTION;
+  if(isFullOp){
+    inv_param.solve_type = QUDA_NORMOP_SOLVE;
+    printf("### Running for the Full Operator\n");
+  }
+  else{
+    inv_param.solve_type = QUDA_NORMOP_PC_SOLVE;
+    if(isEven) printf("### Running for the Even-Even Operator\n");
+    else       printf("### Running for the Odd-Odd Operator\n");
+  }
 
-  if(isFullOp) inv_param.solve_type = QUDA_NORMOP_SOLVE;
-  inv_param.solve_type = QUDA_NORMOP_PC_SOLVE;
 
   inv_param.dagger = QUDA_DAG_NO;
   inv_param.mass_normalization = QUDA_MASS_NORMALIZATION;
@@ -487,7 +493,9 @@ int main(int argc, char **argv)
 
   //  DeflateAndInvert_threepTwop(gauge_APE, gaugeContract, &inv_param,&gauge_param,pathEigenValuesUp,pathEigenVectorsUp,pathEigenValuesDown,pathEigenVectorsDown,twop_filename,threep_filename,NeV,info,NEUTRON,G4);
 
-  calcEigenVectors_threepTwop_FullOp(gauge_APE, gaugeContract, &gauge_param, &inv_param, arpackInfo, info, twop_filename, threep_filename, NEUTRON, G4); 
+  if(isFullOp) calcEigenVectors_threepTwop_FullOp(gauge_APE, gaugeContract, &gauge_param, &inv_param, arpackInfo, info, twop_filename, threep_filename, NEUTRON, G4); 
+  else        calcEigenVectors_threepTwop_EvenOdd(gauge_APE, gaugeContract, &gauge_param, &inv_param, arpackInfo, info, twop_filename, threep_filename, NEUTRON, G4);
+
 
   freeGaugeQuda();
   if (dslash_type == QUDA_CLOVER_WILSON_DSLASH || dslash_type == QUDA_TWISTED_CLOVER_DSLASH) freeCloverQuda();

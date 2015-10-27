@@ -1820,6 +1820,7 @@ private:
   double amax;
   bool isEv;
   bool isFullOp;
+  QudaTwistFlavorType flavor_sign;
 
   int fullorHalf;
   
@@ -1856,7 +1857,7 @@ public:
   void writeEigenVectors_ASCII(char *filename);
   void readEigenValues(char *filename);
   void deflateVector(QKXTM_Vector_Kepler<Float> &vec_defl, QKXTM_Vector_Kepler<Float> &vec_in);
-  void ApplyOp(Float *vec_out, Float *vec_in, QudaInvertParam *param);
+  void ApplyMdagM(Float *vec_out, Float *vec_in, QudaInvertParam *param);
   void MapEvenOddToFull();
   void MapEvenOddToFull(int i);
   void copyEigenVectorToQKXTM_Vector_Kepler(int eigenVector_id, Float *vec);
@@ -1918,6 +1919,7 @@ QKXTM_Deflation_Kepler<Float>::QKXTM_Deflation_Kepler(QudaInvertParam *param, qu
   amax = arpackInfo.amax;
   isEv = arpackInfo.isEven;
   isFullOp = arpackInfo.isFullOp;
+  flavor_sign = param->twist_flavor;
 
   if(NeV == 0){
     warningQuda("Warning you choose zero eigenVectors\n");
@@ -1965,8 +1967,7 @@ void QKXTM_Deflation_Kepler<Float>::printInfo(){
     printfQuda("  The EigenVectors are for the Full operator\n");
   }
   else{
-    if(isEv == true)  printfQuda("  Will calculate EigenVectors for the even-even operator\n");
-    if(isEv == false) printfQuda("  Will calculate EigenVectors for the odd-odd operator\n");
+    printfQuda("  Will calculate EigenVectors for the %s %smu operator\n", isEv ? "even-even" : "odd-odd", (flavor_sign==QUDA_TWIST_PLUS) ? "+" : "-" );
   }
 
   printfQuda("  Number of requested EigenVectors is %d in precision %d\n",NeV,(int) sizeof(Float));
@@ -1978,7 +1979,7 @@ void QKXTM_Deflation_Kepler<Float>::printInfo(){
 //==================================================
 
 template<typename Float>
-void QKXTM_Deflation_Kepler<Float>::ApplyOp(Float *vec_out, Float *vec_in, QudaInvertParam *param){
+void QKXTM_Deflation_Kepler<Float>::ApplyMdagM(Float *vec_out, Float *vec_in, QudaInvertParam *param){
 
   bool opFlag;
 
@@ -2062,7 +2063,7 @@ void QKXTM_Deflation_Kepler<Float>::ApplyOp(Float *vec_out, Float *vec_in, QudaI
     delete Kvec;
   }
 
-  printfQuda("ApplyOp: Completed successfully\n");
+  printfQuda("ApplyMdagM: Completed successfully\n");
 }
 //==================================================
 
@@ -2329,7 +2330,8 @@ void QKXTM_Deflation_Kepler<Float>::deflateVector(QKXTM_Vector_Kepler<Float> &ve
 		}  
   }
   else{
-    memcpy(tmp_vec_lex,tmp_vec,bytes_total_length_per_NeV);
+    //    memcpy(tmp_vec_lex,tmp_vec,bytes_total_length_per_NeV);
+    memcpy(tmp_vec_lex,ptr_elem,bytes_total_length_per_NeV);
   }
 
   vec_defl.packVector((Float*) tmp_vec_lex);
@@ -2341,8 +2343,7 @@ void QKXTM_Deflation_Kepler<Float>::deflateVector(QKXTM_Vector_Kepler<Float> &ve
   free(tmp_vec);
   free(tmp_vec_lex);
 
-  printfQuda("### deflateVector: Deflation of the initial guess completed succesfully\n");
-
+  //  printfQuda("deflateVector: Deflation of the initial guess completed succesfully\n");
 }
 
 
@@ -3273,6 +3274,169 @@ template<typename Float>
 void oneEndTrick_w_One_Der(cudaColorSpinorField &x,cudaColorSpinorField &tmp3, cudaColorSpinorField &tmp4,QudaInvertParam *param, void *cnRes_gv,void *cnRes_vv, void **cnD_gv, void **cnD_vv, void **cnC_gv, void **cnC_vv){
   void *h_ctrn, *ctrnS, *ctrnC;
 
+  double t1,t2;
+
+  if((cudaMallocHost(&h_ctrn, sizeof(Float)*32*GK_localL[0]*GK_localL[1]*GK_localL[2]*GK_localL[3])) == cudaErrorMemoryAllocation)
+    errorQuda("Error allocating memory for contraction results in CPU.\n");
+  cudaMemset(h_ctrn, 0, sizeof(Float)*32*GK_localL[0]*GK_localL[1]*GK_localL[2]*GK_localL[3]);
+
+  if((cudaMalloc(&ctrnS, sizeof(Float)*32*GK_localL[0]*GK_localL[1]*GK_localL[2]*GK_localL[3])) == cudaErrorMemoryAllocation)
+    errorQuda("Error allocating memory for contraction results in GPU.\n");
+  cudaMemset(ctrnS, 0, sizeof(Float)*32*GK_localL[0]*GK_localL[1]*GK_localL[2]*GK_localL[3]);
+
+  if((cudaMalloc(&ctrnC, sizeof(Float)*32*GK_localL[0]*GK_localL[1]*GK_localL[2]*GK_localL[3])) == cudaErrorMemoryAllocation)
+    errorQuda("Error allocating memory for contraction results in GPU.\n");
+  cudaMemset(ctrnC, 0, sizeof(Float)*32*GK_localL[0]*GK_localL[1]*GK_localL[2]*GK_localL[3]);
+
+  checkCudaError();
+
+  t1 = MPI_Wtime();
+  
+  DiracParam dWParam;
+  dWParam.matpcType        = QUDA_MATPC_EVEN_EVEN;
+  dWParam.dagger           = QUDA_DAG_NO;
+  dWParam.gauge            = gaugePrecise;
+  dWParam.kappa            = param->kappa;
+  dWParam.mass             = 1./(2.*param->kappa) - 4.;
+  dWParam.m5               = 0.;
+  dWParam.mu               = 0.;
+  for     (int i=0; i<4; i++)
+    dWParam.commDim[i]       = 1;
+
+  if(param->dslash_type == QUDA_TWISTED_CLOVER_DSLASH) {
+    dWParam.type           = QUDA_CLOVER_DIRAC;
+    dWParam.clover                 = cloverPrecise;
+    DiracClover   *dW      = new DiracClover(dWParam);
+    dW->M(tmp4,x);
+    delete  dW;
+  } 
+  else if (param->dslash_type == QUDA_TWISTED_MASS_DSLASH) {
+    dWParam.type           = QUDA_WILSON_DIRAC;
+    DiracWilson   *dW      = new DiracWilson(dWParam);
+    dW->M(tmp4,x);
+    delete  dW;
+  }
+  else{
+    errorQuda("Error one end trick works only for twisted mass fermions\n");
+  }
+  checkCudaError();
+
+  t2 = MPI_Wtime();
+  //  printfQuda("Stoch Loop TIME REPORT: Application of Full Wilson Op: %f sec\n",t2-t1);
+
+  gamma5Cuda(&(tmp3.Even()), &(tmp4.Even()));
+  gamma5Cuda(&(tmp3.Odd()),  &(tmp4.Odd()));
+
+  long int sizeBuffer;
+  sizeBuffer = sizeof(Float)*32*GK_localL[0]*GK_localL[1]*GK_localL[2]*GK_localL[3];
+  CovD *cov = new CovD(gaugePrecise, profileCovDev);
+
+  ///////////////// LOCAL ///////////////////////////
+  t1 = MPI_Wtime();
+  contract(x, tmp3, ctrnS, QUDA_CONTRACT_GAMMA5);
+  cudaMemcpy(h_ctrn, ctrnS, sizeBuffer, cudaMemcpyDeviceToHost);
+  t2 = MPI_Wtime();
+  //  printfQuda("Stoch Loop TIME REPORT: Ultra-local Generalized: %f sec\n",t2-t1);
+
+  t1 = MPI_Wtime();
+  for(int ix=0; ix < 32*GK_localL[0]*GK_localL[1]*GK_localL[2]*GK_localL[3]; ix++)
+    ((Float*) cnRes_gv)[ix] += ((Float*)h_ctrn)[ix]; // generalized one end trick
+  t2 = MPI_Wtime();
+  //  printfQuda("Stoch Loop TIME REPORT: Ultra-local Generalized SUM: %f sec\n",t2-t1);
+
+  t1 = MPI_Wtime();
+  contract(x, x, ctrnS, QUDA_CONTRACT_GAMMA5);
+  cudaMemcpy(h_ctrn, ctrnS, sizeBuffer, cudaMemcpyDeviceToHost);
+  t2 = MPI_Wtime();
+  //  printfQuda("Stoch Loop TIME REPORT: Ultra-local Standard: %f sec\n",t2-t1);
+
+  t1 = MPI_Wtime();
+  for(int ix=0; ix < 32*GK_localL[0]*GK_localL[1]*GK_localL[2]*GK_localL[3]; ix++)
+    ((Float*) cnRes_vv)[ix] -= ((Float*)h_ctrn)[ix]; // standard one end trick
+  t2 = MPI_Wtime();
+  //  printfQuda("Stoch Loop TIME REPORT: Ultra-local Standard SUM: %f sec\n",t2-t1);
+
+  cudaDeviceSynchronize();
+
+
+  t1 = MPI_Wtime();
+  ////////////////// DERIVATIVES //////////////////////////////
+  for(int mu=0; mu<4; mu++)	// for generalized one-end trick
+    {
+      cov->M(tmp4,tmp3,mu);
+      contract(x, tmp4, ctrnS, QUDA_CONTRACT_GAMMA5); // Term 0
+
+      cov->M  (tmp4, x,  mu+4);
+      contract(tmp4, tmp3, ctrnS, QUDA_CONTRACT_GAMMA5_PLUS);               // Term 0 + Term 3
+      cudaMemcpy(ctrnC, ctrnS, sizeBuffer, cudaMemcpyDeviceToDevice);
+
+      cov->M  (tmp4, x, mu);
+      contract(tmp4, tmp3, ctrnC, QUDA_CONTRACT_GAMMA5_PLUS);               // Term 0 + Term 3 + Term 2 (C Sum)                                                             
+      contract(tmp4, tmp3, ctrnS, QUDA_CONTRACT_GAMMA5_MINUS);              // Term 0 + Term 3 - Term 2 (D Dif)  
+
+      cov->M  (tmp4, tmp3,  mu+4);
+      contract(x, tmp4, ctrnC, QUDA_CONTRACT_GAMMA5_PLUS);                  // Term 0 + Term 3 + Term 2 + Term 1 (C Sum)                                                 
+      contract(x, tmp4, ctrnS, QUDA_CONTRACT_GAMMA5_MINUS);                 // Term 0 + Term 3 - Term 2 - Term 1 (D Dif)                                                             
+      cudaMemcpy(h_ctrn, ctrnS, sizeBuffer, cudaMemcpyDeviceToHost);
+      
+      for(int ix=0; ix < 32*GK_localL[0]*GK_localL[1]*GK_localL[2]*GK_localL[3]; ix++)
+	((Float *) cnD_gv[mu])[ix] += ((Float*)h_ctrn)[ix];
+      
+      cudaMemcpy(h_ctrn, ctrnC, sizeBuffer, cudaMemcpyDeviceToHost);
+      
+      for(int ix=0; ix < 32*GK_localL[0]*GK_localL[1]*GK_localL[2]*GK_localL[3]; ix++)
+	((Float *) cnC_gv[mu])[ix] += ((Float*)h_ctrn)[ix];
+    }
+
+  t2 = MPI_Wtime();
+  //  printfQuda("Stoch Loop TIME REPORT: Derivatives Generalized: %f sec\n",t2-t1);
+
+  
+  t1 = MPI_Wtime();
+  for(int mu=0; mu<4; mu++) // for standard one-end trick
+    {
+      cov->M  (tmp4, x,  mu);
+      cov->M  (tmp3, x,  mu+4);
+
+      contract(x, tmp4, ctrnS, QUDA_CONTRACT_GAMMA5);                       // Term 0                                                                     
+      contract(tmp3, x, ctrnS, QUDA_CONTRACT_GAMMA5_PLUS);                  // Term 0 + Term 3                                                                     
+      cudaMemcpy(ctrnC, ctrnS, sizeBuffer, cudaMemcpyDeviceToDevice);
+
+      contract(tmp4, x, ctrnC, QUDA_CONTRACT_GAMMA5_PLUS);                  // Term 0 + Term 3 + Term 2 (C Sum)                                                             
+      contract(tmp4, x, ctrnS, QUDA_CONTRACT_GAMMA5_MINUS);                 // Term 0 + Term 3 - Term 2 (D Dif)                                                             
+      contract(x, tmp3, ctrnC, QUDA_CONTRACT_GAMMA5_PLUS);                  // Term 0 + Term 3 + Term 2 + Term 1 (C Sum)                                                    
+      contract(x, tmp3, ctrnS, QUDA_CONTRACT_GAMMA5_MINUS);                 // Term 0 + Term 3 - Term 2 - Term 1 (D Dif)                                                     
+
+      cudaMemcpy(h_ctrn, ctrnS, sizeBuffer, cudaMemcpyDeviceToHost);
+      
+      for(int ix=0; ix < 32*GK_localL[0]*GK_localL[1]*GK_localL[2]*GK_localL[3]; ix++)
+	((Float *) cnD_vv[mu])[ix]  -= ((Float*)h_ctrn)[ix];
+      
+      cudaMemcpy(h_ctrn, ctrnC, sizeBuffer, cudaMemcpyDeviceToHost);
+      
+      for(int ix=0; ix < 32*GK_localL[0]*GK_localL[1]*GK_localL[2]*GK_localL[3]; ix++)
+	((Float *) cnC_vv[mu])[ix] -= ((Float*)h_ctrn)[ix];
+      
+    }
+
+  t2 = MPI_Wtime();
+  //  printfQuda("Stoch Loop TIME REPORT: Derivatives Standard: %f sec\n",t2-t1);
+
+///////////////
+
+  delete cov;
+  cudaFreeHost(h_ctrn);
+  cudaFree(ctrnS);
+  cudaFree(ctrnC);
+  checkCudaError();
+}
+
+template<typename Float>
+void oneEndTrick_w_One_Der_2(cudaColorSpinorField &s,cudaColorSpinorField &x,cudaColorSpinorField &tmp3, cudaColorSpinorField &tmp4,QudaInvertParam *param, void *cnRes_gv,void *cnRes_vv, void **cnD_gv, void **cnD_vv, void **cnC_gv, void **cnC_vv){
+  void *h_ctrn, *ctrnS, *ctrnC;
+
+  double t1,t2;
+
   if((cudaMallocHost(&h_ctrn, sizeof(Float)*32*GK_localL[0]*GK_localL[1]*GK_localL[2]*GK_localL[3])) == cudaErrorMemoryAllocation)
     errorQuda("Error allocating memory for contraction results in CPU.\n");
   cudaMemset(h_ctrn, 0, sizeof(Float)*32*GK_localL[0]*GK_localL[1]*GK_localL[2]*GK_localL[3]);
@@ -3324,36 +3488,38 @@ void oneEndTrick_w_One_Der(cudaColorSpinorField &x,cudaColorSpinorField &tmp3, c
   CovD *cov = new CovD(gaugePrecise, profileCovDev);
 
   ///////////////// LOCAL ///////////////////////////
-  contract(x, tmp3, ctrnS, QUDA_CONTRACT_GAMMA5);
+  contract(s, x, ctrnS, QUDA_CONTRACT_GAMMA5);
+  cudaMemcpy(h_ctrn, ctrnS, sizeBuffer, cudaMemcpyDeviceToHost);
+
+  for(int ix=0; ix < 32*GK_localL[0]*GK_localL[1]*GK_localL[2]*GK_localL[3]; ix++)
+    ((Float*) cnRes_vv)[ix] -= ((Float*)h_ctrn)[ix]; // standard one end trick
+
+
+  contract(s, tmp3, ctrnS, QUDA_CONTRACT_GAMMA5);
   cudaMemcpy(h_ctrn, ctrnS, sizeBuffer, cudaMemcpyDeviceToHost);
 
   for(int ix=0; ix < 32*GK_localL[0]*GK_localL[1]*GK_localL[2]*GK_localL[3]; ix++)
     ((Float*) cnRes_gv)[ix] += ((Float*)h_ctrn)[ix]; // generalized one end trick
 
-  contract(x, x, ctrnS, QUDA_CONTRACT_GAMMA5);
-  cudaMemcpy(h_ctrn, ctrnS, sizeBuffer, cudaMemcpyDeviceToHost);
-
-  for(int ix=0; ix < 32*GK_localL[0]*GK_localL[1]*GK_localL[2]*GK_localL[3]; ix++)
-    ((Float*) cnRes_vv)[ix] -= ((Float*)h_ctrn)[ix]; // standard one end trick
   cudaDeviceSynchronize();
 
   ////////////////// DERIVATIVES //////////////////////////////
   for(int mu=0; mu<4; mu++)	// for generalized one-end trick
     {
       cov->M(tmp4,tmp3,mu);
-      contract(x, tmp4, ctrnS, QUDA_CONTRACT_GAMMA5); // Term 0
+      contract(s, tmp4, ctrnS, QUDA_CONTRACT_GAMMA5); // Term 0
 
-      cov->M  (tmp4, x,  mu+4);
+      cov->M  (tmp4, s,  mu+4);
       contract(tmp4, tmp3, ctrnS, QUDA_CONTRACT_GAMMA5_PLUS);               // Term 0 + Term 3
       cudaMemcpy(ctrnC, ctrnS, sizeBuffer, cudaMemcpyDeviceToDevice);
 
-      cov->M  (tmp4, x, mu);
+      cov->M  (tmp4, s, mu);
       contract(tmp4, tmp3, ctrnC, QUDA_CONTRACT_GAMMA5_PLUS);               // Term 0 + Term 3 + Term 2 (C Sum)                                                             
       contract(tmp4, tmp3, ctrnS, QUDA_CONTRACT_GAMMA5_MINUS);              // Term 0 + Term 3 - Term 2 (D Dif)  
 
       cov->M  (tmp4, tmp3,  mu+4);
-      contract(x, tmp4, ctrnC, QUDA_CONTRACT_GAMMA5_PLUS);                  // Term 0 + Term 3 + Term 2 + Term 1 (C Sum)                                                 
-      contract(x, tmp4, ctrnS, QUDA_CONTRACT_GAMMA5_MINUS);                 // Term 0 + Term 3 - Term 2 - Term 1 (D Dif)                                                             
+      contract(s, tmp4, ctrnC, QUDA_CONTRACT_GAMMA5_PLUS);                  // Term 0 + Term 3 + Term 2 + Term 1 (C Sum)                                                 
+      contract(s, tmp4, ctrnS, QUDA_CONTRACT_GAMMA5_MINUS);                 // Term 0 + Term 3 - Term 2 - Term 1 (D Dif)                                                             
       cudaMemcpy(h_ctrn, ctrnS, sizeBuffer, cudaMemcpyDeviceToHost);
       
       for(int ix=0; ix < 32*GK_localL[0]*GK_localL[1]*GK_localL[2]*GK_localL[3]; ix++)
@@ -3364,20 +3530,23 @@ void oneEndTrick_w_One_Der(cudaColorSpinorField &x,cudaColorSpinorField &tmp3, c
       for(int ix=0; ix < 32*GK_localL[0]*GK_localL[1]*GK_localL[2]*GK_localL[3]; ix++)
 	((Float *) cnC_gv[mu])[ix] += ((Float*)h_ctrn)[ix];
     }
-  
+
   for(int mu=0; mu<4; mu++) // for standard one-end trick
     {
       cov->M  (tmp4, x,  mu);
-      cov->M  (tmp3, x,  mu+4);
+      cov->M  (tmp3, s,  mu+4);
 
-      contract(x, tmp4, ctrnS, QUDA_CONTRACT_GAMMA5);                       // Term 0                                                                     
+      contract(s, tmp4, ctrnS, QUDA_CONTRACT_GAMMA5);                       // Term 0                                                                     
       contract(tmp3, x, ctrnS, QUDA_CONTRACT_GAMMA5_PLUS);                  // Term 0 + Term 3                                                                     
       cudaMemcpy(ctrnC, ctrnS, sizeBuffer, cudaMemcpyDeviceToDevice);
 
+      cov->M  (tmp4, s,  mu);
       contract(tmp4, x, ctrnC, QUDA_CONTRACT_GAMMA5_PLUS);                  // Term 0 + Term 3 + Term 2 (C Sum)                                                             
       contract(tmp4, x, ctrnS, QUDA_CONTRACT_GAMMA5_MINUS);                 // Term 0 + Term 3 - Term 2 (D Dif)                                                             
-      contract(x, tmp3, ctrnC, QUDA_CONTRACT_GAMMA5_PLUS);                  // Term 0 + Term 3 + Term 2 + Term 1 (C Sum)                                                    
-      contract(x, tmp3, ctrnS, QUDA_CONTRACT_GAMMA5_MINUS);                 // Term 0 + Term 3 - Term 2 - Term 1 (D Dif)                                                     
+
+      cov->M  (tmp3, x,  mu+4);
+      contract(s, tmp3, ctrnC, QUDA_CONTRACT_GAMMA5_PLUS);                  // Term 0 + Term 3 + Term 2 + Term 1 (C Sum)                                                    
+      contract(s, tmp3, ctrnS, QUDA_CONTRACT_GAMMA5_MINUS);                 // Term 0 + Term 3 - Term 2 - Term 1 (D Dif)                                                     
 
       cudaMemcpy(h_ctrn, ctrnS, sizeBuffer, cudaMemcpyDeviceToHost);
       
@@ -3390,6 +3559,7 @@ void oneEndTrick_w_One_Der(cudaColorSpinorField &x,cudaColorSpinorField &tmp3, c
 	((Float *) cnC_vv[mu])[ix] -= ((Float*)h_ctrn)[ix];
       
     }
+
 ///////////////
 
   delete cov;
@@ -3398,6 +3568,7 @@ void oneEndTrick_w_One_Der(cudaColorSpinorField &x,cudaColorSpinorField &tmp3, c
   cudaFree(ctrnC);
   checkCudaError();
 }
+
 
 template<typename Float>
 void volumeSource_w_One_Der(cudaColorSpinorField &x,cudaColorSpinorField &xi, cudaColorSpinorField &tmp,QudaInvertParam *param, void *cn_local,void **cnD,void **cnC){
@@ -3799,6 +3970,8 @@ void QKXTM_Deflation_Kepler<Float>::Loop_w_One_Der_FullOp_Exact(int n, QudaInver
 
   void *h_ctrn, *ctrnS, *ctrnC;
 
+  double t1,t2;
+
   if((cudaMallocHost(&h_ctrn, sizeof(Float)*32*GK_localL[0]*GK_localL[1]*GK_localL[2]*GK_localL[3])) == cudaErrorMemoryAllocation)
     errorQuda("oneEndTrick_w_One_Der_FullOp_Exact: Error allocating memory for contraction results in CPU.\n");
   cudaMemset(h_ctrn, 0, sizeof(Float)*32*GK_localL[0]*GK_localL[1]*GK_localL[2]*GK_localL[3]);
@@ -3831,13 +4004,15 @@ void QKXTM_Deflation_Kepler<Float>::Loop_w_One_Der_FullOp_Exact(int n, QudaInver
   Kvec->loadVector();
   Kvec->uploadToCuda(x1,pc_solve);
 
-  double eVal = eigenValues[2*n];
+  Float eVal = eigenValues[2*n+0];
 
   cudaColorSpinorField *tmp1 = NULL;
   cudaColorSpinorField *tmp2 = NULL;
   cudaParam.create = QUDA_ZERO_FIELD_CREATE;
   tmp1 = new cudaColorSpinorField(cudaParam);
   tmp2 = new cudaColorSpinorField(cudaParam);
+  zeroCuda(*tmp1);
+  zeroCuda(*tmp2);
 
   cudaColorSpinorField &tmp3 = *tmp1;
   cudaColorSpinorField &tmp4 = *tmp2;
@@ -3880,22 +4055,29 @@ void QKXTM_Deflation_Kepler<Float>::Loop_w_One_Der_FullOp_Exact(int n, QudaInver
   sizeBuffer = sizeof(Float)*32*GK_localL[0]*GK_localL[1]*GK_localL[2]*GK_localL[3];
   CovD *cov = new CovD(gaugePrecise, profileCovDev);
 
+  int NN = 16*GK_localL[0]*GK_localL[1]*GK_localL[2]*GK_localL[3];
+  int incx = 1;
+  int incy = 1;
+  Float pceval[2] = {1.0/eVal,0.0};
+  Float mceval[2] = {-1.0/eVal,0.0};
+
   // ULTRA-LOCAL Generalized one-end trick
   contract(x, tmp3, ctrnS, QUDA_CONTRACT_GAMMA5);
   cudaMemcpy(h_ctrn, ctrnS, sizeBuffer, cudaMemcpyDeviceToHost);
 
-  for(int ix=0; ix < 32*GK_localL[0]*GK_localL[1]*GK_localL[2]*GK_localL[3]; ix++)
-    ((Float*) gen_uloc)[ix] += ((Float*)h_ctrn)[ix]/(Float)eVal;
+  if( typeid(Float) == typeid(float) )       cblas_caxpy(NN, (void*) pceval, (void*) h_ctrn, incx, (void*) gen_uloc, incy);
+  else if( typeid(Float) == typeid(double) ) cblas_zaxpy(NN, (void*) pceval, (void*) h_ctrn, incx, (void*) gen_uloc, incy);
   //------------------------------------------------
 
   // ULTRA-LOCAL Standard one-end trick
   contract(x, x, ctrnS, QUDA_CONTRACT_GAMMA5);
   cudaMemcpy(h_ctrn, ctrnS, sizeBuffer, cudaMemcpyDeviceToHost);
 
-  for(int ix=0; ix < 32*GK_localL[0]*GK_localL[1]*GK_localL[2]*GK_localL[3]; ix++)
-    ((Float*) std_uloc)[ix] -= ((Float*)h_ctrn)[ix]/(Float)eVal;
-  cudaDeviceSynchronize();
+  if( typeid(Float) == typeid(float) )       cblas_caxpy(NN, (void*) mceval, (void*) h_ctrn, incx, (void*) std_uloc, incy);
+  else if( typeid(Float) == typeid(double) ) cblas_zaxpy(NN, (void*) mceval, (void*) h_ctrn, incx, (void*) std_uloc, incy);
   //------------------------------------------------
+
+  cudaDeviceSynchronize();
 
   // ONE-DERIVATIVE Generalized one-end trick
   for(int mu=0; mu<4; mu++){
@@ -3914,14 +4096,14 @@ void QKXTM_Deflation_Kepler<Float>::Loop_w_One_Der_FullOp_Exact(int n, QudaInver
     contract(x, tmp4, ctrnC, QUDA_CONTRACT_GAMMA5_PLUS);                  // Term 0 + Term 3 + Term 2 + Term 1 (C Sum)                                                 
     contract(x, tmp4, ctrnS, QUDA_CONTRACT_GAMMA5_MINUS);                 // Term 0 + Term 3 - Term 2 - Term 1 (D Dif)                                                             
     cudaMemcpy(h_ctrn, ctrnS, sizeBuffer, cudaMemcpyDeviceToHost);
-    
-    for(int ix=0; ix < 32*GK_localL[0]*GK_localL[1]*GK_localL[2]*GK_localL[3]; ix++)
-      ((Float *) gen_oneD[mu])[ix] += ((Float*)h_ctrn)[ix]/(Float)eVal;
+
+    if( typeid(Float) == typeid(float) )       cblas_caxpy(NN, (void*) pceval, (void*) h_ctrn, incx, (void*) gen_oneD[mu], incy);
+    else if( typeid(Float) == typeid(double) ) cblas_zaxpy(NN, (void*) pceval, (void*) h_ctrn, incx, (void*) gen_oneD[mu], incy);
     
     cudaMemcpy(h_ctrn, ctrnC, sizeBuffer, cudaMemcpyDeviceToHost);
-    
-    for(int ix=0; ix < 32*GK_localL[0]*GK_localL[1]*GK_localL[2]*GK_localL[3]; ix++)
-      ((Float *) gen_csvC[mu])[ix] += ((Float*)h_ctrn)[ix]/(Float)eVal;
+
+    if( typeid(Float) == typeid(float) )       cblas_caxpy(NN, (void*) pceval, (void*) h_ctrn, incx, (void*) gen_csvC[mu], incy);
+    else if( typeid(Float) == typeid(double) ) cblas_zaxpy(NN, (void*) pceval, (void*) h_ctrn, incx, (void*) gen_csvC[mu], incy);
   }
   //------------------------------------------------
 
@@ -3940,16 +4122,16 @@ void QKXTM_Deflation_Kepler<Float>::Loop_w_One_Der_FullOp_Exact(int n, QudaInver
     contract(x, tmp3, ctrnS, QUDA_CONTRACT_GAMMA5_MINUS);                 // Term 0 + Term 3 - Term 2 - Term 1 (D Dif)                                                     
     
     cudaMemcpy(h_ctrn, ctrnS, sizeBuffer, cudaMemcpyDeviceToHost);
-    
-    for(int ix=0; ix < 32*GK_localL[0]*GK_localL[1]*GK_localL[2]*GK_localL[3]; ix++)
-      ((Float *) std_oneD[mu])[ix]  -= ((Float*)h_ctrn)[ix]/(Float)eVal;
+
+    if( typeid(Float) == typeid(float) )       cblas_caxpy(NN, (void*) mceval, (void*) h_ctrn, incx, (void*) std_oneD[mu], incy);
+    else if( typeid(Float) == typeid(double) ) cblas_zaxpy(NN, (void*) mceval, (void*) h_ctrn, incx, (void*) std_oneD[mu], incy);
     
     cudaMemcpy(h_ctrn, ctrnC, sizeBuffer, cudaMemcpyDeviceToHost);
-    
-    for(int ix=0; ix < 32*GK_localL[0]*GK_localL[1]*GK_localL[2]*GK_localL[3]; ix++)
-      ((Float *) std_csvC[mu])[ix] -= ((Float*)h_ctrn)[ix]/(Float)eVal;      
-  }
 
+    if( typeid(Float) == typeid(float) )       cblas_caxpy(NN, (void*) mceval, (void*) h_ctrn, incx, (void*) std_csvC[mu], incy);
+    else if( typeid(Float) == typeid(double) ) cblas_zaxpy(NN, (void*) mceval, (void*) h_ctrn, incx, (void*) std_csvC[mu], incy);
+  }
+  //------------------------------------------------
 
   delete Kvec;
   delete x1;

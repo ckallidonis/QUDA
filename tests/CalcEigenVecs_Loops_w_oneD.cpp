@@ -64,7 +64,7 @@ extern int Nstoch;
 extern unsigned long int seed;
 extern char loop_fname[];
 extern int Ndump;
-
+extern int smethod;
 
 //-C.K. ARPACK Parameters
 extern int PolyDeg;
@@ -182,6 +182,7 @@ int main(int argc, char **argv)
   loopInfo.Nstoch = Nstoch;
   loopInfo.seed = seed;
   loopInfo.Ndump = Ndump;
+  loopInfo.smethod = smethod;
   strcpy(loopInfo.loop_fname,loop_fname);
   //-----------------------------------------------------------------------------------------
 
@@ -217,7 +218,7 @@ int main(int argc, char **argv)
   inv_param.kappa = kappa;
   inv_param.mu=muValue;
   inv_param.epsilon = 0.;
-  inv_param.twist_flavor = QUDA_TWIST_PLUS;
+  inv_param.twist_flavor = QUDA_TWIST_MINUS;
 
   double kappa5 = 1.;
 
@@ -231,11 +232,16 @@ int main(int argc, char **argv)
   if(isEven) inv_param.matpc_type = QUDA_MATPC_EVEN_EVEN_ASYMMETRIC;
   else inv_param.matpc_type = QUDA_MATPC_ODD_ODD_ASYMMETRIC;
 
-  if(isFullOp) inv_param.solution_type = QUDA_MAT_SOLUTION;
-  else inv_param.solution_type = QUDA_MATPC_SOLUTION;
-
-  if(isFullOp) inv_param.solve_type = QUDA_NORMOP_SOLVE;
-  inv_param.solve_type = QUDA_NORMOP_PC_SOLVE;
+  inv_param.solution_type = QUDA_MAT_SOLUTION;
+  if(isFullOp){
+    inv_param.solve_type = QUDA_NORMOP_SOLVE;
+    printf("### Running for the Full Operator\n");
+  }
+  else{
+    inv_param.solve_type = QUDA_NORMOP_PC_SOLVE;
+    if(isEven) printf("### Running for the Even-Even Operator\n");
+    else       printf("### Running for the Odd-Odd Operator\n");
+  }
 
   inv_param.dagger = QUDA_DAG_NO;
   inv_param.mass_normalization = QUDA_MASS_NORMALIZATION;
@@ -421,7 +427,8 @@ int main(int argc, char **argv)
   if (dslash_type == QUDA_TWISTED_CLOVER_DSLASH) loadCloverQuda(NULL, NULL, &inv_param);
   //if (dslash_type == QUDA_TWISTED_CLOVER_DSLASH) loadCloverQuda(clover,clover_inv, &inv_param);
 
-  calcEigenVectors_loop_wOneD_FullOp(gauge_Plaq, &inv_param, &gauge_param, arpackInfo, loopInfo, info);
+  if(isFullOp) calcEigenVectors_loop_wOneD_FullOp(gauge_Plaq, &inv_param, &gauge_param, arpackInfo, loopInfo, info);
+  else         calcEigenVectors_loop_wOneD_EvenOdd(gauge_Plaq, &inv_param, &gauge_param, arpackInfo, loopInfo, info);
 
   //  DeflateAndInvert_loop_w_One_Der(gauge_Plaq,&inv_param,&gauge_param,pathEigenValuesDown,pathEigenVectorsDown,loop_filename,NeV,Nstoch,seed,NdumpStep,info);
   

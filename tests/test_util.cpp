@@ -1625,6 +1625,7 @@ int Nstoch = 100;     // Number of stochastic noise vectors
 unsigned long int seed   = 100;     // The seed for the stochastic noise vector generation
 int Ndump  = 10;      // Write the loop every Ndump stoch. vectors
 char loop_fname[512] = "loop";
+int smethod = 1;
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -1697,6 +1698,7 @@ void usage(char** argv )
   printf("    --prop_path                               # File name to save propagators is (default \"prop_path\")\n");
   printf("    --seed                                    # Seed for ranlux random number generator (default 100)\n");
   printf("    --Nstoch                                  # Number of stochastic noise vectors for loop (default 100)\n");
+  printf("    --stoch_method                            # Which method to apply for stochastic part (default 1)\n");
   printf("    --csw                                     # Clover csw coefficient (default 1.57551)\n");
 
   // new
@@ -2144,6 +2146,16 @@ int process_command_line_option(int argc, char** argv, int* idx)
       usage(argv);
     }
     Ndump = atoi(argv[i+1]);
+    i++;
+    ret = 0;
+    goto out;
+  }
+
+  if( strcmp(argv[i], "--stoch_method") ==0){
+    if(i+1 >= argc){
+      usage(argv);
+    }
+    smethod = atoi(argv[i+1]);
     i++;
     ret = 0;
     goto out;
