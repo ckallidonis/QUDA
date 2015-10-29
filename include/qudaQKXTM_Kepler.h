@@ -320,4 +320,13 @@ void calcEigenVectors_threepTwop_EvenOdd(void **gaugeSmeared, void **gauge, Quda
 void calcEigenVectors_threepTwop_FullOp(void **gaugeSmeared, void **gauge, QudaGaugeParam *gauge_param, QudaInvertParam *param, quda::qudaQKXTM_arpackInfo arpackInfo, quda::qudaQKXTMinfo_Kepler info,
 					char *filename_twop, char *filename_threep, quda::WHICHPARTICLE NUCLEON, quda::WHICHPROJECTOR PID );
 
+
+void calcEigenVectors_loop_wOneD_2pt3pt_EvenOdd(void **gaugeSmeared, void **gauge, QudaGaugeParam *gauge_param, QudaInvertParam *param, void **gauge_loop, QudaGaugeParam *gauge_param_loop, QudaInvertParam *param_loop,
+						quda::qudaQKXTM_arpackInfo arpackInfo, quda::qudaQKXTM_loopInfo loopInfo,
+						quda::qudaQKXTMinfo_Kepler info, char *filename_twop, char *filename_threep, quda::WHICHPARTICLE NUCLEON, quda::WHICHPROJECTOR PID );
+
+void calcEigenVectors_loop_wOneD_EvenOdd_noDefl(double *eigVecs_d, double *eigVals_d, void **gaugeToPlaquette, QudaInvertParam *param, QudaGaugeParam *gauge_param,
+						quda::qudaQKXTM_arpackInfo arpackInfo, quda::qudaQKXTM_loopInfo loopInfo, quda::qudaQKXTMinfo_Kepler info);
+				 
+
 #endif

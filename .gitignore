@@ -8,6 +8,7 @@ lib/*~
 tests/*_test
 make.inc
 milc_interface/*
+tests/CalcEigenVecs_Loops_w_oneD_2pt3pt
 tests/deflationInverter
 tests/deflationLoops
 tests/deflationLoops_w_oneD

@@ -17,13 +17,16 @@ LDFLAGS += -L/users/kallidoc/install/lib -larpack -lparpack
 	$(HISQ_UNITARIZE_FORCE_TEST)
 
 #TESTS = deflationLoops_w_oneD deflationLoops_w_oneD_volumeSource deflationTwopThreep
-TESTS = CalcEigenVecs_Loops_w_oneD CalcEigenVecs CalcEigenVecs_2pt3pt deflationTwopThreep deflationInverter deflationLoops deflationLoops_w_oneD deflationLoops_w_oneD_volumeSource createWritePropsSLReadApeGauge test_plaquette
+TESTS = CalcEigenVecs_Loops_w_oneD_2pt3pt CalcEigenVecs_Loops_w_oneD CalcEigenVecs CalcEigenVecs_2pt3pt deflationTwopThreep deflationInverter deflationLoops deflationLoops_w_oneD deflationLoops_w_oneD_volumeSource createWritePropsSLReadApeGauge test_plaquette
 
 all: $(TESTS)
 
 
 #EigenSolver: EigenSolver.o test_util.o wilson_dslash_reference.o domain_wall_dslash_reference.o misc.o blas_reference.o $(QIO_UTIL) $(QUDA)
 #	$(CXX) $(LDFLAGS) $^ -o $@ $(LDFLAGS)
+
+CalcEigenVecs_Loops_w_oneD_2pt3pt: CalcEigenVecs_Loops_w_oneD_2pt3pt.o test_util.o wilson_dslash_reference.o domain_wall_dslash_reference.o misc.o blas_reference.o $(QIO_UTIL) $(QUDA)
+	$(CXX) $(LDFLAGS) $^ -o $@ $(LDFLAGS)
 
 CalcEigenVecs_Loops_w_oneD: CalcEigenVecs_Loops_w_oneD.o test_util.o wilson_dslash_reference.o domain_wall_dslash_reference.o misc.o blas_reference.o $(QIO_UTIL) $(QUDA)
 	$(CXX) $(LDFLAGS) $^ -o $@ $(LDFLAGS)

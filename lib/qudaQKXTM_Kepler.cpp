@@ -1794,7 +1794,6 @@ void QKXTM_Propagator3D_Kepler<Float>::broadcast(int tsink){
 
 
 
-
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////// Class for deflation
@@ -1869,8 +1868,8 @@ public:
   void eigenSolver();
   void Loop_w_One_Der_FullOp_Exact(int n, QudaInvertParam *param, void *gen_uloc,void *std_uloc, void **gen_oneD, void **std_oneD, void **gen_csvC, void **std_csvC);
   void deflateSrcVec(QKXTM_Vector_Kepler<Float> &vec_defl, QKXTM_Vector_Kepler<Float> &vec_in);
+  void copyToEigenVector(Float *vec, Float *vals);
 };
-
 
 
 //-C.K. Constructor for the even-odd operator functions
@@ -2223,6 +2222,12 @@ void QKXTM_Deflation_Kepler<Float>::copyEigenVectorFromQKXTM_Vector_Kepler(int e
     memcpy(&(h_elem[eigenVector_id*total_length_per_NeV]),vec,bytes_total_length_per_NeV);
   }
 
+}
+
+template<typename Float>
+void QKXTM_Deflation_Kepler<Float>::copyToEigenVector(Float *vec, Float *vals){
+  memcpy(&(h_elem[0]), vec, bytes_total_length);
+  memcpy(&(eigenValues[0]), vals, NeV*2*sizeof(Float));
 }
 
 
