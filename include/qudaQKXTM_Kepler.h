@@ -85,6 +85,8 @@ template<typename Float>  class QKXTM_Vector3D_Kepler;
   enum WHICHPARTICLE{PROTON,NEUTRON};
   enum WHICHPROJECTOR{G4,G5G123,G5G1,G5G2,G5G3};
 
+  enum APEDIM{D3,D4};
+
   //////////////////////////////////////// functions /////////////////////////////////////////////
 
   void init_qudaQKXTM_Kepler(qudaQKXTMinfo_Kepler *info);

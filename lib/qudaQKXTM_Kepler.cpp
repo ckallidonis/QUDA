@@ -1893,10 +1893,10 @@ QKXTM_Deflation_Kepler<Float>::QKXTM_Deflation_Kepler(int N_EigenVectors,bool is
   bytes_total_length = total_length*2*sizeof(Float);
 
   h_elem = (Float*)malloc(NeV*bytes_total_length_per_NeV);
-  if(h_elem != NULL) errorQuda("Error: Out of memory for eigenVectors.\n");
+  if(h_elem == NULL) errorQuda("Error: Out of memory for eigenVectors.\n");
   memset(h_elem,0,NeV*bytes_total_length_per_NeV);
 
-  eigenValues = (Float*)malloc(NeV*sizeof(Float));
+  eigenValues = (Float*)malloc(2*NeV*sizeof(Float));
   if(eigenValues == NULL)errorQuda("Error with allocation host memory for deflation class\n");
 }
 
@@ -1956,7 +1956,7 @@ QKXTM_Deflation_Kepler<Float>::~QKXTM_Deflation_Kepler(){
 
   free(h_elem);
   free(eigenValues);
-  delete diracOp;
+  if(diracOp != NULL) delete diracOp;
 }
 
 template<typename Float>
@@ -2292,7 +2292,7 @@ void QKXTM_Deflation_Kepler<Float>::deflateVector(QKXTM_Vector_Kepler<Float> &ve
     ptr_elem = tmp_vec;
   }
 
-  
+
   if( typeid(Float) == typeid(float) ){
     cblas_cgemv(CblasColMajor, CblasConjTrans, NN, NeV, (void*) alpha, (void*) h_elem, NN, ptr_elem, incx, (void*) beta, out_vec, incy ); //-C.K: out_vec = H_elem^dag * ptr_elem -> U^dag * vec_in
     memset(ptr_elem,0,NN*2*sizeof(Float)); //-C.K_CHECK: This might not be needed
@@ -2313,6 +2313,7 @@ void QKXTM_Deflation_Kepler<Float>::deflateVector(QKXTM_Vector_Kepler<Float> &ve
     }
     cblas_zgemv(CblasColMajor, CblasNoTrans, NN, NeV, (void*) alpha, (void*) h_elem, NN, out_vec_reduce, incx, (void*) beta, ptr_elem, incy );    
   }
+  
   
 
   if(!isFullOp){
@@ -3196,9 +3197,10 @@ void QKXTM_Deflation_Kepler<Float>::readEigenValues(char *filename){
   else if(typeid(Float) == typeid(float))
     strcpy(stringFormat,"%f");
 
-  for(int i = 0 ; i < NeV ; i++)
-    fscanf(ptr,stringFormat,&(EigenValues()[i]),&dummy);
-       
+  for(int i = 0 ; i < NeV ; i++){
+    fscanf(ptr,stringFormat,&(EigenValues()[2*i]),&dummy);
+    EigenValues()[2*i+1] = 0.0;
+  }
 
   printfQuda("Eigenvalues loaded successfully\n");
   fclose(ptr);
@@ -3334,7 +3336,6 @@ void oneEndTrick_w_One_Der(cudaColorSpinorField &x,cudaColorSpinorField &tmp3, c
 
   long int sizeBuffer;
   sizeBuffer = sizeof(Float)*32*GK_localL[0]*GK_localL[1]*GK_localL[2]*GK_localL[3];
-  CovD *cov = new CovD(gaugePrecise, profileCovDev);
 
   ///////////////// LOCAL ///////////////////////////
   t1 = MPI_Wtime();
@@ -3363,6 +3364,8 @@ void oneEndTrick_w_One_Der(cudaColorSpinorField &x,cudaColorSpinorField &tmp3, c
 
   cudaDeviceSynchronize();
 
+
+  CovD *cov = new CovD(gaugePrecise, profileCovDev);
 
   t1 = MPI_Wtime();
   ////////////////// DERIVATIVES //////////////////////////////

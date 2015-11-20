@@ -380,6 +380,7 @@ int main(int argc, char **argv)
   if (dslash_type == QUDA_TWISTED_CLOVER_DSLASH) loadCloverQuda(NULL, NULL, &inv_param);
   //if (dslash_type == QUDA_TWISTED_CLOVER_DSLASH) loadCloverQuda(clover,clover_inv, &inv_param);
 
+  printfQuda("NeV = %d\n",NeV);
   DeflateAndInvert_loop_w_One_Der(gauge_Plaq,&inv_param,&gauge_param,pathEigenValuesDown,pathEigenVectorsDown,loop_fname,NeV,Nstoch,seed,Ndump,info);
   
   freeGaugeQuda();

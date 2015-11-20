@@ -1527,6 +1527,11 @@ void DeflateAndInvert_loop_w_One_Der(void **gaugeToPlaquette, QudaInvertParam *p
       errorQuda("Error allocating memory cnC_vv\n");
     if((cudaHostAlloc(&(cnC_gv[mu]), sizeof(double)*2*16*GK_localVolume, cudaHostAllocMapped)) != cudaSuccess)
       errorQuda("Error allocating memory cnC_gv\n");
+
+    cudaMemset(cnD_vv[mu], 0, sizeof(double)*2*16*GK_localVolume);
+    cudaMemset(cnD_gv[mu], 0, sizeof(double)*2*16*GK_localVolume);
+    cudaMemset(cnC_vv[mu], 0, sizeof(double)*2*16*GK_localVolume);
+    cudaMemset(cnC_gv[mu], 0, sizeof(double)*2*16*GK_localVolume);
   }
   cudaDeviceSynchronize();
   ///////////////////////////////////////////////////
@@ -2717,6 +2722,11 @@ void calcEigenVectors_loop_wOneD_EvenOdd(void **gaugeToPlaquette, QudaInvertPara
       errorQuda("Error allocating memory cnC_vv\n");
     if((cudaHostAlloc(&(cnC_gv[mu]), sizeof(double)*2*16*GK_localVolume, cudaHostAllocMapped)) != cudaSuccess)
       errorQuda("Error allocating memory cnC_gv\n");
+
+    cudaMemset(cnD_vv[mu], 0, sizeof(double)*2*16*GK_localVolume);
+    cudaMemset(cnD_gv[mu], 0, sizeof(double)*2*16*GK_localVolume);
+    cudaMemset(cnC_vv[mu], 0, sizeof(double)*2*16*GK_localVolume);
+    cudaMemset(cnC_gv[mu], 0, sizeof(double)*2*16*GK_localVolume);
   }
   cudaDeviceSynchronize();
   ///////////////////////////////////////////////////

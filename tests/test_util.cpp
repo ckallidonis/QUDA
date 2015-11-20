@@ -1617,7 +1617,7 @@ char arpack_logfile[512] = "arpack.log";
 double amin = 3.0e-4;
 double amax = 3.5;
 bool isEven = false;
-bool isFullOp = true;
+bool isFullOp = false;
 
 
 //-C.K. loop Parameters
@@ -1725,7 +1725,7 @@ void usage(char** argv )
   printf("    --aminARPACK                                # amin parameter used in Cheb. Poly. Acc. (default 3.0e-4)\n");
   printf("    --amaxARPACK                                # amax parameter used in Cheb. Poly. Acc. (default 3.5)\n");
   printf("    --UseEven                                   # Whether to use Even-Even operator (yes/no, default no)\n");
-  printf("    --UseFullOp                                 # Whether to use the Full Operator (yes,no, default yes)\n");
+  printf("    --UseFullOp                                 # Whether to use the Full Operator (yes,no, default no)\n");
 
   ////////////////////////////////////////////////////////////////
 
