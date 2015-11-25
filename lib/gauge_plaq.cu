@@ -26,7 +26,12 @@ namespace quda {
       : dataOr(dataOr), plaq_h(static_cast<double*>(pinned_malloc(sizeof(double)))) {
 #ifdef MULTI_GPU
         for(int dir=0; dir<4; ++dir){
+<<<<<<< HEAD
           border[dir] = 2;
+=======
+          border[dir] = data.R()[dir];
+	  X[dir] = data.X()[dir] - border[dir]*2;
+>>>>>>> develop-latest
         }
 
         for(int dir=0; dir<4; ++dir) X[dir] = data.X()[dir] - border[dir]*2;
@@ -130,30 +135,41 @@ namespace quda {
   }
 
   template<typename Float, typename Gauge>
-    class GaugePlaq : Tunable {
+    class GaugePlaq : TunableLocalParity {
       GaugePlaqArg<Gauge> arg;
       const QudaFieldLocation location;
 
       private:
+<<<<<<< HEAD
       unsigned int sharedBytesPerThread() const { return sizeof(Float); }
       unsigned int sharedBytesPerBlock(const TuneParam &param) const { return 0; }
 
       bool tuneSharedBytes() const { return false; } // Don't tune shared memory
       bool tuneGridDim() const { return false; } // Don't tune the grid dimensions.
+=======
+>>>>>>> develop-latest
       unsigned int minThreads() const { return arg.threads; }
 
       public:
       GaugePlaq(GaugePlaqArg<Gauge> &arg, QudaFieldLocation location)
         : arg(arg), location(location) {}
+<<<<<<< HEAD
       ~GaugePlaq () { host_free(arg.plaq_h); }
+=======
+      ~GaugePlaq () { }
+>>>>>>> develop-latest
 
       void apply(const cudaStream_t &stream){
         if(location == QUDA_CUDA_FIELD_LOCATION){
           TuneParam tp = tuneLaunch(*this, getTuning(), getVerbosity());
 
+<<<<<<< HEAD
 	  LAUNCH_KERNEL(computePlaq, tp, stream, arg, Float, Gauge);
 
 //	  cudaMemcpy(arg.plaq_h, arg.plaq, sizeof(double), cudaMemcpyDeviceToHost); 
+=======
+	  LAUNCH_KERNEL_LOCAL_PARITY(computePlaq, tp, stream, arg, Float, Gauge);
+>>>>>>> develop-latest
 	  cudaDeviceSynchronize();
 
 	  #ifdef MULTI_GPU
@@ -171,11 +187,16 @@ namespace quda {
 
       TuneKey tuneKey() const {
         std::stringstream vol, aux;
+<<<<<<< HEAD
         vol << arg.X[0] << "x";
         vol << arg.X[1] << "x";
         vol << arg.X[2] << "x";
         vol << arg.X[3];
         aux << "threads=" << arg.threads << ",prec="  << sizeof(Float);
+=======
+        vol << arg.X[0] << "x" << arg.X[1] << "x" << arg.X[2] << "x" << arg.X[3];
+	aux << "threads=" << arg.threads << ",prec="  << sizeof(Float);
+>>>>>>> develop-latest
         return TuneKey(vol.str().c_str(), typeid(*this).name(), aux.str().c_str());
       }
 
@@ -195,7 +216,11 @@ namespace quda {
     }; 
 
   template<typename Float, typename Gauge>
+<<<<<<< HEAD
     void plaquette(const Gauge dataOr, const GaugeField& data, QudaFieldLocation location, Float &plq) {
+=======
+  void plaquette(const Gauge dataOr, const GaugeField& data, double2 &plq, QudaFieldLocation location) {
+>>>>>>> develop-latest
       GaugePlaqArg<Gauge> arg(dataOr, data);
       GaugePlaq<Float,Gauge> gaugePlaq(arg, location);
       gaugePlaq.apply(0);
@@ -204,6 +229,7 @@ namespace quda {
     }
 
   template<typename Float>
+<<<<<<< HEAD
     Float plaquette(const GaugeField& data, QudaFieldLocation location) {
 
       // Switching to FloatNOrder for the gauge field in order to support RECONSTRUCT_12
@@ -237,11 +263,17 @@ namespace quda {
 
       return res;
     }
+=======
+  double2 plaquette(const GaugeField& data, double2 &plq, QudaFieldLocation location) {
+    INSTANTIATE_RECONSTRUCT(plaquette<Float>, data, plq, location);
+  }
+>>>>>>> develop-latest
 #endif
 
   double plaquette(const GaugeField& data, QudaFieldLocation location) {
 
 #ifdef GPU_GAUGE_TOOLS
+<<<<<<< HEAD
     if(data.Precision() == QUDA_HALF_PRECISION) {
       errorQuda("Half precision not supported\n");
     }
@@ -252,9 +284,15 @@ namespace quda {
     } else {
       errorQuda("Precision %d not supported", data.Precision());
     }
+=======
+    double2 plq;
+    INSTANTIATE_PRECISION(plaquette, data, plq, location);
+    double3 plaq = make_double3(0.5*(plq.x + plq.y), plq.x, plq.y);
+>>>>>>> develop-latest
 #else
   errorQuda("Gauge tools are not build");
 #endif
 
   }
-}
+
+} // namespace quda

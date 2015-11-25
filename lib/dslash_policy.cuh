@@ -67,11 +67,12 @@ struct DslashCommsPattern {
       }
 #endif
 
-
-
+#undef DSLASH_PROFILE
+#ifdef DSLASH_PROFILE
 #define PROFILE(f, profile, idx)		\
   profile.Start(idx);				\
   f;						\
+<<<<<<< HEAD
   profile.Stop(idx); 
 
 
@@ -133,19 +134,15 @@ void dslashCuda(DslashCuda &dslash, const size_t regSize, const int parity, cons
 	      profile, QUDA_PROFILE_EVENT_RECORD);
     }
   }
+=======
+  profile.TPSTOP(idx); 
+#else
+#define PROFILE(f, profile, idx) f;
+>>>>>>> develop-latest
 #endif
 
-  PROFILE(dslash.apply(streams[Nstream-1]), profile, QUDA_PROFILE_DSLASH_KERNEL);
 
-#ifdef MULTI_GPU
-
-  int completeSum = 0;
-  while (completeSum < pattern.commDimTotal) {
-    for (int i=3; i>=0; i--) {
-      if (!dslashParam.commDim[i]) continue;
-
-      for (int dir=1; dir>=0; dir--) {
-
+<<<<<<< HEAD
 	// Query if gather has completed
 	if (!pattern.gatherCompleted[2*i+dir] && pattern.gatherCompleted[pattern.previousDir[2*i+dir]]) { 
 	  //CUresult event_test;
@@ -205,6 +202,8 @@ void dslashCuda(DslashCuda &dslash, const size_t regSize, const int parity, cons
 
   profile.Stop(QUDA_PROFILE_TOTAL);
 }
+=======
+>>>>>>> develop-latest
 
 #ifdef PTHREADS
 #include <pthread.h>
@@ -244,11 +243,13 @@ namespace {
     InteriorParam* param = static_cast<InteriorParam*>(interiorParam);
     cudaSetDevice(param->current_device); // set device in the new thread
     PROFILE(param->dslash->apply(streams[Nstream-1]), (*(param->profile)), QUDA_PROFILE_DSLASH_KERNEL);
+    if (aux_worker) aux_worker->apply(streams[Nstream-1]);
     return NULL;
   }
 
 } // anonymous namespace
 #endif
+
 
 namespace{
 
@@ -331,6 +332,7 @@ struct DslashCuda2 : DslashPolicyImp {
 #endif // MULTI_GPU
 
     PROFILE(dslash.apply(streams[Nstream-1]), profile, QUDA_PROFILE_DSLASH_KERNEL);
+    if (aux_worker) aux_worker->apply(streams[Nstream-1]);
 
 #ifdef MULTI_GPU 
 
@@ -484,6 +486,7 @@ struct DslashPthreads : DslashPolicyImp {
 
 #if (!defined MULTI_GPU)
     PROFILE(dslash.apply(streams[Nstream-1]), profile, QUDA_PROFILE_DSLASH_KERNEL);
+    if (aux_worker) aux_worker->apply(streams[Nstream-1]);
 #endif
 
 #ifdef MULTI_GPU 
@@ -612,6 +615,7 @@ struct DslashGPUComms : DslashPolicyImp {
 #endif // MULTI_GPU
 
     PROFILE(dslash.apply(streams[Nstream-1]), profile, QUDA_PROFILE_DSLASH_KERNEL);
+    if (aux_worker) aux_worker->apply(streams[Nstream-1]);
 
 #ifdef MULTI_GPU 
 
@@ -729,6 +733,7 @@ struct DslashFusedGPUComms : DslashPolicyImp {
 #endif // MULTI_GPU
 
     PROFILE(dslash.apply(streams[Nstream-1]), profile, QUDA_PROFILE_DSLASH_KERNEL);
+    if (aux_worker) aux_worker->apply(streams[Nstream-1]);
 
 #ifdef MULTI_GPU 
 
@@ -860,6 +865,7 @@ struct DslashFaceBuffer : DslashPolicyImp {
 #endif
 
     PROFILE(dslash.apply(streams[Nstream-1]), profile, QUDA_PROFILE_DSLASH_KERNEL);
+    if (aux_worker) aux_worker->apply(streams[Nstream-1]);
 
 #ifdef MULTI_GPU
 
@@ -1008,6 +1014,7 @@ struct DslashFusedExterior : DslashPolicyImp {
 #endif // MULTI_GPU
 
     PROFILE(dslash.apply(streams[Nstream-1]), profile, QUDA_PROFILE_DSLASH_KERNEL);
+    if (aux_worker) aux_worker->apply(streams[Nstream-1]);
 
 #ifdef MULTI_GPU 
 
@@ -1131,6 +1138,7 @@ struct DslashFactory {
 
 } // anonymous namespace
 
+<<<<<<< HEAD
 void dslashCuda2(DslashCuda &dslash, const size_t regSize, const int parity, const int dagger, 
 		 const int volume, const int *faceVolumeCB, TimeProfile &profile) {
 
@@ -1252,21 +1260,12 @@ void dslashCuda2(DslashCuda &dslash, const size_t regSize, const int parity, con
     } else {
       cudaEventSynchronize(dslashStart);
     }
+=======
+>>>>>>> develop-latest
 
-    for (int dir=1; dir>=0; dir--) {	
-      PROFILE(inSpinor->sendStart(dslash.Nface()/2, 2*i+dir, dagger), profile, QUDA_PROFILE_COMMS_START);
-      inSpinor->commsQuery(dslash.Nface()/2, 2*i+dir, dagger); // do a comms query to ensure MPI has begun
-    }
-  }
-#endif
-#ifdef PTHREADS
-  bool interiorLaunched = false;
-#endif
-  int completeSum = 0;
-  while (completeSum < pattern.commDimTotal) {
-    for (int i=3; i>=0; i--) {
-      if (!dslashParam.commDim[i]) continue;
+#if 0
 
+<<<<<<< HEAD
       for (int dir=1; dir>=0; dir--) {
 
 #ifndef GPU_COMMS
@@ -1337,6 +1336,10 @@ void dslashCuda2(DslashCuda &dslash, const size_t regSize, const int parity, con
 #endif // MULTI_GPU
   profile.Stop(QUDA_PROFILE_TOTAL);
 }
+=======
+// FIXME there is no policy version of this variant.  For now just
+// leave this here as this experiment may be useful in the future.
+>>>>>>> develop-latest
 
 /**
    Variation of multi-gpu dslash where the packing kernel writes
@@ -1381,6 +1384,7 @@ void dslashZeroCopyCuda(DslashCuda &dslash, const size_t regSize, const int pari
 #endif
 
   PROFILE(dslash.apply(streams[Nstream-1]), profile, QUDA_PROFILE_DSLASH_KERNEL);
+  if (aux_worker) aux_worker->apply(streams[Nstream-1]);
 
 #ifdef MULTI_GPU
 
@@ -1454,6 +1458,7 @@ void dslashZeroCopyCuda(DslashCuda &dslash, const size_t regSize, const int pari
   profile.Stop(QUDA_PROFILE_TOTAL);
 }
 
+<<<<<<< HEAD
 void dslashCudaNC(DslashCuda &dslash, const size_t regSize, const int parity, const int dagger, 
 		  const int volume, const int *faceVolumeCB, TimeProfile &profile) {
   profile.Start(QUDA_PROFILE_TOTAL);
@@ -1466,3 +1471,6 @@ void dslashCudaNC(DslashCuda &dslash, const size_t regSize, const int parity, co
 
   profile.Stop(QUDA_PROFILE_TOTAL);
 }
+=======
+#endif
+>>>>>>> develop-latest

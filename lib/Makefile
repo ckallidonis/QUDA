@@ -32,10 +32,19 @@ QUDA_OBJS = gauge_phase.o timer.o malloc.o solver.o			\
 	fermion_force_quda.o unitarize_force_quda.o			\
 	unitarize_links_quda.o milc_interface.o				\
 	extended_color_spinor_utilities.o eig_lanczos_quda.o		\
+<<<<<<< HEAD
 	ritz_quda.o eig_solver.o blas_magma.o misc_helpers.o		\
 	inv_mpcg_quda.o inv_mpbicgstab_quda.o				\
 	qudaQKXTM.o qudaQKXTM_Kepler_kernels.o
 
+=======
+	ritz_quda.o eig_solver.o blas_magma.o				\
+	misc_helpers.o inv_mpcg_quda.o inv_mpbicgstab_quda.o		\
+	pgauge_exchange.o pgauge_init.o pgauge_heatbath.o random.o	\
+	gauge_fix_ovr_extra.o gauge_fix_fft.o gauge_fix_ovr.o		\
+	pgauge_det_trace.o clover_outer_product.o			\
+	clover_sigma_outer_product.o momentum.o qcharge_quda.o
+>>>>>>> develop-latest
 
 # header files, found in include/
 QUDA_HDRS = blas_quda.h clover_field.h color_spinor_field.h convert.h	\
@@ -46,8 +55,16 @@ QUDA_HDRS = blas_quda.h clover_field.h color_spinor_field.h convert.h	\
 	texture.h eig_variables.h numa_affinity.h misc_helpers.h	\
 	fermion_force_quda.h malloc_quda.h gauge_field_order.h		\
 	clover_field_order.h color_spinor_field_order.h			\
+<<<<<<< HEAD
 	staggered_oprod.h lanczos_quda.h ritz_quda.h blas_magma.h
 
+=======
+	staggered_oprod.h lanczos_quda.h ritz_quda.h blas_magma.h	\
+	random_quda.h pgauge_monte.h unitarization_links.h		\
+	index_helper.cuh atomic.cuh cub_helper.cuh eig_variables.h	\
+	numa_affinity.h misc_helpers.h texture.h object.h momentum.h	\
+	su3_project.cuh worker.h
+>>>>>>> develop-latest
 
 # These are only inlined into blas_quda.cu
 BLAS_INLN = blas_core.h blas_mixed_core.h
@@ -56,7 +73,7 @@ BLAS_INLN = blas_core.h blas_mixed_core.h
 REDUCE_INLN = reduce_core.h reduce_mixed_core.h multi_reduce_core.h
 
 # These are only inlined into cuda_color_spinor_field.cu
-CSF_INLN = 
+CSF_INLN =
 
 # These are only inlined into dslash_quda.cu
 DSLASH_INLN = dslash_constants.h dslash_textures.h io_spinor.h	\
@@ -145,6 +162,27 @@ CORE = $(QUDA_CORE:%=dslash_core/%)
 CUDA_VERSION = $(shell awk '/\#define CUDA_VERSION/{print $$3}' $(CUDA_INSTALL_PATH)/include/cuda.h)
 HASH = \"cpu_arch=$(strip $(CPU_ARCH)),gpu_arch=$(strip $(GPU_ARCH)),cuda_version=$(strip $(CUDA_VERSION))\"
 
+<<<<<<< HEAD
+=======
+
+DGITVERSION =
+GITVERSION =
+ifeq ($(strip $(GIT)), git)
+	GITVERSION = $(shell git describe --long --dirty 2> /dev/null)
+ifneq ($(GITVERSION),)
+	  DGITVERSION = -DGITVERSION=\"$(GITVERSION)\"
+endif
+endif
+
+ifeq ($(QUDA_DEBUG),true)
+ifeq ($(GITVERSION),)
+	DGITVERSION = -DGITVERSION=\"debug\"
+else
+	DGITVERSION= -DGITVERSION=\"$(GITVERSION)-debug\"
+endif
+endif
+
+>>>>>>> develop-latest
 # limit maximum number of registers in BLAS routines to increase occupancy
 ifneq (,$(filter $(strip $(GPU_ARCH)),sm_20 sm_21 sm_30))
   MAXREG =
@@ -158,25 +196,29 @@ all: $(QUDA)
 $(QUDA): $(QUDA_OBJS) ../make.inc
 	ar cru $@ $(QUDA_OBJS)
 
+
+# The file generate/gen.py imports all the code generators
+# if you create a new code generator please register it there
 gen:
-	$(PYTHON) generate/dslash_cuda_gen.py
-	$(PYTHON) generate/fused_exterior_dslash_gen.py
-	$(PYTHON) generate/dw_dslash_cuda_gen.py
-	$(PYTHON) generate/fused_exterior_dw_dslash_cuda_gen.py
-	$(PYTHON) generate/ndeg_tm_dslash_cuda_gen.py
-	$(PYTHON) generate/fused_exterior_ndeg_tm_dslash_cuda_gen.py
-	$(PYTHON) generate/deg_tm_dslash_cuda_gen.py
-	$(PYTHON) generate/fused_exterior_deg_tm_dslash_cuda_gen.py
-	$(PYTHON) generate/deg_tmc_dslash_cuda_gen.py
-	$(PYTHON) generate/fused_exterior_deg_tmc_dslash_cuda_gen.py
-	$(PYTHON) generate/dw_dslash_4D_cuda_gen.py
-	$(PYTHON) generate/fused_exterior_dw_dslash_4D_cuda_gen.py
+	$(PYTHON) generate/gen.py
+
 
 clean:
 	-rm -f *.o $(QUDA)
 
+<<<<<<< HEAD
+=======
+.PHONY: version.o
+version.o: version.cpp $(HDRS) $(QUDA_OBJS)
+	$(CXX) $(CXXFLAGS) $(DGITVERSION) $< -c -o $@
+
+
+interface_quda.o: interface_quda.cpp $(HDRS)
+	$(CXX) $(CXXFLAGS) $(DGITVERSION) $< -c -o $@
+
+>>>>>>> develop-latest
 tune.o: tune.cpp $(HDRS)
-	$(CXX) $(CXXFLAGS) -DQUDA_HASH=$(HASH) $< -c -o $@
+	$(CXX) $(CXXFLAGS) -DQUDA_HASH=$(HASH) $(DGITVERSION) $< -c -o $@
 
 blas_quda.o: blas_quda.cu $(HDRS) $(BLAS_INLN)
 	$(NVCC) $(NVCCFLAGS) $(MAXREG) $< -c -o $@

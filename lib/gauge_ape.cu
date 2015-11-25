@@ -1,5 +1,6 @@
 #include <quda_internal.h>
 #include <quda_matrix.h>
+#include <su3_project.cuh>
 #include <tune_quda.h>
 #include <gauge_field.h>
 #include <gauge_field_order.h>
@@ -27,10 +28,10 @@ namespace quda {
     GaugeAPEArg(GaugeOr &origin, GaugeDs &dest, const GaugeField &data, const Float alpha, const Float tolerance) 
       : origin(origin), dest(dest), alpha(alpha), tolerance(tolerance) {
 #ifdef MULTI_GPU
-        for(int dir=0; dir<4; ++dir){
-          border[dir] = 2;
-        }
-        for(int dir=0; dir<4; ++dir) X[dir] = data.X()[dir] - border[dir]*2;
+      for ( int dir = 0; dir < 4; ++dir ) {
+        border[dir] = data.R()[dir];
+        X[dir] = data.X()[dir] - border[dir] * 2;
+      } 
 #else
         for(int dir=0; dir<4; ++dir) X[dir] = data.X()[dir];
 #endif
@@ -38,6 +39,7 @@ namespace quda {
     }
   };
 
+<<<<<<< HEAD
 
   __device__ __host__ inline int linkIndex2(int x[], int dx[], const int X[4]) {
     int y[4];
@@ -159,6 +161,8 @@ namespace quda {
     }*/
   }
 
+=======
+>>>>>>> develop-latest
 
   template <typename Float, typename GaugeOr, typename GaugeDs, typename Float2>
   __host__ __device__ void computeStaple(GaugeAPEArg<Float,GaugeOr,GaugeDs>& arg, int idx, int parity, int dir, Matrix<Float2,3> &staple) {
@@ -264,8 +268,13 @@ namespace quda {
 
 	U  = U + S;
 
+<<<<<<< HEAD
         polarSu3<Cmplx,Float>(&U, arg.tolerance);
         arg.dest.save((Float*)(U.data),linkIndex2(x,dx,X), dir, parity); 
+=======
+        polarSu3<Cmplx,Float>(U, arg.tolerance);
+        arg.dest.save((Float*)(U.data),linkIndexShift(x,dx,X), dir, parity); 
+>>>>>>> develop-latest
     }
   }
 

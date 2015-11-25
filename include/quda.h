@@ -64,12 +64,16 @@ extern "C" {
     QudaStaggeredPhase staggered_phase_type; /**< Set the staggered phase type of the links */
     int staggered_phase_applied; /**< Whether the staggered phase has already been applied to the links */
 
+    double i_mu; /**< Imaginary chemical potential */
+
     int overlap; /**< Width of overlapping domains */
 
     int use_resident_gauge;  /**< Use the resident gauge field */
     int use_resident_mom;    /**< Use the resident mom field */
     int make_resident_gauge; /**< Make the gauge field resident */
     int make_resident_mom;   /**< Make the mom field resident */
+    int return_gauge;        /**< Return the new gauge field */
+    int return_mom;          /**< Return the new mom field */
 
   } QudaGaugeParam;
 
@@ -613,11 +617,10 @@ extern "C" {
    * @param max_length The maximum number of non-zero of links in any path in the action
    * @param dt The integration step size (for MILC this is dt*beta/3)
    * @param param The parameters of the external fields and the computation settings
-   * @param timeinfo
    */
   int computeGaugeForceQuda(void* mom, void* sitelink,  int*** input_path_buf, int* path_length,
 			    double* loop_coeff, int num_paths, int max_length, double dt,
-			    QudaGaugeParam* qudaGaugeParam, double* timeinfo);
+			    QudaGaugeParam* qudaGaugeParam);
 
   /**
    * Evolve the gauge field by step size dt, using the momentum field
@@ -633,6 +636,36 @@ extern "C" {
   void updateGaugeFieldQuda(void* gauge, void* momentum, double dt, 
       int conj_mom, int exact, QudaGaugeParam* param);
 
+  /**
+   * Apply the staggered phase factors to the gauge field.  If the
+   * imaginary chemical potential is non-zero then the phase factor
+   * exp(imu/T) will be applied to the links in the temporal
+   * direction.
+   *
+   * @param gauge_h The gauge field
+   * @param param The parameters of the gauge field
+   */
+  void staggeredPhaseQuda(void *gauge_h, QudaGaugeParam *param);
+
+  /**
+   * Project the input field on the SU(3) group.  If the target
+   * tolerance is not met, this routine will give a runtime error.
+   *
+   * @param gauge_h The gauge field to be updated
+   * @param tol The tolerance to which we iterate
+   * @param param The parameters of the gauge field
+   */
+  void projectSU3Quda(void *gauge_h, double tol, QudaGaugeParam *param);
+
+  /**
+   * Evaluate the momentum contribution to the Hybrid Monte Carlo
+   * action.  The momentum field is assumed to be in MILC order.
+   *
+   * @param momentum The momentum field
+   * @param param The parameters of the external fields and the computation settings
+   * @return momentum action
+   */
+  double momActionQuda(void* momentum, QudaGaugeParam* param);
 
   /**
    * Take a gauge field on the host, extend it and load it onto the device. 
@@ -731,9 +764,77 @@ extern "C" {
                       const void* const u_link,
                       const QudaGaugeParam* param);
 
+<<<<<<< HEAD
   //  void performAPEnStep(unsigned int nSteps, double alpha);
   //  void copyGaugeQuda(cudaGaugeField *gaugeCopy, cudaGaugeField *gaugeOrig);
   double plaqCuda();
+=======
+  /**
+   * Computes the total, spatial and temporal plaquette averages of the loaded gauge configuration.
+   * @param Array for storing the averages (total, spatial, temporal)
+   */
+  void plaqQuda(double plaq[3]);
+
+  /**
+   * Performs APE smearing on gaugePrecise and stores it in gaugeSmeared
+   * @param nSteps Number of steps to apply.
+   * @param alpha  Alpha coefficient for APE smearing.
+   */
+  void performAPEnStep(unsigned int nSteps, double alpha);
+
+  /**
+   * Calculates the topological charge from gaugeSmeared, if it exist, or from gaugePrecise if no smeared fields are present.
+   */
+  double qChargeCuda();
+
+  /**
+   * @brief Gauge fixing with overrelaxation with support for single and multi GPU.
+   * @param[in,out] gauge, gauge field to be fixed
+   * @param[in] gauge_dir, 3 for Coulomb gauge fixing, other for Landau gauge fixing
+   * @param[in] Nsteps, maximum number of steps to perform gauge fixing
+   * @param[in] verbose_interval, print gauge fixing info when iteration count is a multiple of this
+   * @param[in] relax_boost, gauge fixing parameter of the overrelaxation method, most common value is 1.5 or 1.7.
+   * @param[in] tolerance, torelance value to stop the method, if this value is zero then the method stops when iteration reachs the maximum number of steps defined by Nsteps
+   * @param[in] reunit_interval, reunitarize gauge field when iteration count is a multiple of this
+   * @param[in] stopWtheta, 0 for MILC criterium and 1 to use the theta value
+   * @param[in] param The parameters of the external fields and the computation settings
+   * @param[out] timeinfo
+   */
+  int computeGaugeFixingOVRQuda(void* gauge,
+                      const unsigned int gauge_dir,  
+                      const unsigned int Nsteps, 
+                      const unsigned int verbose_interval, 
+                      const double relax_boost, 
+                      const double tolerance, 
+                      const unsigned int reunit_interval, 
+                      const unsigned int stopWtheta, 
+                      QudaGaugeParam* param, 
+                      double* timeinfo);
+  /**
+   * @brief Gauge fixing with Steepest descent method with FFTs with support for single GPU only.
+   * @param[in,out] gauge, gauge field to be fixed
+   * @param[in] gauge_dir, 3 for Coulomb gauge fixing, other for Landau gauge fixing
+   * @param[in] Nsteps, maximum number of steps to perform gauge fixing
+   * @param[in] verbose_interval, print gauge fixing info when iteration count is a multiple of this
+   * @param[in] alpha, gauge fixing parameter of the method, most common value is 0.08
+   * @param[in] autotune, 1 to autotune the method, i.e., if the Fg inverts its tendency we decrease the alpha value 
+   * @param[in] tolerance, torelance value to stop the method, if this value is zero then the method stops when iteration reachs the maximum number of steps defined by Nsteps
+   * @param[in] stopWtheta, 0 for MILC criterium and 1 to use the theta value
+   * @param[in] param The parameters of the external fields and the computation settings
+   * @param[out] timeinfo
+   */
+  int computeGaugeFixingFFTQuda(void* gauge,
+                      const unsigned int gauge_dir,  
+                      const unsigned int Nsteps, 
+                      const unsigned int verbose_interval, 
+                      const double alpha,
+                      const unsigned int autotune, 
+                      const double tolerance,  
+                      const unsigned int stopWtheta, 
+                      QudaGaugeParam* param, 
+                      double* timeinfo);
+
+>>>>>>> develop-latest
   /**
   * Open/Close MAGMA library
   *

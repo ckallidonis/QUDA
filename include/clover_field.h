@@ -227,6 +227,73 @@ namespace quda {
   */
   void cloverInvert(CloverField &clover, bool computeTraceLog, QudaFieldLocation location);
 
+<<<<<<< HEAD
+=======
+  /**
+     Compute the force contribution from the solver solution fields
+   
+     Force(x, mu) = U(x, mu) * sum_i=1^nvec ( P_mu^+ x(x+mu) p(x)^\dag  +  P_mu^- p(x+mu) x(x)^\dag )
+
+      M = A_even - kappa^2 * Dslash * A_odd^{-1} * Dslash
+      x(even) = M^{-1} b(even)
+      x(odd)  = A_odd^{-1} * Dslash * x(even)
+      p(even) = M * x(even)
+      p(odd)  = A_odd^{-1} * Dslash^dag * M * x(even). 
+
+     @param force The resulting force field
+     @param U The input gauge field
+     @param x Solution field (both parities)
+     @param p Intermediate vectors (both parities)
+     @param coeff Multiplicative coefficient (e.g., dt * residue)
+   */
+  void computeCloverForce(cudaGaugeField& force, const cudaGaugeField& U,
+			  cudaColorSpinorField& x, cudaColorSpinorField& p,
+			  const double coeff);
+  /**
+     Compute the outer product from the solver solution fields arising
+     from the diagonal term of the fermion bilinear in direction mu,nu.
+
+     @param oprod Computed outer product field (scalar matrix field)
+     @param x Solution field (both parities)
+     @param p Intermediate vectors (both parities)
+     @coeff coeff Multiplicative coefficient (e.g., dt * residiue)
+     @param mu mu direction
+     @param nu nu direction
+     @param update If update>1 then read/write to oprod field else just over write
+  */
+  void computeCloverSigmaOprod(cudaGaugeField& oprod,
+			       cudaColorSpinorField& x,  
+			       cudaColorSpinorField& p,
+			       const double coeff, int mu, int nu, int update);
+  /**
+     Compute the matrix field necessary for the force calculation from
+     the clover trace action.
+
+     @param output The computed matrix field (scalar)
+     @param clover The input clover field
+     @param mu mu direction
+     @param nu nu direction
+     @param location The location of the computation
+   */
+  void computeCloverSigmaTrace(GaugeField &output, const CloverField &clover, int mu, int nu, QudaFieldLocation location);
+
+  /**
+     Compute the derivative of the clover matrix in the direction
+     mu,nu and compute the resulting force given the outer-product
+     field
+
+     @param force The compute force field (read/write update)
+     @param gauge The input gauge field
+     @param oprod The input outer-product field
+     @param mu mu direction
+     @param nu nu direction
+     @param coeff Multiplicative coefficient (e.g., clover coefficient)
+     @param parity The field parity we are working on 
+     @param conjugate Whether to set oprod = oprod - conj(oprod) or not
+   */
+  void cloverDerivative(cudaGaugeField &force, cudaGaugeField& gauge, cudaGaugeField& oprod, int mu, int nu, double coeff, QudaParity parity, int conjugate);
+
+>>>>>>> develop-latest
 } // namespace quda
 
 #endif // _CLOVER_QUDA_H

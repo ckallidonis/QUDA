@@ -377,6 +377,7 @@
       ps << "shared=" << param.shared_bytes;
       return ps.str();
     }
+<<<<<<< HEAD
     virtual int Nface() { return 2; }
 
     virtual void preTune()
@@ -388,6 +389,65 @@
 	  saveOutNorm = new char[out->NormBytes()];
 	  cudaMemcpy(saveOutNorm, out->Norm(), out->NormBytes(), cudaMemcpyDeviceToHost);
 	}
+=======
+  }
+
+  /*void launch_auxiliary(cudaStream_t &stream) {
+    auxiliary.apply(stream);
+    }*/
+  
+  /*
+    per direction / dimension flops
+    spin project flops = Nc * Ns
+    SU(3) matrix-vector flops = (8 Nc - 2) * Nc
+    spin reconstruction flops = 2 * Nc * Ns (just an accumulation to all components)
+    xpay = 2 * 2 * Nc * Ns
+      
+    So for the full dslash we have, where for the final spin
+    reconstruct we have -1 since the first direction does not
+    require any accumulation.
+      
+    flops = (2 * Nd * Nc * Ns)  +  (2 * Nd * (Ns/2) * (8*Nc-2) * Nc)  +  ((2 * Nd - 1) * 2 * Nc * Ns)
+    flops_xpay = flops + 2 * 2 * Nc * Ns
+      
+    For Wilson this should give 1344 for Nc=3,Ns=2 and 1368 for the xpay equivalent
+  */
+  virtual long long flops() const {
+    int mv_flops = (8 * in->Ncolor() - 2) * in->Ncolor(); // SU(3) matrix-vector flops
+    int num_mv_multiply = in->Nspin() == 4 ? 2 : 1;
+    int ghost_flops = (num_mv_multiply * mv_flops + 2*in->Ncolor()*in->Nspin());
+    int xpay_flops = 2 * 2 * in->Ncolor() * in->Nspin(); // multiply and add per real component
+    int num_dir = 2 * 4;
+
+    long long flops;
+    switch(dslashParam.kernel_type) {
+    case EXTERIOR_KERNEL_X:
+    case EXTERIOR_KERNEL_Y:
+    case EXTERIOR_KERNEL_Z:
+    case EXTERIOR_KERNEL_T:
+      flops = (ghost_flops + (x ? xpay_flops : 0)) * 2 * in->GhostFace()[dslashParam.kernel_type];
+      break;
+    case EXTERIOR_KERNEL_ALL:
+      {
+	long long ghost_sites = 2 * (in->GhostFace()[0]+in->GhostFace()[1]+in->GhostFace()[2]+in->GhostFace()[3]);
+	flops = (ghost_flops + (x ? xpay_flops : 0)) * ghost_sites;
+	break;
+      }
+    case INTERIOR_KERNEL:
+      {
+	long long sites = in->VolumeCB();
+	flops = (num_dir*(in->Nspin()/4)*in->Ncolor()*in->Nspin() +   // spin project (=0 for staggered)
+		 num_dir*num_mv_multiply*mv_flops +                   // SU(3) matrix-vector multiplies
+		 ((num_dir-1)*2*in->Ncolor()*in->Nspin())) * sites;   // accumulation
+	if (x) flops += xpay_flops * sites;
+
+	// now correct for flops done by exterior kernel
+	long long ghost_sites = 0;
+	for (int d=0; d<4; d++) if (dslashParam.commDim[d]) ghost_sites += 2 * in->GhostFace()[d];
+	flops -= (ghost_flops + (x ? xpay_flops : 0)) * ghost_sites;
+	  
+	break;
+>>>>>>> develop-latest
       }
     }
     

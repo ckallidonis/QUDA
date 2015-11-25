@@ -431,6 +431,38 @@ namespace quda {
   };
 
 
+<<<<<<< HEAD
+=======
+
+
+template <typename Float, int number> struct VectorType;
+
+// double precision
+template <> struct VectorType<double, 1>{typedef double type; };
+template <> struct VectorType<double, 2>{typedef double2 type; };
+template <> struct VectorType<double, 4>{typedef double4 type; };
+
+// single precision
+template <> struct VectorType<float, 1>{typedef float type; };
+template <> struct VectorType<float, 2>{typedef float2 type; };
+template <> struct VectorType<float, 4>{typedef float4 type; };
+
+// half precision
+template <> struct VectorType<short, 1>{typedef short type; };
+template <> struct VectorType<short, 2>{typedef short2 type; };
+template <> struct VectorType<short, 4>{typedef short4 type; };
+
+ template <typename VectorType>
+   __device__ __host__ VectorType vector_load(void *ptr, int idx) {
+#define USE_LDG
+#if defined(__CUDA_ARCH__) && defined(USE_LDG)
+   return __ldg(reinterpret_cast< VectorType* >(ptr) + idx);
+#else
+   return reinterpret_cast< VectorType* >(ptr)[idx];
+#endif
+ }
+
+>>>>>>> develop-latest
   template <typename Float, int length, int N, int reconLen>
     struct FloatNOrder {
       typedef typename mapper<Float>::type RegType;
@@ -919,4 +951,66 @@ namespace quda {
   };
 
 
+<<<<<<< HEAD
 }
+=======
+  
+  // Use traits to reduce the template explosion
+  template<typename ,QudaReconstructType,int N=18> struct gauge_mapper { };
+
+  // double precision
+  template<int N> struct gauge_mapper<double,QUDA_RECONSTRUCT_NO,N> { typedef FloatNOrder<double, N, 2, N> type; };
+  template<int N> struct gauge_mapper<double,QUDA_RECONSTRUCT_13,N> { typedef FloatNOrder<double, N, 2, 13> type; };
+  template<int N> struct gauge_mapper<double,QUDA_RECONSTRUCT_12,N> { typedef FloatNOrder<double, N, 2, 12> type; };
+  template<int N> struct gauge_mapper<double,QUDA_RECONSTRUCT_9,N> { typedef FloatNOrder<double, N, 2, 9> type; };
+  template<int N> struct gauge_mapper<double,QUDA_RECONSTRUCT_8,N> { typedef FloatNOrder<double, N, 2, 8> type; };
+
+  // single precision
+  template<int N> struct gauge_mapper<float,QUDA_RECONSTRUCT_NO,N> { typedef FloatNOrder<float, N, 2, N> type; };
+  template<int N> struct gauge_mapper<float,QUDA_RECONSTRUCT_13,N> { typedef FloatNOrder<float, N, 4, 13> type; };
+  template<int N> struct gauge_mapper<float,QUDA_RECONSTRUCT_12,N> { typedef FloatNOrder<float, N, 4, 12> type; };
+  template<int N> struct gauge_mapper<float,QUDA_RECONSTRUCT_9,N> { typedef FloatNOrder<float, N, 4, 9> type; };
+  template<int N> struct gauge_mapper<float,QUDA_RECONSTRUCT_8,N> { typedef FloatNOrder<float, N, 4, 8> type; };
+
+  // half precision
+  template<int N> struct gauge_mapper<short,QUDA_RECONSTRUCT_NO,N> { typedef FloatNOrder<short, N, 2, N> type; };
+  template<int N> struct gauge_mapper<short,QUDA_RECONSTRUCT_13,N> { typedef FloatNOrder<short, N, 4, 13> type; };
+  template<int N> struct gauge_mapper<short,QUDA_RECONSTRUCT_12,N> { typedef FloatNOrder<short, N, 4, 12> type; };
+  template<int N> struct gauge_mapper<short,QUDA_RECONSTRUCT_9,N> { typedef FloatNOrder<short, N, 4, 9> type; };
+  template<int N> struct gauge_mapper<short,QUDA_RECONSTRUCT_8,N> { typedef FloatNOrder<short, N, 4, 8> type; };
+
+
+  // experiments in reducing template instantation boilerplate
+  // can this be replaced with a C++11 variant that uses variadic templates?
+
+#define INSTANTIATE_RECONSTRUCT(func, g, ...) \ 
+  {									\
+    if (!data.isNative())						\
+      errorQuda("Field order %d and precision %d is not native", g.Order(), g.Precision()); \
+    if( g.Reconstruct() == QUDA_RECONSTRUCT_NO) {			\
+      typedef typename gauge_mapper<Float,QUDA_RECONSTRUCT_NO>::type Gauge; \
+      func(Gauge(g), g, __VA_ARGS__);					\
+    } else if( g.Reconstruct() == QUDA_RECONSTRUCT_12){			\
+      typedef typename gauge_mapper<Float,QUDA_RECONSTRUCT_12>::type Gauge; \
+      func(Gauge(g), g, __VA_ARGS__);					\
+    } else if( g.Reconstruct() == QUDA_RECONSTRUCT_8){			\
+      typedef typename gauge_mapper<Float,QUDA_RECONSTRUCT_8>::type Gauge; \
+      func(Gauge(g), g, __VA_ARGS__);					\
+    } else {								\
+      errorQuda("Reconstruction type %d of gauge field not supported", g.Reconstruct()); \
+    }									\
+  }
+  
+#define INSTANTIATE_PRECISION(func, lat, ...)				\
+  {									\
+    if (lat.Precision() == QUDA_DOUBLE_PRECISION) {			\
+      func<double>(lat, __VA_ARGS__);					\
+    } else if(lat.Precision() == QUDA_SINGLE_PRECISION) {		\
+      func<float>(lat, __VA_ARGS__);					\
+    } else {								\
+      errorQuda("Precision %d not supported", lat.Precision());		\
+    }									\
+  }
+
+} // namespace quda
+>>>>>>> develop-latest
