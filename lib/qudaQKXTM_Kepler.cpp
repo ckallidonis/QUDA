@@ -2484,7 +2484,8 @@ void oneEndTrick(cudaColorSpinorField &x,cudaColorSpinorField &tmp3, cudaColorSp
 
 
 template<typename Float>
-void oneEndTrick_w_One_Der(cudaColorSpinorField &x,cudaColorSpinorField &tmp3, cudaColorSpinorField &tmp4,QudaInvertParam *param, void *cnRes_gv,void *cnRes_vv, void **cnD_gv, void **cnD_vv, void **cnC_gv, void **cnC_vv){
+void oneEndTrick_w_One_Der(cudaColorSpinorField &x,cudaColorSpinorField &tmp3, cudaColorSpinorField &tmp4,QudaInvertParam *param, void *cnRes_gv,void *cnRes_vv, void **cnD_gv, void **cnD_vv, void **cnC_gv, void **cnC_vv,
+			   int iAPE){
   void *h_ctrn, *ctrnS, *ctrnC;
 
   if((cudaMallocHost(&h_ctrn, sizeof(Float)*32*GK_localL[0]*GK_localL[1]*GK_localL[2]*GK_localL[3])) == cudaErrorMemoryAllocation)
@@ -2535,23 +2536,30 @@ void oneEndTrick_w_One_Der(cudaColorSpinorField &x,cudaColorSpinorField &tmp3, c
 
   long int sizeBuffer;
   sizeBuffer = sizeof(Float)*32*GK_localL[0]*GK_localL[1]*GK_localL[2]*GK_localL[3];
-  CovD *cov = new CovD(gaugePrecise, profileCovDev);
+  //CovD *cov = new CovD(gaugePrecise, profileCovDev);
 
   ///////////////// LOCAL ///////////////////////////
-  contract(x, tmp3, ctrnS, QUDA_CONTRACT_GAMMA5);
-  cudaMemcpy(h_ctrn, ctrnS, sizeBuffer, cudaMemcpyDeviceToHost);
+  if(iAPE==0){
+    contract(x, tmp3, ctrnS, QUDA_CONTRACT_GAMMA5);
+    cudaMemcpy(h_ctrn, ctrnS, sizeBuffer, cudaMemcpyDeviceToHost);
 
-  for(int ix=0; ix < 32*GK_localL[0]*GK_localL[1]*GK_localL[2]*GK_localL[3]; ix++)
-    ((Float*) cnRes_gv)[ix] += ((Float*)h_ctrn)[ix]; // generalized one end trick
+    for(int ix=0; ix < 32*GK_localL[0]*GK_localL[1]*GK_localL[2]*GK_localL[3]; ix++)
+      ((Float*) cnRes_gv)[ix] += ((Float*)h_ctrn)[ix]; // generalized one end trick
 
-  contract(x, x, ctrnS, QUDA_CONTRACT_GAMMA5);
-  cudaMemcpy(h_ctrn, ctrnS, sizeBuffer, cudaMemcpyDeviceToHost);
+    contract(x, x, ctrnS, QUDA_CONTRACT_GAMMA5);
+    cudaMemcpy(h_ctrn, ctrnS, sizeBuffer, cudaMemcpyDeviceToHost);
 
-  for(int ix=0; ix < 32*GK_localL[0]*GK_localL[1]*GK_localL[2]*GK_localL[3]; ix++)
-    ((Float*) cnRes_vv)[ix] -= ((Float*)h_ctrn)[ix]; // standard one end trick
-  cudaDeviceSynchronize();
+    for(int ix=0; ix < 32*GK_localL[0]*GK_localL[1]*GK_localL[2]*GK_localL[3]; ix++)
+      ((Float*) cnRes_vv)[ix] -= ((Float*)h_ctrn)[ix]; // standard one end trick
+    cudaDeviceSynchronize();
+    printfQuda("Local loop contractions done\n");
+  }
 
   ////////////////// DERIVATIVES //////////////////////////////
+  CovD *cov = new CovD(gaugeSmrd[iAPE], profileCovDev);
+
+  printfQuda("Derivative loaded\n");
+
   for(int mu=0; mu<4; mu++)	// for generalized one-end trick
     {
       cov->M(tmp4,tmp3,mu);

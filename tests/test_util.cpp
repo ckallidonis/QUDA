@@ -1608,6 +1608,9 @@ char pathEigenValuesUp[257] = "evals_u.dat";
 char pathEigenValuesDown[257] = "evals_d.dat";
 char loop_filename[257] = "loop";
 int NdumpStep = 1;
+
+char fileAPE[512] = "NoSmearing";
+
 //////////////////////////////////////////////////////////////////////////////////////////////////////
 
 
@@ -1686,11 +1689,14 @@ void usage(char** argv )
   printf("    --pathListSourcePositions                 # Path where the list with the source positions is (default \" listSourcePositions.txt \")\n");
   printf("    --NeV                                     # The number of eigenVectors we will deflate (default 20)\n");
   printf("    --pathEigenVectorsUp                      # Path where the eigenVectors for up flavor are (default ev_u.0000)\n");
-  printf("    --pathEigenVectorsDown                      # Path where the eigenVectors for up flavor are (default ev_d.0000)\n");
-  printf("    --pathEigenValuesUp                      # Path where the eigenVectors for up flavor are (default evals_u.dat)\n");
-  printf("    --pathEigenValuesDown                      # Path where the eigenVectors for up flavor are (default evals_d.dat)\n");
+  printf("    --pathEigenVectorsDown                    # Path where the eigenVectors for up flavor are (default ev_d.0000)\n");
+  printf("    --pathEigenValuesUp                       # Path where the eigenVectors for up flavor are (default evals_u.dat)\n");
+  printf("    --pathEigenValuesDown                     # Path where the eigenVectors for up flavor are (default evals_d.dat)\n");
   printf("    --loop_filename                           # File name to save loops (default \"loop\")\n");
-  printf("    --NdumpStep                           # Every how many noise vectors it will dump the data (default 1)\n");
+  printf("    --NdumpStep                               # Every how many noise vectors it will dump the data (default 1)\n");
+  printf("    --APESmearFile                            # File containing the parameters for APE smearing (default No Smearing)\n");
+
+
   ////////////////////////////////////////////////////////////////
 
   
@@ -2029,6 +2035,18 @@ int process_command_line_option(int argc, char** argv, int* idx)
     ret = 0;
     goto out;
   }
+
+  if( strcmp(argv[i], "--APESmearFile") == 0){
+    if (i+1 >= argc){
+      usage(argv);
+    }     
+    strcpy(fileAPE, argv[i+1]);
+    i++;
+    ret = 0;
+    goto out;
+  }
+
+
 
   /////////////////////////////////////////////////
 

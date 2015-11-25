@@ -78,6 +78,9 @@ extern char pathEigenValuesUp[];
 extern char pathEigenValuesDown[];
 extern char loop_filename[];
 extern int NdumpStep;
+
+extern char fileAPE[];
+
 void
 display_test_info()
 {
@@ -380,7 +383,30 @@ int main(int argc, char **argv)
   if (dslash_type == QUDA_TWISTED_CLOVER_DSLASH) loadCloverQuda(NULL, NULL, &inv_param);
   //if (dslash_type == QUDA_TWISTED_CLOVER_DSLASH) loadCloverQuda(clover,clover_inv, &inv_param);
 
-  DeflateAndInvert_loop_w_One_Der(gauge_Plaq,&inv_param,&gauge_param,pathEigenValuesDown,pathEigenVectorsDown,loop_filename,NeV,Nstoch,seed,NdumpStep,info);
+
+
+  //-Read the APE smearing file, if applicable
+  smearParams smearParam;
+  if(strcmp(fileAPE,"NoSmearing")==0){
+    smearParam.nAPE = 1;
+    smearParam.APESteps[0] = 0;
+    smearParam.APEalpha[0] = 0.0;
+  }
+  else{
+    FILE *APEptr;
+    APEptr = fopen(fileAPE,"r");
+    if(APEptr==NULL){
+      errorQuda("Cannot open %s for APE smearing params. Exiting.\n",fileAPE);
+      exit(-1);
+    }
+    fscanf(APEptr,"%d\n",&smearParam.nAPE);
+    for(int iAPE=0;iAPE<smearParam.nAPE;iAPE++){
+      fscanf(APEptr,"%d %f\n",&smearParam.APESteps[iAPE],&smearParam.APEalpha[iAPE]);
+    }
+  }
+
+
+  DeflateAndInvert_loop_w_One_Der(gauge_Plaq,&inv_param,gauge_param,pathEigenValuesDown,pathEigenVectorsDown,loop_filename,NeV,Nstoch,seed,NdumpStep,info,smearParam);
   
   freeGaugeQuda();
   if (dslash_type == QUDA_CLOVER_WILSON_DSLASH || dslash_type == QUDA_TWISTED_CLOVER_DSLASH) freeCloverQuda();

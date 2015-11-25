@@ -249,16 +249,18 @@ namespace quda {
       }
 #endif
 
+      int nDims = 4;
       int dx[4] = {0, 0, 0, 0};
-      for (int dir=0; dir < 3; dir++) {				//Only spatial dimensions are smeared
+      for (int dir=0; dir < nDims; dir++) {				//Only spatial dimensions are smeared
         Matrix<Cmplx,3> U, S;
 
         computeStaple<Float,GaugeOr,GaugeDs,Cmplx>(arg,idx,parity,dir,S);
 
         arg.origin.load((Float*)(U.data),linkIndex2(x,dx,X), dir, parity);
 
+	int dDen = nDims*(nDims-1);
 	U  = U * (1. - arg.alpha);
-	S  = S * (arg.alpha/6.);
+	S  = S * ( arg.alpha/(Float)dDen );
 
 	U  = U + S;
 

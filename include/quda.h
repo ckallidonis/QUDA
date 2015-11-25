@@ -731,7 +731,8 @@ extern "C" {
                       const void* const u_link,
                       const QudaGaugeParam* param);
 
-  void performAPEnStep(unsigned int nSteps, double alpha);
+  //  void performAPEnStep(unsigned int nSteps, double alpha);
+  //  void copyGaugeQuda(cudaGaugeField *gaugeCopy, cudaGaugeField *gaugeOrig);
   double plaqCuda();
   /**
   * Open/Close MAGMA library

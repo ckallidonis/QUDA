@@ -122,6 +122,8 @@ cudaGaugeField *gaugeLongPrecondition = NULL;
 
 cudaGaugeField *gaugeSmeared = NULL; 
 
+cudaGaugeField *gaugeSmrd[10];
+
 cudaCloverField *cloverPrecise = NULL;
 cudaCloverField *cloverSloppy = NULL;
 cudaCloverField *cloverPrecondition = NULL;
@@ -5207,6 +5209,7 @@ double plaqCuda ()
   return quda::plaquette(*data, QUDA_CUDA_FIELD_LOCATION);
 }
 
+
 void performAPEnStep(unsigned int nSteps, double alpha)
 {
   profileAPE.Start(QUDA_PROFILE_TOTAL);
@@ -5217,21 +5220,111 @@ void performAPEnStep(unsigned int nSteps, double alpha)
 
 #ifdef MULTI_GPU
   if (extendedGaugeResident == NULL)
+    {
+      int y[4];
+      for(int dir=0; dir<4; ++dir) y[dir] = gaugePrecise->X()[dir] + 4;
+      int pad = 0;
+      GaugeFieldParam gParamEx(y, gaugePrecise->Precision(), gaugePrecise->Reconstruct(),
+			       pad, QUDA_VECTOR_GEOMETRY, QUDA_GHOST_EXCHANGE_NO);
+      gParamEx.create = QUDA_ZERO_FIELD_CREATE;
+      gParamEx.order = gaugePrecise->Order();
+      gParamEx.siteSubset = QUDA_FULL_SITE_SUBSET;
+      gParamEx.t_boundary = gaugePrecise->TBoundary();
+      gParamEx.nFace = 1;
+
+      extendedGaugeResident = new cudaGaugeField(gParamEx);
+
+      copyExtendedGauge(*extendedGaugeResident, *gaugePrecise, QUDA_CUDA_FIELD_LOCATION);
+      int R[4] = {2,2,2,2}; // radius of the extended region in each dimension / direction
+      extendedGaugeResident->exchangeExtendedGhost(R,true);
+    }
+#endif
+
+  int pad = 0;
+  int y[4];
+
+#ifdef MULTI_GPU
+  int R[4] = {2,2,2,2}; // radius of the extended region in each dimension / direction
+  for (int dir=0; dir<4; ++dir) y[dir] = gaugePrecise->X()[dir] + 4;
+#else
+  for (int dir=0; dir<4; ++dir) y[dir] = gaugePrecise->X()[dir];
+#endif
+
+  GaugeFieldParam gParam(y, gaugePrecise->Precision(), gaugePrecise->Reconstruct(),
+			 pad, QUDA_VECTOR_GEOMETRY, QUDA_GHOST_EXCHANGE_NO);
+  gParam.create = QUDA_ZERO_FIELD_CREATE;
+  gParam.order = gaugePrecise->Order();
+  gParam.siteSubset = QUDA_FULL_SITE_SUBSET;
+  gParam.t_boundary = gaugePrecise->TBoundary();
+  gParam.nFace = 1;
+  gParam.tadpole = gaugePrecise->Tadpole();
+
+  if (gaugeSmeared == NULL) {
+    //    gaugeSmeared = new cudaGaugeField(gParamEx);
+    gaugeSmeared = new cudaGaugeField(gParam);
+    #ifdef MULTI_GPU
+      copyExtendedGauge(*gaugeSmeared, *extendedGaugeResident, QUDA_CUDA_FIELD_LOCATION);
+      // gaugeSmeared->exchangeExtendedGhost(R,true);  C.K: Removed this for test
+    #else
+      gaugeSmeared->copy(*gaugePrecise);
+    #endif
+  }
+
+  cudaGaugeField *cudaGaugeTemp = NULL;
+  cudaGaugeTemp = new cudaGaugeField(gParam);
+
+  printfQuda("Plaquette of input gauge field: %le\n", plaquette(*gaugeSmeared, QUDA_CUDA_FIELD_LOCATION));
+
+  for (unsigned int i=0; i<nSteps; i++) {
+    #ifdef MULTI_GPU
+      copyExtendedGauge(*cudaGaugeTemp, *gaugeSmeared, QUDA_CUDA_FIELD_LOCATION);
+      cudaGaugeTemp->exchangeExtendedGhost(R,true);
+      APEStep(*gaugeSmeared, *cudaGaugeTemp, alpha, QUDA_CUDA_FIELD_LOCATION);
+    //      gaugeSmeared->exchangeExtendedGhost(R,true);FIXME I'm not entirely sure whether I can remove this...
+    #else
+      cudaGaugeTemp->copy(*gaugeSmeared);
+      APEStep(*gaugeSmeared, *cudaGaugeTemp, alpha, QUDA_CUDA_FIELD_LOCATION);
+    #endif
+  }
+
+  delete cudaGaugeTemp;
+
+  #ifdef MULTI_GPU
+  gaugeSmeared->exchangeExtendedGhost(R,true);
+  #endif
+
+  printfQuda("Plaquette after %d APE steps: %le\n", nSteps, plaquette(*gaugeSmeared, QUDA_CUDA_FIELD_LOCATION));
+
+  profileAPE.Stop(QUDA_PROFILE_TOTAL);
+}
+
+
+
+void copyGaugeSmrdQuda(cudaGaugeField *gaugeOrig, int idx)
+{
+  profileAPE.Start(QUDA_PROFILE_TOTAL);
+
+  if (gaugeOrig == NULL) {
+    errorQuda("Gauge field must be loaded");
+  }
+
+#ifdef MULTI_GPU
+  if (extendedGaugeResident == NULL)
   {
     int y[4];
-    for(int dir=0; dir<4; ++dir) y[dir] = gaugePrecise->X()[dir] + 4;
+    for(int dir=0; dir<4; ++dir) y[dir] = gaugeOrig->X()[dir] + 4;
     int pad = 0;
-    GaugeFieldParam gParamEx(y, gaugePrecise->Precision(), gaugePrecise->Reconstruct(),
+    GaugeFieldParam gParamEx(y, gaugeOrig->Precision(), gaugeOrig->Reconstruct(),
         pad, QUDA_VECTOR_GEOMETRY, QUDA_GHOST_EXCHANGE_NO);
     gParamEx.create = QUDA_ZERO_FIELD_CREATE;
-    gParamEx.order = gaugePrecise->Order();
+    gParamEx.order = gaugeOrig->Order();
     gParamEx.siteSubset = QUDA_FULL_SITE_SUBSET;
-    gParamEx.t_boundary = gaugePrecise->TBoundary();
+    gParamEx.t_boundary = gaugeOrig->TBoundary();
     gParamEx.nFace = 1;
 
     extendedGaugeResident = new cudaGaugeField(gParamEx);
 
-    copyExtendedGauge(*extendedGaugeResident, *gaugePrecise, QUDA_CUDA_FIELD_LOCATION);
+    copyExtendedGauge(*extendedGaugeResident, *gaugeOrig, QUDA_CUDA_FIELD_LOCATION);
     int R[4] = {2,2,2,2}; // radius of the extended region in each dimension / direction
     extendedGaugeResident->exchangeExtendedGhost(R,true);
   }
@@ -5242,55 +5335,30 @@ void performAPEnStep(unsigned int nSteps, double alpha)
 
 #ifdef MULTI_GPU
     int R[4] = {2,2,2,2}; // radius of the extended region in each dimension / direction
-    for (int dir=0; dir<4; ++dir) y[dir] = gaugePrecise->X()[dir] + 4;
+    for (int dir=0; dir<4; ++dir) y[dir] = gaugeOrig->X()[dir] + 4;
 #else
-    for (int dir=0; dir<4; ++dir) y[dir] = gaugePrecise->X()[dir];
+    for (int dir=0; dir<4; ++dir) y[dir] = gaugeOrig->X()[dir];
 #endif
 
-  GaugeFieldParam gParam(y, gaugePrecise->Precision(), gaugePrecise->Reconstruct(),
+  GaugeFieldParam gParam(y, gaugeOrig->Precision(), gaugeOrig->Reconstruct(),
       pad, QUDA_VECTOR_GEOMETRY, QUDA_GHOST_EXCHANGE_NO);
   gParam.create = QUDA_ZERO_FIELD_CREATE;
-  gParam.order = gaugePrecise->Order();
+  gParam.order = gaugeOrig->Order();
   gParam.siteSubset = QUDA_FULL_SITE_SUBSET;
-  gParam.t_boundary = gaugePrecise->TBoundary();
+  gParam.t_boundary = gaugeOrig->TBoundary();
   gParam.nFace = 1;
-  gParam.tadpole = gaugePrecise->Tadpole();
+  gParam.tadpole = gaugeOrig->Tadpole();
 
-  if (gaugeSmeared == NULL) {
-//    gaugeSmeared = new cudaGaugeField(gParamEx);
-    gaugeSmeared = new cudaGaugeField(gParam);
+  if (gaugeSmrd[idx] == NULL) {
+//    gaugeCopy = new cudaGaugeField(gParamEx);
+    gaugeSmrd[idx] = new cudaGaugeField(gParam);
     #ifdef MULTI_GPU
-      copyExtendedGauge(*gaugeSmeared, *extendedGaugeResident, QUDA_CUDA_FIELD_LOCATION);
-      gaugeSmeared->exchangeExtendedGhost(R,true);
+      copyExtendedGauge(*gaugeSmrd[idx], *extendedGaugeResident, QUDA_CUDA_FIELD_LOCATION);
+      //gaugeSmrd[idx]->exchangeExtendedGhost(R,true);
     #else
-      gaugeSmeared->copy(*gaugePrecise);
+      gaugeSmrd[idx]->copy(*gaugeOrig);
     #endif
   }
-
-  cudaGaugeField *cudaGaugeTemp = NULL;
-  cudaGaugeTemp = new cudaGaugeField(gParam);
-
-  printfQuda("Plaquette after 0 APE steps: %le\n", plaquette(*gaugeSmeared, QUDA_CUDA_FIELD_LOCATION));
-
-  for (unsigned int i=0; i<nSteps; i++) {
-    #ifdef MULTI_GPU
-      copyExtendedGauge(*cudaGaugeTemp, *gaugeSmeared, QUDA_CUDA_FIELD_LOCATION);
-      cudaGaugeTemp->exchangeExtendedGhost(R,true);
-      APEStep(*gaugeSmeared, *cudaGaugeTemp, alpha, QUDA_CUDA_FIELD_LOCATION);
-//      gaugeSmeared->exchangeExtendedGhost(R,true);	FIXME I'm not entirely sure whether I can remove this...
-    #else
-      cudaGaugeTemp->copy(*gaugeSmeared);
-      APEStep(*gaugeSmeared, *cudaGaugeTemp, alpha, QUDA_CUDA_FIELD_LOCATION);
-    #endif
-  }
-
-  delete cudaGaugeTemp;
-
-  #ifdef MULTI_GPU
-    gaugeSmeared->exchangeExtendedGhost(R,true);
-  #endif
-
-  printfQuda("Plaquette after %d APE steps: %le\n", nSteps, plaquette(*gaugeSmeared, QUDA_CUDA_FIELD_LOCATION));
 
   profileAPE.Stop(QUDA_PROFILE_TOTAL);
 }

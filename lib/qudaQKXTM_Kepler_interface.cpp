@@ -1369,9 +1369,11 @@ void DeflateAndInvert_loop(void **gaugeToPlaquette, QudaInvertParam *param ,Quda
 
 }
 
-void DeflateAndInvert_loop_w_One_Der(void **gaugeToPlaquette, QudaInvertParam *param ,QudaGaugeParam *gauge_param, char *filename_eigenValues_down, char *filename_eigenVectors_down,char *filename_out , int NeV , int Nstoch, int seed ,int NdumpStep, qudaQKXTMinfo_Kepler info){
+void DeflateAndInvert_loop_w_One_Der(void **gaugeToPlaquette, QudaInvertParam *param ,QudaGaugeParam gauge_param, char *filename_eigenValues_down, char *filename_eigenVectors_down,char *filename_out , int NeV , int Nstoch, int seed ,int NdumpStep, qudaQKXTMinfo_Kepler info, smearParams smearParam){
   bool flag_eo;
   double t1,t2;
+
+  char filename_APE[512];
 
   profileInvert.Start(QUDA_PROFILE_TOTAL);
   if(param->solve_type != QUDA_NORMOP_PC_SOLVE) errorQuda("This function works only with even odd preconditioning");
@@ -1393,7 +1395,7 @@ void DeflateAndInvert_loop_w_One_Der(void **gaugeToPlaquette, QudaInvertParam *p
   deflation_down->readEigenValues(filename_eigenValues_down);
   deflation_down->readEigenVectors(filename_eigenVectors_down);
   deflation_down->rotateFromChiralToUKQCD();
-  if(gauge_param->t_boundary == QUDA_ANTI_PERIODIC_T)deflation_down->multiply_by_phase();
+  if(gauge_param.t_boundary == QUDA_ANTI_PERIODIC_T)deflation_down->multiply_by_phase();
   t2 = MPI_Wtime();
 
 #ifdef TIMING_REPORT
@@ -1507,36 +1509,93 @@ void DeflateAndInvert_loop_w_One_Der(void **gaugeToPlaquette, QudaInvertParam *p
   cudaMemset      (cnTmp, 0, sizeof(double)*2*16*GK_localVolume);
   ///////////////////////////////////////////////////
   //////////// Allocate memory for one-Der and conserved current
-  void    **cnD_vv;
-  void    **cnD_gv;
-  void    **cnC_vv;
-  void    **cnC_gv;
+  void    **cnD_vv[smearParam.nAPE];
+  void    **cnD_gv[smearParam.nAPE];
+  void    **cnC_vv[smearParam.nAPE];
+  void    **cnC_gv[smearParam.nAPE];
 
-  cnD_vv   = (void**) malloc(sizeof(double*)*2*4);
-  cnD_gv   = (void**) malloc(sizeof(double*)*2*4);
-  cnC_vv   = (void**) malloc(sizeof(double*)*2*4);
-  cnC_gv   = (void**) malloc(sizeof(double*)*2*4);
+  for(int iAPE=0;iAPE<smearParam.nAPE;iAPE++){
+    cnD_vv[iAPE] = (void**) malloc(sizeof(double*)*4);
+    cnD_gv[iAPE] = (void**) malloc(sizeof(double*)*4);
+    cnC_vv[iAPE] = (void**) malloc(sizeof(double*)*4);
+    cnC_gv[iAPE] = (void**) malloc(sizeof(double*)*4);
 
-  if(cnD_gv == NULL)errorQuda("Error allocating memory cnD_gv higher level\n");
-  if(cnD_vv == NULL)errorQuda("Error allocating memory cnD_vv higher level\n");
-  if(cnC_gv == NULL)errorQuda("Error allocating memory cnC_gv higher level\n");
-  if(cnC_vv == NULL)errorQuda("Error allocating memory cnC_vv higher level\n");
-  cudaDeviceSynchronize();
+    if(cnD_gv[iAPE] == NULL)errorQuda("Error allocating memory cnD_gv[%d] higher level\n",iAPE);
+    if(cnD_vv[iAPE] == NULL)errorQuda("Error allocating memory cnD_vv[%d] higher level\n",iAPE);
+    if(cnC_gv[iAPE] == NULL)errorQuda("Error allocating memory cnC_gv[%d] higher level\n",iAPE);
+    if(cnC_vv[iAPE] == NULL)errorQuda("Error allocating memory cnC_vv[%d] higher level\n",iAPE);
+    cudaDeviceSynchronize();
 
-  for(int mu = 0; mu < 4 ; mu++){
-    if((cudaHostAlloc(&(cnD_vv[mu]), sizeof(double)*2*16*GK_localVolume, cudaHostAllocMapped)) != cudaSuccess)
-      errorQuda("Error allocating memory cnD_vv\n");
-    if((cudaHostAlloc(&(cnD_gv[mu]), sizeof(double)*2*16*GK_localVolume, cudaHostAllocMapped)) != cudaSuccess)
-      errorQuda("Error allocating memory cnD_gv\n");
-    if((cudaHostAlloc(&(cnC_vv[mu]), sizeof(double)*2*16*GK_localVolume, cudaHostAllocMapped)) != cudaSuccess)
-      errorQuda("Error allocating memory cnC_vv\n");
-    if((cudaHostAlloc(&(cnC_gv[mu]), sizeof(double)*2*16*GK_localVolume, cudaHostAllocMapped)) != cudaSuccess)
-      errorQuda("Error allocating memory cnC_gv\n");
+    for(int mu = 0; mu < 4 ; mu++){
+      if((cudaHostAlloc(&(cnD_vv[iAPE][mu]), sizeof(double)*2*16*GK_localVolume, cudaHostAllocMapped)) != cudaSuccess)
+	errorQuda("Error allocating memory cnD_vv\n");
+      if((cudaHostAlloc(&(cnD_gv[iAPE][mu]), sizeof(double)*2*16*GK_localVolume, cudaHostAllocMapped)) != cudaSuccess)
+	errorQuda("Error allocating memory cnD_gv\n");
+      if((cudaHostAlloc(&(cnC_vv[iAPE][mu]), sizeof(double)*2*16*GK_localVolume, cudaHostAllocMapped)) != cudaSuccess)
+	errorQuda("Error allocating memory cnC_vv\n");
+      if((cudaHostAlloc(&(cnC_gv[iAPE][mu]), sizeof(double)*2*16*GK_localVolume, cudaHostAllocMapped)) != cudaSuccess)
+	errorQuda("Error allocating memory cnC_gv\n");
+      
+      cudaMemset(cnD_vv[iAPE][mu], 0, sizeof(double)*2*16*GK_localVolume);
+      cudaMemset(cnD_gv[iAPE][mu], 0, sizeof(double)*2*16*GK_localVolume);
+      cudaMemset(cnC_vv[iAPE][mu], 0, sizeof(double)*2*16*GK_localVolume);
+      cudaMemset(cnC_gv[iAPE][mu], 0, sizeof(double)*2*16*GK_localVolume);
+    }
+    cudaDeviceSynchronize();
   }
-  cudaDeviceSynchronize();
+
   ///////////////////////////////////////////////////
   gsl_rng *rNum = gsl_rng_alloc(gsl_rng_ranlux);
   gsl_rng_set(rNum, seed + comm_rank()*seed);
+
+
+  t1 = MPI_Wtime();
+  int nSteps;
+  float alpha;
+  if(smearParam.nAPE==1 && (smearParam.APESteps[0]==0)) printfQuda("Will not perform 4D APE Smearing\n");
+  else{
+    printfQuda("Will perform 4D APE Smearing for %d sets of parameters\n",smearParam.nAPE);
+    printfQuda("APE iter 0, Params: (%d,%4.2f) \n",smearParam.APESteps[0],smearParam.APEalpha[0]);
+  }
+  
+
+  gaugeSmrd[0] = NULL;
+  if(smearParam.APESteps[0]==0){
+    //gaugeSmrd[0] = gaugePrecise;
+    copyGaugeSmrdQuda(gaugePrecise,0);
+    printfQuda("No Smearing performed. Plaquette  = %le\n",plaquette(*gaugeSmrd[0], QUDA_CUDA_FIELD_LOCATION));
+    printfQuda("No Smearing performed. Plaquette2 = %le\n",plaquette(*gaugePrecise, QUDA_CUDA_FIELD_LOCATION));    
+  }
+  else{
+    nSteps = smearParam.APESteps[0];
+    alpha = smearParam.APEalpha[0];
+    performAPEnStep(nSteps, alpha);
+    //gaugeSmrd[0] = gaugeSmeared;
+    copyGaugeSmrdQuda(gaugeSmeared,0);      
+  }
+  
+  for(int iAPE=1;iAPE<smearParam.nAPE; iAPE++){
+    gaugeSmrd[iAPE] = NULL;
+    nSteps = smearParam.APESteps[iAPE] - smearParam.APESteps[iAPE-1];
+    alpha = smearParam.APEalpha[iAPE];
+    if(nSteps<0){
+      errorQuda("oneEndTrick: Your Smearing steps must be in ascending order!");
+      exit(-1);
+    }
+    else if(nSteps==0){
+      errorQuda("oneEndTrick: Two identical smearing parameters detected!");
+      exit(-1);
+    }	
+    printfQuda("APE iter %d, Params: (%d,%4.2f) \n",iAPE,smearParam.APESteps[iAPE],smearParam.APEalpha[iAPE]);
+    
+    performAPEnStep(nSteps, alpha);
+    //gaugeSmrd[iAPE] = gaugeSmeared;
+    copyGaugeSmrdQuda(gaugeSmeared,iAPE);
+  }//-for iAPE
+  t2 = MPI_Wtime();
+  printfQuda("oneEndTrick: 4D-APE Smearing completed in %f secs\n",t2-t1);
+  printfQuda("Original plaquette = %le\n",plaquette(*gaugePrecise, QUDA_CUDA_FIELD_LOCATION));    
+
 
   for(int is = 0 ; is < Nstoch ; is++){
     t1 = MPI_Wtime();
@@ -1559,7 +1618,13 @@ void DeflateAndInvert_loop_w_One_Der(void **gaugeToPlaquette, QudaInvertParam *p
     //  zeroCuda(*out); // remove it later , just for test
     (*solve)(*out,*in);
     dirac.reconstruct(*x,*b,param->solution_type);
-    oneEndTrick_w_One_Der<double>(*x,*tmp3,*tmp4,param,cnRes_gv,cnRes_vv,cnD_gv,cnD_vv,cnC_gv,cnC_vv);
+
+    printfQuda("Inversion %d done\n",is);
+    for(int iAPE=0;iAPE<smearParam.nAPE; iAPE++){
+      oneEndTrick_w_One_Der<double>(*x,*tmp3,*tmp4,param,cnRes_gv,cnRes_vv,cnD_gv[iAPE],cnD_vv[iAPE],cnC_gv[iAPE],cnC_vv[iAPE], iAPE);
+      printfQuda("Loop contractions for iAPE = %d done\n",iAPE);
+    }
+
     t2 = MPI_Wtime();
     printfQuda("Stoch %d finished in %f sec\n",is,t2-t1);
     if( (is+1)%NdumpStep == 0){
@@ -1567,16 +1632,20 @@ void DeflateAndInvert_loop_w_One_Der(void **gaugeToPlaquette, QudaInvertParam *p
       dumpLoop_ultraLocal<double>(cnTmp,filename_out,is+1,info.Q_sq,0); // Scalar
       doCudaFFT_v2<double>(cnRes_gv,cnTmp);
       dumpLoop_ultraLocal<double>(cnTmp,filename_out,is+1,info.Q_sq,1); // dOp
-      for(int mu = 0 ; mu < 4 ; mu++){
-	doCudaFFT_v2<double>(cnD_vv[mu],cnTmp);
-	dumpLoop_oneD<double>(cnTmp,filename_out,is+1,info.Q_sq,mu,0); // Loops
-	doCudaFFT_v2<double>(cnD_gv[mu],cnTmp);
-	dumpLoop_oneD<double>(cnTmp,filename_out,is+1,info.Q_sq,mu,1); // LpsDw
 
-	doCudaFFT_v2<double>(cnC_vv[mu],cnTmp);
-	dumpLoop_oneD<double>(cnTmp,filename_out,is+1,info.Q_sq,mu,2); // LpsDw noether
-	doCudaFFT_v2<double>(cnC_gv[mu],cnTmp);
-	dumpLoop_oneD<double>(cnTmp,filename_out,is+1,info.Q_sq,mu,3); // LpsDw noether
+      for(int iAPE=0;iAPE<smearParam.nAPE; iAPE++){
+	sprintf(filename_APE,"%s_nAPE%d_alphaAPE0p%2d",filename_out,smearParam.APESteps[iAPE],(int)smearParam.APEalpha[iAPE]*100);
+	for(int mu = 0 ; mu < 4 ; mu++){
+	  doCudaFFT_v2<double>(cnD_vv[iAPE][mu],cnTmp);
+	  dumpLoop_oneD<double>(cnTmp,filename_APE,is+1,info.Q_sq,mu,0); // Loops
+	  doCudaFFT_v2<double>(cnD_gv[iAPE][mu],cnTmp);
+	  dumpLoop_oneD<double>(cnTmp,filename_APE,is+1,info.Q_sq,mu,1); // LpsDw
+	  
+	  doCudaFFT_v2<double>(cnC_vv[iAPE][mu],cnTmp);
+	  dumpLoop_oneD<double>(cnTmp,filename_APE,is+1,info.Q_sq,mu,2); // LpsDw noether
+	  doCudaFFT_v2<double>(cnC_gv[iAPE][mu],cnTmp);
+	  dumpLoop_oneD<double>(cnTmp,filename_APE,is+1,info.Q_sq,mu,3); // LpsDw noether
+	}
       }
     } // close loop for dump loops
 
@@ -1587,17 +1656,19 @@ void DeflateAndInvert_loop_w_One_Der(void **gaugeToPlaquette, QudaInvertParam *p
 
   cudaFreeHost(cnTmp);
 
-  for(int mu = 0 ; mu < 4 ; mu++){
-    cudaFreeHost(cnD_vv[mu]);
-    cudaFreeHost(cnD_gv[mu]);
-    cudaFreeHost(cnC_vv[mu]);
-    cudaFreeHost(cnC_gv[mu]);
+  for(int iAPE=0;iAPE<smearParam.nAPE; iAPE++){
+    for(int mu = 0 ; mu < 4 ; mu++){
+      cudaFreeHost(cnD_vv[iAPE][mu]);
+      cudaFreeHost(cnD_gv[iAPE][mu]);
+      cudaFreeHost(cnC_vv[iAPE][mu]);
+      cudaFreeHost(cnC_gv[iAPE][mu]);
+    }
+    cudaFreeHost(cnD_vv[iAPE]);
+    cudaFreeHost(cnD_gv[iAPE]);
+    cudaFreeHost(cnC_vv[iAPE]);
+    cudaFreeHost(cnC_gv[iAPE]);
   }
-  
-  free(cnD_vv);
-  free(cnD_gv);
-  free(cnC_vv);
-  free(cnC_gv);
+
 
   free(input_vector);
   free(output_vector);
