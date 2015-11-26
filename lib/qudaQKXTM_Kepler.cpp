@@ -2484,8 +2484,7 @@ void oneEndTrick(cudaColorSpinorField &x,cudaColorSpinorField &tmp3, cudaColorSp
 
 
 template<typename Float>
-void oneEndTrick_w_One_Der(cudaColorSpinorField &x,cudaColorSpinorField &tmp3, cudaColorSpinorField &tmp4,QudaInvertParam *param, void *cnRes_gv,void *cnRes_vv, void **cnD_gv, void **cnD_vv, void **cnC_gv, void **cnC_vv,
-			   int iAPE, bool APE_4D){
+void oneEndTrick_w_One_Der(cudaColorSpinorField &x,cudaColorSpinorField &tmp3, cudaColorSpinorField &tmp4,QudaInvertParam *param, void *cnRes_gv,void *cnRes_vv, void **cnD_gv, void **cnD_vv, void **cnC_gv, void **cnC_vv, int iAPE, bool APE_4D){
   void *h_ctrn, *ctrnS, *ctrnC;
 
   if((cudaMallocHost(&h_ctrn, sizeof(Float)*32*GK_localL[0]*GK_localL[1]*GK_localL[2]*GK_localL[3])) == cudaErrorMemoryAllocation)
@@ -2538,21 +2537,32 @@ void oneEndTrick_w_One_Der(cudaColorSpinorField &x,cudaColorSpinorField &tmp3, c
   sizeBuffer = sizeof(Float)*32*GK_localL[0]*GK_localL[1]*GK_localL[2]*GK_localL[3];
   //CovD *cov = new CovD(gaugePrecise, profileCovDev);
 
+  int NN = 16*GK_localL[0]*GK_localL[1]*GK_localL[2]*GK_localL[3];
+  int incx = 1;
+  int incy = 1;
+  Float pceval[2] = {1.0,0.0};
+  Float mceval[2] = {-1.0,0.0};
+
   ///////////////// LOCAL ///////////////////////////
   if(iAPE==0){
     contract(x, tmp3, ctrnS, QUDA_CONTRACT_GAMMA5);
     cudaMemcpy(h_ctrn, ctrnS, sizeBuffer, cudaMemcpyDeviceToHost);
 
+    if( typeid(Float) == typeid(float) )       cblas_caxpy(NN, (void*) pceval, (void*) h_ctrn, incx, (void*) cnRes_gv, incy);
+    else if( typeid(Float) == typeid(double) ) cblas_zaxpy(NN, (void*) pceval, (void*) h_ctrn, incx, (void*) cnRes_gv, incy);
 
-
-    for(int ix=0; ix < 32*GK_localL[0]*GK_localL[1]*GK_localL[2]*GK_localL[3]; ix++)
-      ((Float*) cnRes_gv)[ix] += ((Float*)h_ctrn)[ix]; // generalized one end trick
+    //    for(int ix=0; ix < 32*GK_localL[0]*GK_localL[1]*GK_localL[2]*GK_localL[3]; ix++)
+    //      ((Float*) cnRes_gv)[ix] += ((Float*)h_ctrn)[ix]; // generalized one end trick
 
     contract(x, x, ctrnS, QUDA_CONTRACT_GAMMA5);
     cudaMemcpy(h_ctrn, ctrnS, sizeBuffer, cudaMemcpyDeviceToHost);
 
-    for(int ix=0; ix < 32*GK_localL[0]*GK_localL[1]*GK_localL[2]*GK_localL[3]; ix++)
-      ((Float*) cnRes_vv)[ix] -= ((Float*)h_ctrn)[ix]; // standard one end trick
+    //    for(int ix=0; ix < 32*GK_localL[0]*GK_localL[1]*GK_localL[2]*GK_localL[3]; ix++)
+    //      ((Float*) cnRes_vv)[ix] -= ((Float*)h_ctrn)[ix]; // standard one end trick
+
+    if( typeid(Float) == typeid(float) )       cblas_caxpy(NN, (void*) mceval, (void*) h_ctrn, incx, (void*) cnRes_vv, incy);
+    else if( typeid(Float) == typeid(double) ) cblas_zaxpy(NN, (void*) mceval, (void*) h_ctrn, incx, (void*) cnRes_vv, incy);
+
     cudaDeviceSynchronize();
   }
 
@@ -2580,13 +2590,19 @@ void oneEndTrick_w_One_Der(cudaColorSpinorField &x,cudaColorSpinorField &tmp3, c
       contract(x, tmp4, ctrnS, QUDA_CONTRACT_GAMMA5_MINUS);                 // Term 0 + Term 3 - Term 2 - Term 1 (D Dif)                                                             
       cudaMemcpy(h_ctrn, ctrnS, sizeBuffer, cudaMemcpyDeviceToHost);
       
-      for(int ix=0; ix < 32*GK_localL[0]*GK_localL[1]*GK_localL[2]*GK_localL[3]; ix++)
-	((Float *) cnD_gv[mu])[ix] += ((Float*)h_ctrn)[ix];
+      if( typeid(Float) == typeid(float) )       cblas_caxpy(NN, (void*) pceval, (void*) h_ctrn, incx, (void*) cnD_gv[mu], incy);
+      else if( typeid(Float) == typeid(double) ) cblas_zaxpy(NN, (void*) pceval, (void*) h_ctrn, incx, (void*) cnD_gv[mu], incy);
+
+      //      for(int ix=0; ix < 32*GK_localL[0]*GK_localL[1]*GK_localL[2]*GK_localL[3]; ix++)
+      //	((Float *) cnD_gv[mu])[ix] += ((Float*)h_ctrn)[ix];
       
       cudaMemcpy(h_ctrn, ctrnC, sizeBuffer, cudaMemcpyDeviceToHost);
+
+      if( typeid(Float) == typeid(float) )       cblas_caxpy(NN, (void*) pceval, (void*) h_ctrn, incx, (void*) cnC_gv[mu], incy);
+      else if( typeid(Float) == typeid(double) ) cblas_zaxpy(NN, (void*) pceval, (void*) h_ctrn, incx, (void*) cnC_gv[mu], incy);
       
-      for(int ix=0; ix < 32*GK_localL[0]*GK_localL[1]*GK_localL[2]*GK_localL[3]; ix++)
-	((Float *) cnC_gv[mu])[ix] += ((Float*)h_ctrn)[ix];
+      //      for(int ix=0; ix < 32*GK_localL[0]*GK_localL[1]*GK_localL[2]*GK_localL[3]; ix++)
+      //	((Float *) cnC_gv[mu])[ix] += ((Float*)h_ctrn)[ix];
     }
   
   for(int mu=0; mu<4; mu++) // for standard one-end trick
@@ -2605,14 +2621,19 @@ void oneEndTrick_w_One_Der(cudaColorSpinorField &x,cudaColorSpinorField &tmp3, c
 
       cudaMemcpy(h_ctrn, ctrnS, sizeBuffer, cudaMemcpyDeviceToHost);
       
-      for(int ix=0; ix < 32*GK_localL[0]*GK_localL[1]*GK_localL[2]*GK_localL[3]; ix++)
-	((Float *) cnD_vv[mu])[ix]  -= ((Float*)h_ctrn)[ix];
+      if( typeid(Float) == typeid(float) )       cblas_caxpy(NN, (void*) mceval, (void*) h_ctrn, incx, (void*) cnD_vv[mu], incy);
+      else if( typeid(Float) == typeid(double) ) cblas_zaxpy(NN, (void*) mceval, (void*) h_ctrn, incx, (void*) cnD_vv[mu], incy);
+
+      //      for(int ix=0; ix < 32*GK_localL[0]*GK_localL[1]*GK_localL[2]*GK_localL[3]; ix++)
+      //	((Float *) cnD_vv[mu])[ix]  -= ((Float*)h_ctrn)[ix];
       
       cudaMemcpy(h_ctrn, ctrnC, sizeBuffer, cudaMemcpyDeviceToHost);
       
-      for(int ix=0; ix < 32*GK_localL[0]*GK_localL[1]*GK_localL[2]*GK_localL[3]; ix++)
-	((Float *) cnC_vv[mu])[ix] -= ((Float*)h_ctrn)[ix];
-      
+      if( typeid(Float) == typeid(float) )       cblas_caxpy(NN, (void*) mceval, (void*) h_ctrn, incx, (void*) cnC_vv[mu], incy);
+      else if( typeid(Float) == typeid(double) ) cblas_zaxpy(NN, (void*) mceval, (void*) h_ctrn, incx, (void*) cnC_vv[mu], incy);
+
+      //      for(int ix=0; ix < 32*GK_localL[0]*GK_localL[1]*GK_localL[2]*GK_localL[3]; ix++)
+      //	((Float *) cnC_vv[mu])[ix] -= ((Float*)h_ctrn)[ix];
     }
 ///////////////
 
