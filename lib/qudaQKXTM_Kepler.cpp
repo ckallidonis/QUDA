@@ -2485,7 +2485,7 @@ void oneEndTrick(cudaColorSpinorField &x,cudaColorSpinorField &tmp3, cudaColorSp
 
 template<typename Float>
 void oneEndTrick_w_One_Der(cudaColorSpinorField &x,cudaColorSpinorField &tmp3, cudaColorSpinorField &tmp4,QudaInvertParam *param, void *cnRes_gv,void *cnRes_vv, void **cnD_gv, void **cnD_vv, void **cnC_gv, void **cnC_vv,
-			   int iAPE){
+			   int iAPE, bool APE_4D){
   void *h_ctrn, *ctrnS, *ctrnC;
 
   if((cudaMallocHost(&h_ctrn, sizeof(Float)*32*GK_localL[0]*GK_localL[1]*GK_localL[2]*GK_localL[3])) == cudaErrorMemoryAllocation)
@@ -2543,6 +2543,8 @@ void oneEndTrick_w_One_Der(cudaColorSpinorField &x,cudaColorSpinorField &tmp3, c
     contract(x, tmp3, ctrnS, QUDA_CONTRACT_GAMMA5);
     cudaMemcpy(h_ctrn, ctrnS, sizeBuffer, cudaMemcpyDeviceToHost);
 
+
+
     for(int ix=0; ix < 32*GK_localL[0]*GK_localL[1]*GK_localL[2]*GK_localL[3]; ix++)
       ((Float*) cnRes_gv)[ix] += ((Float*)h_ctrn)[ix]; // generalized one end trick
 
@@ -2552,13 +2554,13 @@ void oneEndTrick_w_One_Der(cudaColorSpinorField &x,cudaColorSpinorField &tmp3, c
     for(int ix=0; ix < 32*GK_localL[0]*GK_localL[1]*GK_localL[2]*GK_localL[3]; ix++)
       ((Float*) cnRes_vv)[ix] -= ((Float*)h_ctrn)[ix]; // standard one end trick
     cudaDeviceSynchronize();
-    printfQuda("Local loop contractions done\n");
   }
 
   ////////////////// DERIVATIVES //////////////////////////////
-  CovD *cov = new CovD(gaugeSmrd[iAPE], profileCovDev);
-
-  printfQuda("Derivative loaded\n");
+  CovD *cov;
+  
+  if(APE_4D) cov = new CovD(gaugeSmrd[iAPE], profileCovDev);
+  else cov = new CovD(gaugePrecise, profileCovDev);
 
   for(int mu=0; mu<4; mu++)	// for generalized one-end trick
     {

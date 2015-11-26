@@ -1028,6 +1028,13 @@ void freeGaugeQuda(void)
 
   if (gaugeSmeared) delete gaugeSmeared;
 
+  for(int iAPE = 0;iAPE<10;iAPE++){
+    if(gaugeSmrd[iAPE]){
+      delete gaugeSmrd[iAPE];
+      gaugeSmrd[iAPE] = NULL;
+    }
+  }
+
   gaugeSmeared = NULL;
   // Need to merge extendedGaugeResident and gaugeFatPrecise/gaugePrecise
   if (extendedGaugeResident) {

@@ -1787,75 +1787,77 @@ void DeflateAndInvert_loop_w_One_Der(void **gaugeToPlaquette, QudaInvertParam *p
   gsl_rng *rNum = gsl_rng_alloc(gsl_rng_ranlux);
   gsl_rng_set(rNum, seed + comm_rank()*seed);
 
+  bool APE_4D = true;
+  if(smearParam.nAPE==1 && (smearParam.APESteps[0]==0)) APE_4D = false;
 
-  t1 = MPI_Wtime();
-  int nSteps;
-  float alpha;
-  if(smearParam.nAPE==1 && (smearParam.APESteps[0]==0)) printfQuda("Will not perform 4D APE Smearing\n");
-  else{
+  if(APE_4D){
+    t1 = MPI_Wtime();
+    int nSteps;
+    float alpha;
+    double3 plaq;
+
+    gaugeSmrd[0] = NULL;
     printfQuda("Will perform 4D APE Smearing for %d sets of parameters\n",smearParam.nAPE);
     printfQuda("APE iter 0, Params: (%d,%4.2f) \n",smearParam.APESteps[0],smearParam.APEalpha[0]);
-  }
-  
-  double3 plaq;
+    if(smearParam.APESteps[0]==0){
+      copyGaugeSmrdQuda(gaugePrecise,0);
+      plaq = plaquette(*gaugeSmrd[0], QUDA_CUDA_FIELD_LOCATION);
+      printfQuda("No Smearing performed. Plaquette  = %le\n",plaq.x);
+      plaq = plaquette(*gaugePrecise, QUDA_CUDA_FIELD_LOCATION);
+      printfQuda("No Smearing performed. Plaquette2 = %le\n",plaq.x);    
+      printfQuda("iAPE 0: Smeared Volume %d\n",gaugeSmrd[0]->Volume());
+      printfQuda("iAPE 0: Smeared VolumeCB %d\n",gaugeSmrd[0]->VolumeCB());
+    }
+    else{
+      nSteps = smearParam.APESteps[0];
+      alpha = smearParam.APEalpha[0];
+      performAPEnStep(nSteps, alpha);
+      copyGaugeSmrdQuda(gaugeSmeared,0);      
+      plaq = plaquette(*gaugeSmrd[0], QUDA_CUDA_FIELD_LOCATION);
+      printfQuda("iAPE 0: Plaquette  = %le\n",plaq.x);
+      printfQuda("iAPE 0: Smeared Volume %d\n",gaugeSmrd[0]->Volume());
+      printfQuda("iAPE 0: Smeared VolumeCB %d\n",gaugeSmrd[0]->VolumeCB());
+    }
+    
+    
+    for(int iAPE=1;iAPE<smearParam.nAPE; iAPE++){
+      gaugeSmrd[iAPE] = NULL;
+      nSteps = smearParam.APESteps[iAPE];// - smearParam.APESteps[iAPE-1];
+      alpha = smearParam.APEalpha[iAPE];
+      if(nSteps<0 || alpha<=0){
+	errorQuda("oneEndTrick: Your Smearing steps must be in ascending order!");
+	errorQuda("oneEndTrick: APE steps and alpha must be positive!!!");
+	exit(-1);
+      }
+      else if(nSteps==0){
+	errorQuda("oneEndTrick: Two identical smearing parameters detected!");
+	exit(-1);
+      }	
+      printfQuda("APE iter %d, Params: (%d,%4.2f) \n",iAPE,smearParam.APESteps[iAPE],smearParam.APEalpha[iAPE]);
+      
+      performAPEnStep(nSteps, alpha);
+      copyGaugeSmrdQuda(gaugeSmeared,iAPE);
+      
+      plaq = plaquette(*gaugeSmrd[iAPE], QUDA_CUDA_FIELD_LOCATION);
+      printfQuda("iAPE %d: Plaquette  = %le\n",iAPE,plaq.x);
+      printfQuda("iAPE %d: Smeared Volume %d\n",iAPE,gaugeSmrd[iAPE]->Volume());
+      printfQuda("iAPE %d: Smeared VolumeCB %d\n",iAPE,gaugeSmrd[iAPE]->VolumeCB());
+    }//-for iAPE
 
-  gaugeSmrd[0] = NULL;
-  if(smearParam.APESteps[0]==0){
-    copyGaugeSmrdQuda(gaugePrecise,0);
-    plaq = plaquette(*gaugeSmrd[0], QUDA_CUDA_FIELD_LOCATION);
-    printfQuda("No Smearing performed. Plaquette  = %le\n",plaq.x);
+    t2 = MPI_Wtime();
+    printfQuda("oneEndTrick: 4D-APE Smearing completed in %f secs\n",t2-t1);
+    
     plaq = plaquette(*gaugePrecise, QUDA_CUDA_FIELD_LOCATION);
-    printfQuda("No Smearing performed. Plaquette2 = %le\n",plaq.x);    
-    printfQuda("iAPE 0: Smeared Volume %d\n",gaugeSmrd[0]->Volume());
-    printfQuda("iAPE 0: Smeared VolumeCB %d\n",gaugeSmrd[0]->VolumeCB());
+    printfQuda("Original plaquette = %le\n",plaq.x);    
+    double plaq2[3];
+    plaqQuda(plaq2);
+    printfQuda("Original plaquette from plaqQuda = %le\n",plaq2[0]);    
+    printfQuda("Original Volume %d\n",gaugePrecise->Volume());
+    printfQuda("Original VolumeCB %d\n",gaugePrecise->VolumeCB());
   }
   else{
-    nSteps = smearParam.APESteps[0];
-    alpha = smearParam.APEalpha[0];
-    performAPEnStep(nSteps, alpha);
-    copyGaugeSmrdQuda(gaugeSmeared,0);      
-    plaq = plaquette(*gaugeSmrd[0], QUDA_CUDA_FIELD_LOCATION);
-    printfQuda("iAPE 0: Plaquette  = %le\n",plaq.x);
-    printfQuda("iAPE 0: Smeared Volume %d\n",gaugeSmrd[0]->Volume());
-    printfQuda("iAPE 0: Smeared VolumeCB %d\n",gaugeSmrd[0]->VolumeCB());
+    printfQuda("Will not perform 4D APE Smearing\n");
   }
-  
-
-  for(int iAPE=1;iAPE<smearParam.nAPE; iAPE++){
-    gaugeSmrd[iAPE] = NULL;
-    nSteps = smearParam.APESteps[iAPE];// - smearParam.APESteps[iAPE-1];
-    alpha = smearParam.APEalpha[iAPE];
-    if(nSteps<0 || alpha<=0){
-      errorQuda("oneEndTrick: Your Smearing steps must be in ascending order!");
-      errorQuda("oneEndTrick: APE steps and alpha must be positive!!!");
-      exit(-1);
-    }
-    else if(nSteps==0){
-      errorQuda("oneEndTrick: Two identical smearing parameters detected!");
-      exit(-1);
-    }	
-    printfQuda("APE iter %d, Params: (%d,%4.2f) \n",iAPE,smearParam.APESteps[iAPE],smearParam.APEalpha[iAPE]);
-    
-    performAPEnStep(nSteps, alpha);
-    copyGaugeSmrdQuda(gaugeSmeared,iAPE);
-
-    plaq = plaquette(*gaugeSmrd[iAPE], QUDA_CUDA_FIELD_LOCATION);
-    printfQuda("iAPE %d: Plaquette  = %le\n",iAPE,plaq.x);
-    printfQuda("iAPE %d: Smeared Volume %d\n",iAPE,gaugeSmrd[iAPE]->Volume());
-    printfQuda("iAPE %d: Smeared VolumeCB %d\n",iAPE,gaugeSmrd[iAPE]->VolumeCB());
-  }//-for iAPE
-
-  t2 = MPI_Wtime();
-  printfQuda("oneEndTrick: 4D-APE Smearing completed in %f secs\n",t2-t1);
-
-  plaq = plaquette(*gaugePrecise, QUDA_CUDA_FIELD_LOCATION);
-  printfQuda("Original plaquette = %le\n",plaq.x);    
-  double plaq2[3];
-  plaqQuda(plaq2);
-  printfQuda("Original plaquette from plaqQuda = %le\n",plaq2[0]);    
-  printfQuda("Original Volume %d\n",gaugePrecise->Volume());
-  printfQuda("Original VolumeCB %d\n",gaugePrecise->VolumeCB());
-
 
   for(int is = 0 ; is < Nstoch ; is++){
     t1 = MPI_Wtime();
@@ -1879,10 +1881,15 @@ void DeflateAndInvert_loop_w_One_Der(void **gaugeToPlaquette, QudaInvertParam *p
     (*solve)(*out,*in);
     dirac.reconstruct(*x,*b,param->solution_type);
 
-    printfQuda("Inversion %d done\n",is);
-    for(int iAPE=0;iAPE<smearParam.nAPE; iAPE++){
-      oneEndTrick_w_One_Der<double>(*x,*tmp3,*tmp4,param,cnRes_gv,cnRes_vv,cnD_gv[iAPE],cnD_vv[iAPE],cnC_gv[iAPE],cnC_vv[iAPE], iAPE);
-      printfQuda("Loop contractions for iAPE = %d done\n",iAPE);
+    if(APE_4D){
+      for(int iAPE=0;iAPE<smearParam.nAPE; iAPE++){
+	oneEndTrick_w_One_Der<double>(*x,*tmp3,*tmp4,param,cnRes_gv,cnRes_vv,cnD_gv[iAPE],cnD_vv[iAPE],cnC_gv[iAPE],cnC_vv[iAPE], iAPE, APE_4D);
+	printfQuda("Loop contractions for iAPE = %d done\n",iAPE);
+      }
+    }
+    else{
+      int iAPE = 0;
+      oneEndTrick_w_One_Der<double>(*x,*tmp3,*tmp4,param,cnRes_gv,cnRes_vv,cnD_gv[iAPE],cnD_vv[iAPE],cnC_gv[iAPE],cnC_vv[iAPE], iAPE, APE_4D);
     }
 
     t2 = MPI_Wtime();
@@ -1893,27 +1900,42 @@ void DeflateAndInvert_loop_w_One_Der(void **gaugeToPlaquette, QudaInvertParam *p
       doCudaFFT_v2<double>(cnRes_gv,cnTmp);
       dumpLoop_ultraLocal<double>(cnTmp,filename_out,is+1,info.Q_sq,1); // dOp
 
-      for(int iAPE=0;iAPE<smearParam.nAPE; iAPE++){
-	sprintf(filename_APE,"%s_nAPE%d_alphaAPE0p%2.0f",filename_out,smearParam.APESteps[iAPE],smearParam.APEalpha[iAPE]*100);
+      if(APE_4D){
+	for(int iAPE=0;iAPE<smearParam.nAPE; iAPE++){
+	  sprintf(filename_APE,"%s_nAPE%d_alphaAPE0p%02.0f",filename_out,smearParam.APESteps[iAPE],smearParam.APEalpha[iAPE]*100);
+	  for(int mu = 0 ; mu < 4 ; mu++){
+	    doCudaFFT_v2<double>(cnD_vv[iAPE][mu],cnTmp);
+	    dumpLoop_oneD<double>(cnTmp,filename_APE,is+1,info.Q_sq,mu,0); // Loops
+	    doCudaFFT_v2<double>(cnD_gv[iAPE][mu],cnTmp);
+	    dumpLoop_oneD<double>(cnTmp,filename_APE,is+1,info.Q_sq,mu,1); // LpsDw
+	    
+	    doCudaFFT_v2<double>(cnC_vv[iAPE][mu],cnTmp);
+	    dumpLoop_oneD<double>(cnTmp,filename_APE,is+1,info.Q_sq,mu,2); // LpsDw noether
+	    doCudaFFT_v2<double>(cnC_gv[iAPE][mu],cnTmp);
+	    dumpLoop_oneD<double>(cnTmp,filename_APE,is+1,info.Q_sq,mu,3); // LpsDw noether
+	  }
+	}
+      }
+      else{
+	int iAPE = 0;
 	for(int mu = 0 ; mu < 4 ; mu++){
 	  doCudaFFT_v2<double>(cnD_vv[iAPE][mu],cnTmp);
-	  dumpLoop_oneD<double>(cnTmp,filename_APE,is+1,info.Q_sq,mu,0); // Loops
+	  dumpLoop_oneD<double>(cnTmp,filename_out,is+1,info.Q_sq,mu,0); // Loops
 	  doCudaFFT_v2<double>(cnD_gv[iAPE][mu],cnTmp);
-	  dumpLoop_oneD<double>(cnTmp,filename_APE,is+1,info.Q_sq,mu,1); // LpsDw
+	  dumpLoop_oneD<double>(cnTmp,filename_out,is+1,info.Q_sq,mu,1); // LpsDw
 	  
 	  doCudaFFT_v2<double>(cnC_vv[iAPE][mu],cnTmp);
-	  dumpLoop_oneD<double>(cnTmp,filename_APE,is+1,info.Q_sq,mu,2); // LpsDw noether
+	  dumpLoop_oneD<double>(cnTmp,filename_out,is+1,info.Q_sq,mu,2); // LpsDw noether
 	  doCudaFFT_v2<double>(cnC_gv[iAPE][mu],cnTmp);
-	  dumpLoop_oneD<double>(cnTmp,filename_APE,is+1,info.Q_sq,mu,3); // LpsDw noether
+	  dumpLoop_oneD<double>(cnTmp,filename_out,is+1,info.Q_sq,mu,3); // LpsDw noether
 	}
       }
     } // close loop for dump loops
 
-  } // close loop over source positions
+  } // close loop over stochastic vectors
 
   cudaFreeHost(cnRes_gv);
   cudaFreeHost(cnRes_vv);
-
   cudaFreeHost(cnTmp);
 
   for(int iAPE=0;iAPE<smearParam.nAPE; iAPE++){
@@ -1923,12 +1945,11 @@ void DeflateAndInvert_loop_w_One_Der(void **gaugeToPlaquette, QudaInvertParam *p
       cudaFreeHost(cnC_vv[iAPE][mu]);
       cudaFreeHost(cnC_gv[iAPE][mu]);
     }
-    cudaFreeHost(cnD_vv[iAPE]);
-    cudaFreeHost(cnD_gv[iAPE]);
-    cudaFreeHost(cnC_vv[iAPE]);
-    cudaFreeHost(cnC_gv[iAPE]);
+    free(cnD_vv[iAPE]);
+    free(cnD_gv[iAPE]);
+    free(cnC_vv[iAPE]);
+    free(cnC_gv[iAPE]);
   }
-
 
   free(input_vector);
   free(output_vector);
@@ -1947,6 +1968,7 @@ void DeflateAndInvert_loop_w_One_Der(void **gaugeToPlaquette, QudaInvertParam *p
   delete b;
   delete tmp3;
   delete tmp4;
+
   popVerbosity();
   saveTuneCache(getVerbosity());
   profileInvert.TPSTOP(QUDA_PROFILE_TOTAL);
@@ -1957,6 +1979,7 @@ void DeflateAndInvert_loop_w_One_Der_volumeSource(void **gaugeToPlaquette, QudaI
   double t1,t2;
 
   profileInvert.TPSTART(QUDA_PROFILE_TOTAL);
+
   if(param->solve_type != QUDA_NORMOP_PC_SOLVE) errorQuda("This function works only with even odd preconditioning");
   if(param->inv_type != QUDA_CG_INVERTER) errorQuda("This function works only with CG method");
   if( (param->matpc_type != QUDA_MATPC_EVEN_EVEN_ASYMMETRIC) && (param->matpc_type != QUDA_MATPC_ODD_ODD_ASYMMETRIC) ) errorQuda("Only asymmetric operators are supported in deflation\n");
