@@ -1,3 +1,4 @@
+#include <qudaQKXTM.h>
 #include <qudaQKXTM_Kepler.cpp>
 #include <sys/stat.h>
 #define TIMING_REPORT
@@ -14,6 +15,8 @@ template  class QKXTM_Vector_Kepler<float>;
 template  class QKXTM_Propagator_Kepler<float>;
 template  class QKXTM_Propagator3D_Kepler<float>;
 template  class QKXTM_Vector3D_Kepler<float>;
+
+extern Topology *default_topo;
 
 static bool exists_file (const char* name) {
   return ( access( name, F_OK ) != -1 );
@@ -61,8 +64,244 @@ void testGaussSmearing(void **gauge){
   delete gauge_object;
 }
 
+
+
+void quda::invertWritePropsNoApe_SL_v2(void **gauge, void **gaugeAPE ,QudaInvertParam *param ,QudaGaugeParam *gauge_param,int *sourcePosition, char *prop_path){
+
+  size_t freeMem;
+  size_t totalMem;
+
+  cudaMemGetInfo(&freeMem,&totalMem);
+  printfQuda("Memory status before any allocation (Free = %f Mb),(Percentage = %f %%)\n",freeMem/(1024.*1024.),100*(freeMem/(double)totalMem));
+
+  profileInvert.TPSTART(QUDA_PROFILE_TOTAL);
+  if (!initialized) errorQuda("QUDA not initialized");
+  pushVerbosity(param->verbosity);
+  if (getVerbosity() >= QUDA_DEBUG_VERBOSE) printQudaInvertParam(param);
+  // check the gauge fields have been created                                                      
+  cudaGaugeField *cudaGauge = checkGauge(param);
+  checkInvertParam(param);
+
+  // calculate plaquette and apply APE smearing
+  QKXTM_Gauge *qkxTM_gaugeAPE = new QKXTM_Gauge();
+
+  cudaMemGetInfo(&freeMem,&totalMem);
+  printfQuda("Memory status after allocation memory for smearing (Free = %f Mb),(Percentage = %f %%)\n",freeMem/(1024.*1024.),100*(freeMem/(double)totalMem));
+
+  double plaq;
+  qkxTM_gaugeAPE->packGauge(gaugeAPE);
+  qkxTM_gaugeAPE->loadGauge();               // now we have the gauge on device        
+
+  cudaMemGetInfo(&freeMem,&totalMem);
+  printfQuda("Memory status after clear memory from smearing (Free = %f Mb),(Percentage = %f %%)\n",freeMem/(1024.*1024.),100*(freeMem/(double)totalMem));
+
+  plaq = qkxTM_gaugeAPE->calculatePlaq();
+  printfQuda("Plaquette smeared is %e\n",plaq);
+  /////////////////////////////////////////////
+
+  bool pc_solution = (param->solution_type == QUDA_MATPC_SOLUTION) ||
+    (param->solution_type == QUDA_MATPCDAG_MATPC_SOLUTION);
+  bool pc_solve = (param->solve_type == QUDA_DIRECT_PC_SOLVE) ||
+    (param->solve_type == QUDA_NORMOP_PC_SOLVE);
+  bool mat_solution = (param->solution_type == QUDA_MAT_SOLUTION) ||
+    (param->solution_type ==  QUDA_MATPC_SOLUTION);
+  bool direct_solve = (param->solve_type == QUDA_DIRECT_SOLVE) ||
+    (param->solve_type == QUDA_DIRECT_PC_SOLVE);
+
+  param->spinorGiB = cudaGauge->VolumeCB() * spinorSiteSize;
+  if (!pc_solve) param->spinorGiB *= 2;
+  param->spinorGiB *= (param->cuda_prec == QUDA_DOUBLE_PRECISION ? sizeof(double) : sizeof(float));
+  if (param->preserve_source == QUDA_PRESERVE_SOURCE_NO) {
+    param->spinorGiB *= (param->inv_type == QUDA_CG_INVERTER ? 5 : 7)/(double)(1<<30);
+  } else {
+    param->spinorGiB *= (param->inv_type == QUDA_CG_INVERTER ? 8 : 9)/(double)(1<<30);
+  }
+
+  param->secs = 0;
+  param->gflops = 0;
+  param->iter = 0;
+
+  // load the gauge field for inversions
+  //  loadGaugeQuda((void*)gauge, gauge_param); // !!!!!!!!! dont do it in the executable because I did it here
+
+  Dirac *d = NULL;
+  Dirac *dSloppy = NULL;
+  Dirac *dPre = NULL;
+  // create the dirac operator                                                                     
+  createDirac(d, dSloppy, dPre, *param, pc_solve);
+  Dirac &dirac = *d;
+  Dirac &diracSloppy = *dSloppy;
+  Dirac &diracPre = *dPre;
+  profileInvert.TPSTART(QUDA_PROFILE_H2D);
+
+  cudaColorSpinorField *b = NULL;
+  cudaColorSpinorField *x = NULL;
+  cudaColorSpinorField *in = NULL;
+  cudaColorSpinorField *out = NULL;
+  const int *X = cudaGauge->X();
+
+  void *input_vector = malloc(X[0]*X[1]*X[2]*X[3]*spinorSiteSize*sizeof(double));
+  void *output_vector = malloc(X[0]*X[1]*X[2]*X[3]*spinorSiteSize*sizeof(double));
+
+  ColorSpinorParam cpuParam(input_vector,*param,X,pc_solution);
+  ColorSpinorField *h_b = (param->input_location == QUDA_CPU_FIELD_LOCATION) ?
+    static_cast<ColorSpinorField*>(new cpuColorSpinorField(cpuParam)) :
+    static_cast<ColorSpinorField*>(new cudaColorSpinorField(cpuParam));
+
+  cpuParam.v = output_vector;
+  ColorSpinorField *h_x = (param->output_location == QUDA_CPU_FIELD_LOCATION) ?
+    static_cast<ColorSpinorField*>(new cpuColorSpinorField(cpuParam)) :
+    static_cast<ColorSpinorField*>(new cudaColorSpinorField(cpuParam));
+
+  ColorSpinorParam cudaParam(cpuParam, *param);
+  cudaParam.create = QUDA_COPY_FIELD_CREATE;
+  b = new cudaColorSpinorField(*h_b, cudaParam);
+  cudaParam.create = QUDA_ZERO_FIELD_CREATE;
+  x = new cudaColorSpinorField(cudaParam);
+
+  cudaMemGetInfo(&freeMem,&totalMem);
+  printfQuda("Memory status after allocate memory for inversion input output spinors (Free = %f Mb),(Percentage = %f %%)\n",freeMem/(1024.*1024.),100*(freeMem/(double)totalMem));
+
+
+  profileInvert.TPSTOP(QUDA_PROFILE_H2D);
+  setTuning(param->tune);
+
+  if (pc_solution && !pc_solve) {
+    errorQuda("Preconditioned (PC) solution_type requires a PC solve_type");
+  }
+  if (!mat_solution && !pc_solution && pc_solve) {
+    errorQuda("Unpreconditioned MATDAG_MAT solution_type requires an unpreconditioned solve_type");
+  }
+  if( !(mat_solution == true && direct_solve == false) )errorQuda("qudaQKXTM package supports only mat solution and indirect solution");
+  if( param->inv_type != QUDA_CG_INVERTER) errorQuda("qudaQKXTM package supports only cg inverter");
+
+  DiracMdagM m(dirac), mSloppy(diracSloppy), mPre(diracPre);
+  SolverParam solverParam(*param);
+  Solver *solve = Solver::create(solverParam, m, mSloppy, mPre, profileInvert);
+
+  QKXTM_Vector *qkxTM_vectorTmp = new QKXTM_Vector();                                                                           
+  QKXTM_Vector *qkxTM_vectorGauss = new QKXTM_Vector();
+  //  void *input_vector = malloc(X[0]*X[1]*X[2]*X[3]*spinorSiteSize*sizeof(double));
+  char tempFilename[257];
+
+  for(int ip = 0 ; ip < 12 ; ip++){     // for test source position will be 0,0,0,0 then I will make it general
+   
+    memset(input_vector,0,X[0]*X[1]*X[2]*X[3]*spinorSiteSize*sizeof(double));
+
+    // change to up quark
+    b->changeTwist(QUDA_TWIST_PLUS);
+    x->changeTwist(QUDA_TWIST_PLUS);
+
+    b->Even().changeTwist(QUDA_TWIST_PLUS);
+    b->Odd().changeTwist(QUDA_TWIST_PLUS);
+    x->Even().changeTwist(QUDA_TWIST_PLUS);
+    x->Odd().changeTwist(QUDA_TWIST_PLUS);
+
+    // find where to put source
+    int my_src[4];
+    for(int i = 0 ; i < 4 ; i++)
+      my_src[i] = sourcePosition[i] - comm_coords(default_topo)[i] * X[i];
+
+    if( (my_src[0]>=0) && (my_src[0]<X[0]) && (my_src[1]>=0) && (my_src[1]<X[1]) && (my_src[2]>=0) && (my_src[2]<X[2]) && (my_src[3]>=0) && (my_src[3]<X[3]))
+      *( (double*)input_vector + my_src[3]*X[2]*X[1]*X[0]*24 + my_src[2]*X[1]*X[0]*24 + my_src[1]*X[0]*24 + my_src[0]*24 + ip*2 ) = 1.;         //only real parts
+
+
+    qkxTM_vectorTmp->flagsToFalse();                                                 // hack
+    qkxTM_vectorTmp->packVector(input_vector);
+    qkxTM_vectorTmp->loadVector();
+    Gaussian_smearing(*qkxTM_vectorGauss, *qkxTM_vectorTmp , *qkxTM_gaugeAPE);
+    qkxTM_vectorGauss->uploadToCuda(*b);           // uses it and for down quark   
+    zeroCuda(*x);
+    dirac.prepare(in, out, *x, *b, param->solution_type); // prepares the source vector 
+    checkCudaError();
+    cudaColorSpinorField *tmp_up = new cudaColorSpinorField(*in);
+
+
+    dirac.Mdag(*in, *tmp_up);                        // indirect method needs apply of D^+ on source vector
+   
+    (*solve)(*out, *in);      
+    dirac.reconstruct(*x, *b, param->solution_type);
+    qkxTM_vectorTmp->downloadFromCuda(*x);
+    if (param->mass_normalization == QUDA_MASS_NORMALIZATION || param->mass_normalization == QUDA_ASYMMETRIC_MASS_NORMALIZATION) {
+      qkxTM_vectorTmp->scaleVector(2*param->kappa);
+    }
+
+    //   Gaussian_smearing(*qkxTM_vectorGauss, *qkxTM_vectorTmp , *qkxTM_gaugeAPE);
+    qkxTM_vectorTmp->download();
+    sprintf(tempFilename,"%s_up.%04d",prop_path,ip);
+    qkxTM_vectorTmp->write(tempFilename);
+    delete tmp_up;
+    printfQuda("Finish Inversion for up quark %d/12 \n",ip+1);
+   
+    // down
+    qkxTM_vectorTmp->flagsToFalse();                                                 // hack
+    qkxTM_vectorTmp->packVector(input_vector);
+    qkxTM_vectorTmp->loadVector();
+    Gaussian_smearing(*qkxTM_vectorGauss, *qkxTM_vectorTmp , *qkxTM_gaugeAPE);
+
+
+    b->changeTwist(QUDA_TWIST_MINUS);
+    x->changeTwist(QUDA_TWIST_MINUS);
+    b->Even().changeTwist(QUDA_TWIST_MINUS);
+    b->Odd().changeTwist(QUDA_TWIST_MINUS);
+    x->Even().changeTwist(QUDA_TWIST_MINUS);
+    x->Odd().changeTwist(QUDA_TWIST_MINUS);
+
+    qkxTM_vectorGauss->uploadToCuda(*b);               // re-upload source for inversion for down quark       
+    zeroCuda(*x);
+    dirac.prepare(in, out, *x, *b, param->solution_type); // prepares the source vector 
+    cudaColorSpinorField *tmp_down = new cudaColorSpinorField(*in);
+    dirac.Mdag(*in, *tmp_down);                        // indirect method needs apply of D^+ on source vector
+    (*solve)(*out, *in);   
+    dirac.reconstruct(*x, *b, param->solution_type);
+    qkxTM_vectorTmp->downloadFromCuda(*x);
+    if (param->mass_normalization == QUDA_MASS_NORMALIZATION || param->mass_normalization == QUDA_ASYMMETRIC_MASS_NORMALIZATION) {
+      qkxTM_vectorTmp->scaleVector(2*param->kappa);
+    }
+
+    //   Gaussian_smearing(*qkxTM_vectorGauss, *qkxTM_vectorTmp , *qkxTM_gaugeAPE);
+    qkxTM_vectorTmp->download();
+    sprintf(tempFilename,"%s_down.%04d",prop_path,ip);
+    qkxTM_vectorTmp->write(tempFilename);
+
+    delete tmp_down;
+    printfQuda("Finish Inversion for down quark %d/12 \n",ip+1);   
+
+  }
+
+  free(input_vector);
+  free(output_vector);
+
+  delete qkxTM_vectorTmp;
+  delete qkxTM_vectorGauss;
+  delete qkxTM_gaugeAPE;
+  delete solve;
+  delete h_b;
+  delete h_x;
+  delete b;
+  delete x;
+ 
+  delete d;
+  delete dSloppy;
+  delete dPre;
+
+  cudaMemGetInfo(&freeMem,&totalMem);
+  printfQuda("Memory status after cleaning (Free = %f Mb),(Percentage = %f %%)\n",freeMem/(1024.*1024.),100*(freeMem/(double)totalMem));
+  
+  // freeGaugeQuda();
+  // popVerbosity();
+  popVerbosity();
+  // FIXME: added temporarily so that the cache is written out even if a long benchmarking job gets interrupted
+  saveTuneCache(getVerbosity());
+ 
+  profileInvert.TPSTOP(QUDA_PROFILE_TOTAL);
+
+
+} // end function
+
+
 void invertWritePropsNoApe_SL_v2_Kepler(void **gauge, void **gaugeAPE ,QudaInvertParam *param ,QudaGaugeParam *gauge_param,quda::qudaQKXTMinfo_Kepler info, char *prop_path){
-  profileInvert.Start(QUDA_PROFILE_TOTAL);
+  profileInvert.TPSTART(QUDA_PROFILE_TOTAL);
   if (!initialized) errorQuda("QUDA not initialized");
   pushVerbosity(param->verbosity);
   if (getVerbosity() >= QUDA_DEBUG_VERBOSE) printQudaInvertParam(param);
@@ -104,7 +343,7 @@ void invertWritePropsNoApe_SL_v2_Kepler(void **gauge, void **gaugeAPE ,QudaInver
   Dirac &dirac = *d;
   Dirac &diracSloppy = *dSloppy;
   Dirac &diracPre = *dPre;
-  profileInvert.Start(QUDA_PROFILE_H2D);
+  profileInvert.TPSTART(QUDA_PROFILE_H2D);
 
   cudaColorSpinorField *b = NULL;
   cudaColorSpinorField *x = NULL;
@@ -132,7 +371,7 @@ void invertWritePropsNoApe_SL_v2_Kepler(void **gauge, void **gaugeAPE ,QudaInver
   x = new cudaColorSpinorField(cudaParam);
 
 
-  profileInvert.Stop(QUDA_PROFILE_H2D);
+  profileInvert.TPSTOP(QUDA_PROFILE_H2D);
   setTuning(param->tune);
 
   if (pc_solution && !pc_solve) {
@@ -271,14 +510,14 @@ void invertWritePropsNoApe_SL_v2_Kepler(void **gauge, void **gaugeAPE ,QudaInver
 
  popVerbosity();
  saveTuneCache(getVerbosity());
- profileInvert.Stop(QUDA_PROFILE_TOTAL);
+ profileInvert.TPSTOP(QUDA_PROFILE_TOTAL);
 
 
 }
 
 
 void invertWritePropsNoApe_SL_v2_Kepler_single(void **gauge, void **gaugeAPE ,QudaInvertParam *param ,QudaGaugeParam *gauge_param,quda::qudaQKXTMinfo_Kepler info, char *prop_path){
-  profileInvert.Start(QUDA_PROFILE_TOTAL);
+  profileInvert.TPSTART(QUDA_PROFILE_TOTAL);
   if (!initialized) errorQuda("QUDA not initialized");
   pushVerbosity(param->verbosity);
   if (getVerbosity() >= QUDA_DEBUG_VERBOSE) printQudaInvertParam(param);
@@ -320,7 +559,7 @@ void invertWritePropsNoApe_SL_v2_Kepler_single(void **gauge, void **gaugeAPE ,Qu
   Dirac &dirac = *d;
   Dirac &diracSloppy = *dSloppy;
   Dirac &diracPre = *dPre;
-  profileInvert.Start(QUDA_PROFILE_H2D);
+  profileInvert.TPSTART(QUDA_PROFILE_H2D);
 
   cudaColorSpinorField *b = NULL;
   cudaColorSpinorField *x = NULL;
@@ -348,7 +587,7 @@ void invertWritePropsNoApe_SL_v2_Kepler_single(void **gauge, void **gaugeAPE ,Qu
   x = new cudaColorSpinorField(cudaParam);
 
 
-  profileInvert.Stop(QUDA_PROFILE_H2D);
+  profileInvert.TPSTOP(QUDA_PROFILE_H2D);
   setTuning(param->tune);
 
   if (pc_solution && !pc_solve) {
@@ -487,7 +726,7 @@ void invertWritePropsNoApe_SL_v2_Kepler_single(void **gauge, void **gaugeAPE ,Qu
 
  popVerbosity();
  saveTuneCache(getVerbosity());
- profileInvert.Stop(QUDA_PROFILE_TOTAL);
+ profileInvert.TPSTOP(QUDA_PROFILE_TOTAL);
 
 
 }
@@ -682,7 +921,7 @@ void checkDeflateAndInvert(void **gaugeToPlaquette, QudaInvertParam *param ,Quda
   double t1,t2;
 
 
-  profileInvert.Start(QUDA_PROFILE_TOTAL);
+  profileInvert.TPSTART(QUDA_PROFILE_TOTAL);
   if(param->solve_type != QUDA_NORMOP_PC_SOLVE) errorQuda("This function works only with even odd preconditioning");
   if(param->inv_type != QUDA_CG_INVERTER) errorQuda("This function works only with CG method");
   if( (param->matpc_type != QUDA_MATPC_EVEN_EVEN_ASYMMETRIC) && (param->matpc_type != QUDA_MATPC_ODD_ODD_ASYMMETRIC) ) errorQuda("Only asymmetric operators are supported in deflation\n");
@@ -744,7 +983,7 @@ void checkDeflateAndInvert(void **gaugeToPlaquette, QudaInvertParam *param ,Quda
   Dirac &dirac = *d;
   Dirac &diracSloppy = *dSloppy;
   Dirac &diracPre = *dPre;
-  profileInvert.Start(QUDA_PROFILE_H2D);
+  profileInvert.TPSTART(QUDA_PROFILE_H2D);
 
 
   cudaColorSpinorField *b = NULL;
@@ -777,7 +1016,7 @@ void checkDeflateAndInvert(void **gaugeToPlaquette, QudaInvertParam *param ,Quda
   cudaParam.create = QUDA_ZERO_FIELD_CREATE;
   x = new cudaColorSpinorField(cudaParam);
 
-  profileInvert.Stop(QUDA_PROFILE_H2D);
+  profileInvert.TPSTOP(QUDA_PROFILE_H2D);
   setTuning(param->tune);
 
 
@@ -874,7 +1113,7 @@ void checkDeflateAndInvert(void **gaugeToPlaquette, QudaInvertParam *param ,Quda
 
   popVerbosity();
   saveTuneCache(getVerbosity());
-  profileInvert.Stop(QUDA_PROFILE_TOTAL);
+  profileInvert.TPSTOP(QUDA_PROFILE_TOTAL);
 
 }
 
@@ -883,7 +1122,7 @@ void DeflateAndInvert_twop(void **gaugeSmeared, QudaInvertParam *param ,QudaGaug
   bool flag_eo;
   double t1,t2;
 
-  profileInvert.Start(QUDA_PROFILE_TOTAL);
+  profileInvert.TPSTART(QUDA_PROFILE_TOTAL);
   if(param->solve_type != QUDA_NORMOP_PC_SOLVE) errorQuda("This function works only with even odd preconditioning");
   if(param->inv_type != QUDA_CG_INVERTER) errorQuda("This function works only with CG method");
   if( (param->matpc_type != QUDA_MATPC_EVEN_EVEN_ASYMMETRIC) && (param->matpc_type != QUDA_MATPC_ODD_ODD_ASYMMETRIC) ) errorQuda("Only asymmetric operators are supported in deflation\n");
@@ -963,7 +1202,7 @@ void DeflateAndInvert_twop(void **gaugeSmeared, QudaInvertParam *param ,QudaGaug
   Dirac &dirac = *d;
   Dirac &diracSloppy = *dSloppy;
   Dirac &diracPre = *dPre;
-  profileInvert.Start(QUDA_PROFILE_H2D);
+  profileInvert.TPSTART(QUDA_PROFILE_H2D);
 
 
   cudaColorSpinorField *b = NULL;
@@ -994,7 +1233,7 @@ void DeflateAndInvert_twop(void **gaugeSmeared, QudaInvertParam *param ,QudaGaug
   cudaParam.create = QUDA_ZERO_FIELD_CREATE;
   x = new cudaColorSpinorField(cudaParam);
 
-  profileInvert.Stop(QUDA_PROFILE_H2D);
+  profileInvert.TPSTOP(QUDA_PROFILE_H2D);
   setTuning(param->tune);
   
   zeroCuda(*x);
@@ -1134,7 +1373,7 @@ void DeflateAndInvert_twop(void **gaugeSmeared, QudaInvertParam *param ,QudaGaug
 
   popVerbosity();
   saveTuneCache(getVerbosity());
-  profileInvert.Stop(QUDA_PROFILE_TOTAL);
+  profileInvert.TPSTOP(QUDA_PROFILE_TOTAL);
 
 }
 
@@ -1171,7 +1410,7 @@ void DeflateAndInvert_loop(void **gaugeToPlaquette, QudaInvertParam *param ,Quda
   bool flag_eo;
   double t1,t2;
 
-  profileInvert.Start(QUDA_PROFILE_TOTAL);
+  profileInvert.TPSTART(QUDA_PROFILE_TOTAL);
   if(param->solve_type != QUDA_NORMOP_PC_SOLVE) errorQuda("This function works only with even odd preconditioning");
   if(param->inv_type != QUDA_CG_INVERTER) errorQuda("This function works only with CG method");
   if( (param->matpc_type != QUDA_MATPC_EVEN_EVEN_ASYMMETRIC) && (param->matpc_type != QUDA_MATPC_ODD_ODD_ASYMMETRIC) ) errorQuda("Only asymmetric operators are supported in deflation\n");
@@ -1235,7 +1474,7 @@ void DeflateAndInvert_loop(void **gaugeToPlaquette, QudaInvertParam *param ,Quda
   Dirac &dirac = *d;
   Dirac &diracSloppy = *dSloppy;
   Dirac &diracPre = *dPre;
-  profileInvert.Start(QUDA_PROFILE_H2D);
+  profileInvert.TPSTART(QUDA_PROFILE_H2D);
 
 
   cudaColorSpinorField *b = NULL;
@@ -1274,7 +1513,7 @@ void DeflateAndInvert_loop(void **gaugeToPlaquette, QudaInvertParam *param ,Quda
   tmp3 = new cudaColorSpinorField(cudaParam);
   tmp4 = new cudaColorSpinorField(cudaParam);
 
-  profileInvert.Stop(QUDA_PROFILE_H2D);
+  profileInvert.TPSTOP(QUDA_PROFILE_H2D);
   setTuning(param->tune);
   
   zeroCuda(*x);
@@ -1365,7 +1604,7 @@ void DeflateAndInvert_loop(void **gaugeToPlaquette, QudaInvertParam *param ,Quda
   delete tmp4;
   popVerbosity();
   saveTuneCache(getVerbosity());
-  profileInvert.Stop(QUDA_PROFILE_TOTAL);
+  profileInvert.TPSTOP(QUDA_PROFILE_TOTAL);
 
 }
 
@@ -1375,7 +1614,7 @@ void DeflateAndInvert_loop_w_One_Der(void **gaugeToPlaquette, QudaInvertParam *p
 
   char filename_APE[512];
 
-  profileInvert.Start(QUDA_PROFILE_TOTAL);
+  profileInvert.TPSTART(QUDA_PROFILE_TOTAL);
   if(param->solve_type != QUDA_NORMOP_PC_SOLVE) errorQuda("This function works only with even odd preconditioning");
   if(param->inv_type != QUDA_CG_INVERTER) errorQuda("This function works only with CG method");
   if( (param->matpc_type != QUDA_MATPC_EVEN_EVEN_ASYMMETRIC) && (param->matpc_type != QUDA_MATPC_ODD_ODD_ASYMMETRIC) ) errorQuda("Only asymmetric operators are supported in deflation\n");
@@ -1439,7 +1678,7 @@ void DeflateAndInvert_loop_w_One_Der(void **gaugeToPlaquette, QudaInvertParam *p
   Dirac &dirac = *d;
   Dirac &diracSloppy = *dSloppy;
   Dirac &diracPre = *dPre;
-  profileInvert.Start(QUDA_PROFILE_H2D);
+  profileInvert.TPSTART(QUDA_PROFILE_H2D);
 
 
   cudaColorSpinorField *b = NULL;
@@ -1478,7 +1717,7 @@ void DeflateAndInvert_loop_w_One_Der(void **gaugeToPlaquette, QudaInvertParam *p
   tmp3 = new cudaColorSpinorField(cudaParam);
   tmp4 = new cudaColorSpinorField(cudaParam);
 
-  profileInvert.Stop(QUDA_PROFILE_H2D);
+  profileInvert.TPSTOP(QUDA_PROFILE_H2D);
   setTuning(param->tune);
   
   zeroCuda(*x);
@@ -1558,28 +1797,37 @@ void DeflateAndInvert_loop_w_One_Der(void **gaugeToPlaquette, QudaInvertParam *p
     printfQuda("APE iter 0, Params: (%d,%4.2f) \n",smearParam.APESteps[0],smearParam.APEalpha[0]);
   }
   
+  double3 plaq;
 
   gaugeSmrd[0] = NULL;
   if(smearParam.APESteps[0]==0){
-    //gaugeSmrd[0] = gaugePrecise;
     copyGaugeSmrdQuda(gaugePrecise,0);
-    printfQuda("No Smearing performed. Plaquette  = %le\n",plaquette(*gaugeSmrd[0], QUDA_CUDA_FIELD_LOCATION));
-    printfQuda("No Smearing performed. Plaquette2 = %le\n",plaquette(*gaugePrecise, QUDA_CUDA_FIELD_LOCATION));    
+    plaq = plaquette(*gaugeSmrd[0], QUDA_CUDA_FIELD_LOCATION);
+    printfQuda("No Smearing performed. Plaquette  = %le\n",plaq.x);
+    plaq = plaquette(*gaugePrecise, QUDA_CUDA_FIELD_LOCATION);
+    printfQuda("No Smearing performed. Plaquette2 = %le\n",plaq.x);    
+    printfQuda("iAPE 0: Smeared Volume %d\n",gaugeSmrd[0]->Volume());
+    printfQuda("iAPE 0: Smeared VolumeCB %d\n",gaugeSmrd[0]->VolumeCB());
   }
   else{
     nSteps = smearParam.APESteps[0];
     alpha = smearParam.APEalpha[0];
     performAPEnStep(nSteps, alpha);
-    //gaugeSmrd[0] = gaugeSmeared;
     copyGaugeSmrdQuda(gaugeSmeared,0);      
+    plaq = plaquette(*gaugeSmrd[0], QUDA_CUDA_FIELD_LOCATION);
+    printfQuda("iAPE 0: Plaquette  = %le\n",plaq.x);
+    printfQuda("iAPE 0: Smeared Volume %d\n",gaugeSmrd[0]->Volume());
+    printfQuda("iAPE 0: Smeared VolumeCB %d\n",gaugeSmrd[0]->VolumeCB());
   }
   
+
   for(int iAPE=1;iAPE<smearParam.nAPE; iAPE++){
     gaugeSmrd[iAPE] = NULL;
-    nSteps = smearParam.APESteps[iAPE] - smearParam.APESteps[iAPE-1];
+    nSteps = smearParam.APESteps[iAPE];// - smearParam.APESteps[iAPE-1];
     alpha = smearParam.APEalpha[iAPE];
-    if(nSteps<0){
+    if(nSteps<0 || alpha<=0){
       errorQuda("oneEndTrick: Your Smearing steps must be in ascending order!");
+      errorQuda("oneEndTrick: APE steps and alpha must be positive!!!");
       exit(-1);
     }
     else if(nSteps==0){
@@ -1589,12 +1837,24 @@ void DeflateAndInvert_loop_w_One_Der(void **gaugeToPlaquette, QudaInvertParam *p
     printfQuda("APE iter %d, Params: (%d,%4.2f) \n",iAPE,smearParam.APESteps[iAPE],smearParam.APEalpha[iAPE]);
     
     performAPEnStep(nSteps, alpha);
-    //gaugeSmrd[iAPE] = gaugeSmeared;
     copyGaugeSmrdQuda(gaugeSmeared,iAPE);
+
+    plaq = plaquette(*gaugeSmrd[iAPE], QUDA_CUDA_FIELD_LOCATION);
+    printfQuda("iAPE %d: Plaquette  = %le\n",iAPE,plaq.x);
+    printfQuda("iAPE %d: Smeared Volume %d\n",iAPE,gaugeSmrd[iAPE]->Volume());
+    printfQuda("iAPE %d: Smeared VolumeCB %d\n",iAPE,gaugeSmrd[iAPE]->VolumeCB());
   }//-for iAPE
+
   t2 = MPI_Wtime();
   printfQuda("oneEndTrick: 4D-APE Smearing completed in %f secs\n",t2-t1);
-  printfQuda("Original plaquette = %le\n",plaquette(*gaugePrecise, QUDA_CUDA_FIELD_LOCATION));    
+
+  plaq = plaquette(*gaugePrecise, QUDA_CUDA_FIELD_LOCATION);
+  printfQuda("Original plaquette = %le\n",plaq.x);    
+  double plaq2[3];
+  plaqQuda(plaq2);
+  printfQuda("Original plaquette from plaqQuda = %le\n",plaq2[0]);    
+  printfQuda("Original Volume %d\n",gaugePrecise->Volume());
+  printfQuda("Original VolumeCB %d\n",gaugePrecise->VolumeCB());
 
 
   for(int is = 0 ; is < Nstoch ; is++){
@@ -1634,7 +1894,7 @@ void DeflateAndInvert_loop_w_One_Der(void **gaugeToPlaquette, QudaInvertParam *p
       dumpLoop_ultraLocal<double>(cnTmp,filename_out,is+1,info.Q_sq,1); // dOp
 
       for(int iAPE=0;iAPE<smearParam.nAPE; iAPE++){
-	sprintf(filename_APE,"%s_nAPE%d_alphaAPE0p%2d",filename_out,smearParam.APESteps[iAPE],(int)smearParam.APEalpha[iAPE]*100);
+	sprintf(filename_APE,"%s_nAPE%d_alphaAPE0p%2.0f",filename_out,smearParam.APESteps[iAPE],smearParam.APEalpha[iAPE]*100);
 	for(int mu = 0 ; mu < 4 ; mu++){
 	  doCudaFFT_v2<double>(cnD_vv[iAPE][mu],cnTmp);
 	  dumpLoop_oneD<double>(cnTmp,filename_APE,is+1,info.Q_sq,mu,0); // Loops
@@ -1689,14 +1949,14 @@ void DeflateAndInvert_loop_w_One_Der(void **gaugeToPlaquette, QudaInvertParam *p
   delete tmp4;
   popVerbosity();
   saveTuneCache(getVerbosity());
-  profileInvert.Stop(QUDA_PROFILE_TOTAL);
+  profileInvert.TPSTOP(QUDA_PROFILE_TOTAL);
 }
 
 void DeflateAndInvert_loop_w_One_Der_volumeSource(void **gaugeToPlaquette, QudaInvertParam *param ,QudaGaugeParam *gauge_param, char *filename_eigenValues_up, char *filename_eigenVectors_up, char *filename_eigenValues_down, char *filename_eigenVectors_down,char *filename_out , int NeV , int Nstoch, int seed ,int NdumpStep, qudaQKXTMinfo_Kepler info){
   bool flag_eo;
   double t1,t2;
 
-  profileInvert.Start(QUDA_PROFILE_TOTAL);
+  profileInvert.TPSTART(QUDA_PROFILE_TOTAL);
   if(param->solve_type != QUDA_NORMOP_PC_SOLVE) errorQuda("This function works only with even odd preconditioning");
   if(param->inv_type != QUDA_CG_INVERTER) errorQuda("This function works only with CG method");
   if( (param->matpc_type != QUDA_MATPC_EVEN_EVEN_ASYMMETRIC) && (param->matpc_type != QUDA_MATPC_ODD_ODD_ASYMMETRIC) ) errorQuda("Only asymmetric operators are supported in deflation\n");
@@ -1765,7 +2025,7 @@ void DeflateAndInvert_loop_w_One_Der_volumeSource(void **gaugeToPlaquette, QudaI
   Dirac &dirac = *d;
   Dirac &diracSloppy = *dSloppy;
   Dirac &diracPre = *dPre;
-  profileInvert.Start(QUDA_PROFILE_H2D);
+  profileInvert.TPSTART(QUDA_PROFILE_H2D);
 
 
   cudaColorSpinorField *b = NULL;
@@ -1802,7 +2062,7 @@ void DeflateAndInvert_loop_w_One_Der_volumeSource(void **gaugeToPlaquette, QudaI
 
   tmp = new cudaColorSpinorField(cudaParam);
 
-  profileInvert.Stop(QUDA_PROFILE_H2D);
+  profileInvert.TPSTOP(QUDA_PROFILE_H2D);
   setTuning(param->tune);
   
   zeroCuda(*x);
@@ -2028,7 +2288,7 @@ void DeflateAndInvert_loop_w_One_Der_volumeSource(void **gaugeToPlaquette, QudaI
   delete tmp;
   popVerbosity();
   saveTuneCache(getVerbosity());
-  profileInvert.Stop(QUDA_PROFILE_TOTAL);
+  profileInvert.TPSTOP(QUDA_PROFILE_TOTAL);
 }
 
 /*
@@ -2049,7 +2309,7 @@ void DeflateAndInvert_threepTwop(void **gaugeSmeared, void **gauge, QudaInvertPa
   bool flag_eo;
   double t1,t2;
 
-  profileInvert.Start(QUDA_PROFILE_TOTAL);
+  profileInvert.TPSTART(QUDA_PROFILE_TOTAL);
   if(param->solve_type != QUDA_NORMOP_PC_SOLVE) errorQuda("This function works only with even odd preconditioning");
   if(param->inv_type != QUDA_CG_INVERTER) errorQuda("This function works only with CG method");
   if( (param->matpc_type != QUDA_MATPC_EVEN_EVEN_ASYMMETRIC) && (param->matpc_type != QUDA_MATPC_ODD_ODD_ASYMMETRIC) ) errorQuda("Only asymmetric operators are supported in deflation\n");
@@ -2142,7 +2402,7 @@ void DeflateAndInvert_threepTwop(void **gaugeSmeared, void **gauge, QudaInvertPa
   Dirac &dirac = *d;
   Dirac &diracSloppy = *dSloppy;
   Dirac &diracPre = *dPre;
-  profileInvert.Start(QUDA_PROFILE_H2D);
+  profileInvert.TPSTART(QUDA_PROFILE_H2D);
 
 
   cudaColorSpinorField *b = NULL;
@@ -2173,7 +2433,7 @@ void DeflateAndInvert_threepTwop(void **gaugeSmeared, void **gauge, QudaInvertPa
   cudaParam.create = QUDA_ZERO_FIELD_CREATE;
   x = new cudaColorSpinorField(cudaParam);
 
-  profileInvert.Stop(QUDA_PROFILE_H2D);
+  profileInvert.TPSTOP(QUDA_PROFILE_H2D);
   setTuning(param->tune);
   
   zeroCuda(*x);
@@ -2517,6 +2777,6 @@ void DeflateAndInvert_threepTwop(void **gaugeSmeared, void **gauge, QudaInvertPa
 
   popVerbosity();
   saveTuneCache(getVerbosity());
-  profileInvert.Stop(QUDA_PROFILE_TOTAL);
+  profileInvert.TPSTOP(QUDA_PROFILE_TOTAL);
 
 }

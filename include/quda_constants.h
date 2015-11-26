@@ -1,10 +1,6 @@
 #define QUDA_VERSION_MAJOR     0
 #define QUDA_VERSION_MINOR     7
-<<<<<<< HEAD
-#define QUDA_VERSION_SUBMINOR  0
-=======
 #define QUDA_VERSION_SUBMINOR  2
->>>>>>> develop-latest
 
 /**
  * @def   QUDA_VERSION
@@ -32,4 +28,3 @@
  * @brief Maximum length of the Ls dimension for domain-wall fermions
  */
 #define QUDA_MAX_DWF_LS 128
-

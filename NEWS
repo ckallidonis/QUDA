@@ -1,5 +1,3 @@
-<<<<<<< HEAD
-=======
 Version 0.7.2 - 07th October 2015
 
 - Add support for separate temporal-spatial plaquette
@@ -60,7 +58,6 @@ Version 0.7.1 - 11th June 2015
   https://github.com/lattice/quda/issues?q=milestone%3A%22QUDA+0.7.1%22+is%3Aclosed
 
 
->>>>>>> develop-latest
 Version 0.7.0 - 4th February 2015
 
 - Added support for twisted-clover, 4-d preconditioned domain wall and
@@ -602,7 +599,7 @@ Version 0.2.4 - 22 June 2010
 
 
 Version 0.2.3 - 2 June 2010
- 
+
 - Further improved performance of the blas routines.
 
 - Added 3D Wilson Dslash in anticipation of temporal preconditioning.
@@ -646,4 +643,3 @@ Version 0.2 - 16 December 2009
 Version 0.1 - 17 November 2009
 
 - Initial public release.
-

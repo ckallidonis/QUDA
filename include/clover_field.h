@@ -61,6 +61,12 @@ namespace quda {
     const void* V(bool inverse=false) const { return inverse ? cloverInv : clover; }
     const void* Norm(bool inverse=false) const { return inverse ? invNorm : norm; }
 
+    /**
+       This function returns true if the field is stored in an
+       internal field order for the given precision.
+    */
+    bool isNative() const;
+
     double* TrLog() const { return trlog; }
     
     QudaCloverFieldOrder Order() const { return order; }
@@ -196,8 +202,6 @@ namespace quda {
   void computeClover(CloverField &clover, const GaugeField &gauge, double coeff,  QudaFieldLocation location);
 
 
-  void computeCloverSigmaTrace(GaugeField &gauge, const CloverField &clover, int dir1, int dir2, QudaFieldLocation location);
-
   /**
      This generic function is used for copying the clover field where
      in the input and output can be in any order and location.
@@ -214,9 +218,6 @@ namespace quda {
 			 void *Out=0, void *In=0, void *outNorm=0, void *inNorm=0);
   
 
-  void cloverDerivative(cudaGaugeField &out, cudaGaugeField& gauge, cudaGaugeField& oprod, int mu, int nu, double coeff, QudaParity parity, int conjugate);
-
-
 
   /**
      This function compute the Cholesky decomposition of each clover
@@ -227,8 +228,6 @@ namespace quda {
   */
   void cloverInvert(CloverField &clover, bool computeTraceLog, QudaFieldLocation location);
 
-<<<<<<< HEAD
-=======
   /**
      Compute the force contribution from the solver solution fields
    
@@ -293,7 +292,6 @@ namespace quda {
    */
   void cloverDerivative(cudaGaugeField &force, cudaGaugeField& gauge, cudaGaugeField& oprod, int mu, int nu, double coeff, QudaParity parity, int conjugate);
 
->>>>>>> develop-latest
 } // namespace quda
 
 #endif // _CLOVER_QUDA_H

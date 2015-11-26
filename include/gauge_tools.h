@@ -1,8 +1,4 @@
 namespace quda {
-<<<<<<< HEAD
-  double	plaquette	(const GaugeField& data, QudaFieldLocation location);
-  void		APEStep		(GaugeField &dataDs, const GaugeField& dataOr, double alpha, QudaFieldLocation location);
-=======
   /**
      Compute the plaquette of the gauge field
 
@@ -90,5 +86,4 @@ namespace quda {
    */
 
   double computeQCharge(GaugeField& Fmunu, QudaFieldLocation location);
->>>>>>> develop-latest
 }

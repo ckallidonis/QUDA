@@ -291,8 +291,8 @@ namespace quda {
 #endif
 
 #ifdef LAUNCH_TIMER
-    launchTimer.Start(QUDA_PROFILE_TOTAL);
-    launchTimer.Start(QUDA_PROFILE_INIT);
+    launchTimer.TPSTART(QUDA_PROFILE_TOTAL);
+    launchTimer.TPSTART(QUDA_PROFILE_INIT);
 #endif
 
     const TuneKey key = tunable.tuneKey();
@@ -300,8 +300,8 @@ namespace quda {
     static TuneParam param;
 
 #ifdef LAUNCH_TIMER
-    launchTimer.Stop(QUDA_PROFILE_INIT);
-    launchTimer.Start(QUDA_PROFILE_PREAMBLE);
+    launchTimer.TPSTOP(QUDA_PROFILE_INIT);
+    launchTimer.TPSTART(QUDA_PROFILE_PREAMBLE);
 #endif
 
     // first check if we have the tuned value and return if we have it
@@ -311,23 +311,23 @@ namespace quda {
     if (enabled == QUDA_TUNE_YES && it != tunecache.end()) {
 
 #ifdef LAUNCH_TIMER
-      launchTimer.Stop(QUDA_PROFILE_PREAMBLE);
-      launchTimer.Start(QUDA_PROFILE_COMPUTE);
+      launchTimer.TPSTOP(QUDA_PROFILE_PREAMBLE);
+      launchTimer.TPSTART(QUDA_PROFILE_COMPUTE);
 #endif
 
       //param = tunecache[key];
       TuneParam param = it->second;
 
 #ifdef LAUNCH_TIMER
-      launchTimer.Stop(QUDA_PROFILE_COMPUTE);
-      launchTimer.Start(QUDA_PROFILE_EPILOGUE);
+      launchTimer.TPSTOP(QUDA_PROFILE_COMPUTE);
+      launchTimer.TPSTART(QUDA_PROFILE_EPILOGUE);
 #endif
 
       tunable.checkLaunchParam(it->second);
 
 #ifdef LAUNCH_TIMER
-      launchTimer.Stop(QUDA_PROFILE_EPILOGUE);
-      launchTimer.Stop(QUDA_PROFILE_TOTAL);
+      launchTimer.TPSTOP(QUDA_PROFILE_EPILOGUE);
+      launchTimer.TPSTOP(QUDA_PROFILE_TOTAL);
 #endif
 
 #ifdef PTHREADS
@@ -339,8 +339,8 @@ namespace quda {
     }
 
 #ifdef LAUNCH_TIMER
-    launchTimer.Stop(QUDA_PROFILE_PREAMBLE);
-    launchTimer.Stop(QUDA_PROFILE_TOTAL);
+    launchTimer.TPSTOP(QUDA_PROFILE_PREAMBLE);
+    launchTimer.TPSTOP(QUDA_PROFILE_TOTAL);
 #endif
 
 
