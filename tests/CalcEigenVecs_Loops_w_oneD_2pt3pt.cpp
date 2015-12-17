@@ -247,12 +247,9 @@ int main(int argc, char **argv)
   inv_param.solution_type = QUDA_MAT_SOLUTION;
   if(isFullOp){
     inv_param.solve_type = QUDA_NORMOP_SOLVE;
-    printf("### Running for the Full Operator\n");
   }
   else{
     inv_param.solve_type = QUDA_NORMOP_PC_SOLVE;
-    if(isEven) printf("### Running for the Even-Even Operator\n");
-    else       printf("### Running for the Odd-Odd Operator\n");
   }
 
 
