@@ -1627,6 +1627,8 @@ int Ndump  = 10;      // Write the loop every Ndump stoch. vectors
 char loop_fname[512] = "loop";
 int smethod = 1;
 
+char source_type[257] = "random";
+
 //////////////////////////////////////////////////////////////////////////////////////////////////////
 
 
@@ -1727,6 +1729,7 @@ void usage(char** argv )
   printf("    --UseEven                                   # Whether to use Even-Even operator (yes/no, default no)\n");
   printf("    --UseFullOp                                 # Whether to use the Full Operator (yes,no, default no)\n");
   printf("    --stoch-method                              # Use MdagM psi = (1-P)Mdag xi (1,default) or MdagM phi = Mdag xi (0)\n");
+  printf("    --source_type                             # Stochastic source type (unity/random) (default random)\n");
 
   ////////////////////////////////////////////////////////////////
 
@@ -2207,6 +2210,16 @@ int process_command_line_option(int argc, char** argv, int* idx)
       usage(argv);
     }     
     strcpy(loop_fname, argv[i+1]);
+    i++;
+    ret = 0;
+    goto out;
+  }
+
+  if( strcmp(argv[i], "--source_type") == 0){
+    if (i+1 >= argc){
+      usage(argv);
+    }
+    strcpy(source_type, argv[i+1]);
     i++;
     ret = 0;
     goto out;

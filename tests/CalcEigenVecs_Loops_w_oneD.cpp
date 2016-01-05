@@ -80,7 +80,7 @@ extern double amax;
 extern bool isEven;
 extern bool isFullOp;
 
-
+extern char source_type[];
 
 void
 display_test_info()
@@ -403,7 +403,12 @@ int main(int argc, char **argv)
   info.lL[2] = zdim;
   info.lL[3] = tdim;
   info.Q_sq = Q_sq;
-
+  if( strcmp(source_type,"random")==0 ) info.source_type = RANDOM;
+  else if( strcmp(source_type,"unity")==0 ) info.source_type = UNITY;
+  else{
+    printf("Wrong type for stochastic source type. Must be either random/unity. Exiting.\n");
+    exit(1);
+  }
 
   initQuda(device);
   init_qudaQKXTM_Kepler(&info);

@@ -29,6 +29,8 @@
 
 namespace quda {
 
+  enum SOURCE_T{UNITY,RANDOM};
+
   typedef struct {
     int nsmearAPE;
     int nsmearGauss;
@@ -42,6 +44,7 @@ namespace quda {
     int Ntsink;
     int tsinkSource[MAX_TSINK];
     int run3pt_src[MAX_NSOURCES];
+    SOURCE_T source_type;
   } qudaQKXTMinfo_Kepler;
 
 

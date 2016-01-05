@@ -1139,6 +1139,36 @@ void DeflateAndInvert_twop(void **gaugeSmeared, QudaInvertParam *param ,QudaGaug
 }
 
 template <typename Float>
+void getStochasticRandomSource(void *spinorIn, gsl_rng *rNum, SOURCE_T source_type){
+  memset(spinorIn,0,GK_localVolume*12*2*sizeof(Float));
+  for(int i = 0; i<GK_localVolume*12; i++){
+    int randomNumber = gsl_rng_uniform_int(rNum, 4);
+
+    if(source_type==UNITY){
+      ((Float*) spinorIn)[i*2] = 1.0;
+      ((Float*) spinorIn)[i*2+1] = 0.0;
+    }
+    else if(source_type==RANDOM){
+      switch  (randomNumber){
+      case 0:
+	((Float*) spinorIn)[i*2] = 1.;
+	break;
+      case 1:
+	((Float*) spinorIn)[i*2] = -1.;
+	break;
+      case 2:
+	((Float*) spinorIn)[i*2+1] = 1.;
+	break;
+      case 3:
+	((Float*) spinorIn)[i*2+1] = -1.;
+	break;
+      }
+    }    
+  }
+
+}
+
+template <typename Float>
 void getStochasticRandomSource(void *spinorIn, gsl_rng *rNum){
   memset(spinorIn,0,GK_localVolume*12*2*sizeof(Float));
 
@@ -1314,10 +1344,13 @@ void DeflateAndInvert_loop(void **gaugeToPlaquette, QudaInvertParam *param ,Quda
   gsl_rng *rNum = gsl_rng_alloc(gsl_rng_ranlux);
   gsl_rng_set(rNum, seed + comm_rank()*seed);
 
+  if(info.source_type==RANDOM) printfQuda("Will use RANDOM stochastic sources\n");
+  else if (info.source_type==UNITY) printfQuda("Will use UNITY stochastic sources\n");
+
   for(int is = 0 ; is < Nstoch ; is++){
     t1 = MPI_Wtime();
     memset(input_vector,0,X[0]*X[1]*X[2]*X[3]*spinorSiteSize*sizeof(double));
-    getStochasticRandomSource<double>(input_vector,rNum);
+    getStochasticRandomSource<double>(input_vector,rNum,info.source_type);
     K_vector->packVector((double*) input_vector);
     K_vector->loadVector();
     K_vector->uploadToCuda(b,flag_eo);
@@ -1547,10 +1580,13 @@ void DeflateAndInvert_loop_w_One_Der(void **gaugeToPlaquette, QudaInvertParam *p
   gsl_rng *rNum = gsl_rng_alloc(gsl_rng_ranlux);
   gsl_rng_set(rNum, seed + comm_rank()*seed);
 
+  if(info.source_type==RANDOM) printfQuda("Will use RANDOM stochastic sources\n");
+  else if (info.source_type==UNITY) printfQuda("Will use UNITY stochastic sources\n");
+
   for(int is = 0 ; is < Nstoch ; is++){
     t1 = MPI_Wtime();
     memset(input_vector,0,X[0]*X[1]*X[2]*X[3]*spinorSiteSize*sizeof(double));
-    getStochasticRandomSource<double>(input_vector,rNum);
+    getStochasticRandomSource<double>(input_vector,rNum,info.source_type);
     K_vector->packVector((double*) input_vector);
     K_vector->loadVector();
     K_vector->uploadToCuda(b,flag_eo);
@@ -1804,10 +1840,13 @@ void DeflateAndInvert_loop_w_One_Der_volumeSource(void **gaugeToPlaquette, QudaI
   gsl_rng *rNum = gsl_rng_alloc(gsl_rng_ranlux);
   gsl_rng_set(rNum, seed + comm_rank()*seed);
 
+  if(info.source_type==RANDOM) printfQuda("Will use RANDOM stochastic sources\n");
+  else if (info.source_type==UNITY) printfQuda("Will use UNITY stochastic sources\n");
+
   for(int is = 0 ; is < Nstoch ; is++){
 
     memset(input_vector,0,X[0]*X[1]*X[2]*X[3]*spinorSiteSize*sizeof(double));
-    getStochasticRandomSource<double>(input_vector,rNum);
+    getStochasticRandomSource<double>(input_vector,rNum,info.source_type);
     t1 = MPI_Wtime();
 
 #define CROSSCHECK
@@ -2742,11 +2781,14 @@ void calcEigenVectors_loop_wOneD_EvenOdd(void **gaugeToPlaquette, QudaInvertPara
   gsl_rng *rNum = gsl_rng_alloc(gsl_rng_ranlux);
   gsl_rng_set(rNum, seed + comm_rank()*seed);
 
+  if(info.source_type==RANDOM) printfQuda("Will use RANDOM stochastic sources\n");
+  else if (info.source_type==UNITY) printfQuda("Will use UNITY stochastic sources\n");
+
   for(int is = 0 ; is < Nstoch ; is++){
     t1 = MPI_Wtime();
 
     memset(input_vector,0,X[0]*X[1]*X[2]*X[3]*spinorSiteSize*sizeof(double));
-    getStochasticRandomSource<double>(input_vector,rNum);
+    getStochasticRandomSource<double>(input_vector,rNum,info.source_type);
     K_vector->packVector((double*) input_vector);
     K_vector->loadVector();
     K_vector->uploadToCuda(b,flag_eo);
@@ -3057,10 +3099,13 @@ void calcEigenVectors_loop_wOneD_FullOp(void **gaugeToPlaquette, QudaInvertParam
   gsl_rng *rNum = gsl_rng_alloc(gsl_rng_ranlux);
   gsl_rng_set(rNum, seed + comm_rank()*seed);
 
+  if(info.source_type==RANDOM) printfQuda("Will use RANDOM stochastic sources\n");
+  else if (info.source_type==UNITY) printfQuda("Will use UNITY stochastic sources\n");
+
   for(int is = 0 ; is < Nstoch ; is++){
     t1 = MPI_Wtime();
     memset(input_vector,0,GK_localL[0]*GK_localL[1]*GK_localL[2]*GK_localL[3]*spinorSiteSize*sizeof(double));
-    getStochasticRandomSource<double>(input_vector,rNum);
+    getStochasticRandomSource<double>(input_vector,rNum,info.source_type);
     K_vector->packVector((double*) input_vector);
     K_vector->loadVector();
     K_vector->uploadToCuda(b,pc_solve);
@@ -4360,11 +4405,14 @@ void calcEigenVectors_loop_wOneD_EvenOdd_noDefl(double *eigVecs_d, double *eigVa
   gsl_rng *rNum = gsl_rng_alloc(gsl_rng_ranlux);
   gsl_rng_set(rNum, seed + comm_rank()*seed);
 
+  if(info.source_type==RANDOM) printfQuda("Will use RANDOM stochastic sources\n");
+  else if (info.source_type==UNITY) printfQuda("Will use UNITY stochastic sources\n");
+
   for(int is = 0 ; is < Nstoch ; is++){
     t1 = MPI_Wtime();
 
     memset(input_vector,0,X[0]*X[1]*X[2]*X[3]*spinorSiteSize*sizeof(double));
-    getStochasticRandomSource<double>(input_vector,rNum);
+    getStochasticRandomSource<double>(input_vector,rNum,info.source_type);
     K_vector->packVector((double*) input_vector);
     K_vector->loadVector();
     K_vector->uploadToCuda(b,flag_eo);

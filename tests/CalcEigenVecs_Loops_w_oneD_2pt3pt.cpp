@@ -93,6 +93,8 @@ extern char loop_fname[];
 extern int Ndump;
 extern int smethod;
 
+extern char source_type[];
+
 
 void
 display_test_info()
@@ -423,6 +425,13 @@ int main(int argc, char **argv)
   info.Q_sq = Q_sq;
   //  info.tsinkSource=t_sinkSource;
   info.Ntsink = Ntsink;
+  if( strcmp(source_type,"random")==0 ) info.source_type = RANDOM;
+  else if( strcmp(source_type,"unity")==0 ) info.source_type = UNITY;
+  else{
+    printf("Wrong type for stochastic source type. Must be either random/unity. Exiting.\n");
+    exit(1);
+  }
+
 
 
   if(strcmp(run3pt,"all")==0 || strcmp(run3pt,"ALL")==0){
