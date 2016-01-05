@@ -1141,24 +1141,33 @@ void DeflateAndInvert_twop(void **gaugeSmeared, QudaInvertParam *param ,QudaGaug
 template <typename Float>
 void getStochasticRandomSource(void *spinorIn, gsl_rng *rNum){
   memset(spinorIn,0,GK_localVolume*12*2*sizeof(Float));
+
   for(int i = 0; i<GK_localVolume*12; i++){
-    int randomNumber = gsl_rng_uniform_int(rNum, 4);
-    switch  (randomNumber)
-      {
-      case 0:
-	((Float*) spinorIn)[i*2] = 1.;
-	break;
-      case 1:
-	((Float*) spinorIn)[i*2] = -1.;
-	break;
-      case 2:
-	((Float*) spinorIn)[i*2+1] = 1.;
-	break;
-      case 3:
-	((Float*) spinorIn)[i*2+1] = -1.;
-	break;
-      }
-  }
+
+    //- Unity sources
+    ((Float*) spinorIn)[i*2] = 1.0;
+    ((Float*) spinorIn)[i*2+1] = 0.0;
+
+    //- Random sources
+//     int randomNumber = gsl_rng_uniform_int(rNum, 4);
+//     switch  (randomNumber)
+//       {
+//       case 0:
+// 	((Float*) spinorIn)[i*2] = 1.;
+// 	break;
+//       case 1:
+// 	((Float*) spinorIn)[i*2] = -1.;
+// 	break;
+//       case 2:
+// 	((Float*) spinorIn)[i*2+1] = 1.;
+// 	break;
+//       case 3:
+// 	((Float*) spinorIn)[i*2+1] = -1.;
+// 	break;
+//       }
+
+  }//-for
+
 }
 
 
@@ -2956,7 +2965,7 @@ void calcEigenVectors_loop_wOneD_FullOp(void **gaugeToPlaquette, QudaInvertParam
   //============================  S T O C H A S T I C   P A R T  ============================//
   //=========================================================================================//
 
-  sprintf(loop_stoch_fname,"%s_stoch",loopInfo.loop_fname);
+  sprintf(loop_stoch_fname,"%s_stoch_NeV%d",loopInfo.loop_fname,NeV);
 
   cudaGaugeField *cudaGauge = checkGauge(param);
   checkInvertParam(param);

@@ -5,7 +5,7 @@ QUDA = ../lib/libquda.a
 INC += -I../include -I. -I/users/kallidoc/install/include
 
 HDRS = blas_reference.h wilson_dslash_reference.h staggered_dslash_reference.h    \
-	domain_wall_dslash_reference.h test_util.h dslash_util.h
+	domain_wall_dslash_reference.h test_util.h dslash_util.h read_conf.h
 
 LDFLAGS += -L/users/kallidoc/install/lib -larpack -lparpack
 
@@ -106,7 +106,7 @@ clean:
 	gauge_force_test fermion_force_test hisq_paths_force_test	\
 	hisq_unitarize_force_test unitarize_link_test \
 	deflationTwopThreep deflationInverter deflationLoops deflationLoops_w_oneD deflationLoops_w_oneD_volumeSource CalcEigenVecs \
-	createWritePropsSLReadApeGauge test_plaquette CalcEigenVecs_2pt3pt CalcEigenVecs_Loops_w_oneD
+	createWritePropsSLReadApeGauge test_plaquette CalcEigenVecs_2pt3pt CalcEigenVecs_Loops_w_oneD CalcEigenVecs_Loops_w_oneD_2pt3pt
 
 %.o: %.c $(HDRS)
 	$(CC) $(CFLAGS) $< -c -o $@

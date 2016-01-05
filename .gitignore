@@ -27,3 +27,4 @@ lib/*orig*
 lib/#*
 tests/#*
 include/#*
+tunecache.tsv

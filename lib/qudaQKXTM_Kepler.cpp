@@ -1878,7 +1878,7 @@ QKXTM_Deflation_Kepler<Float>::QKXTM_Deflation_Kepler(int N_EigenVectors,bool is
   if(GK_init_qudaQKXTM_Kepler_flag == false)errorQuda("You must initialize QKXTM library first\n");
   NeV=N_EigenVectors;
   if(NeV == 0){
-    warningQuda("Warning: you chose zero eigenVectors\n");
+    warningQuda("You chose zero eigenVectors\n");
     return;
   }
 
@@ -3918,10 +3918,6 @@ void dumpLoop_oneD_v2(void *cn, const char *Pref,int accumLevel, int Q_sq, int m
 template <typename Float>
 void QKXTM_Deflation_Kepler<Float>::deflateSrcVec(QKXTM_Vector_Kepler<Float> &vec_defl, QKXTM_Vector_Kepler<Float> &vec_in){
 
-  if(NeV == 0){
-    vec_defl.zero_device();
-    return;
-  }
   if(!isFullOp) errorQuda("deflateSrcVec: This function only works with the Full Operator\n");
   
   Float *tmp_vec = (Float*) calloc((GK_localVolume)*4*3*2,sizeof(Float)) ;
@@ -3940,6 +3936,18 @@ void QKXTM_Deflation_Kepler<Float>::deflateSrcVec(QKXTM_Vector_Kepler<Float> &ve
   Float *ptr_elem = (Float*) calloc((GK_localVolume)*4*3*2,sizeof(Float)) ;
   
   memcpy(tmp_vec,vec_in.H_elem(),bytes_total_length_per_NeV); //-C.K. tmp_vec = vec_in
+
+  if(NeV == 0){
+    printfQuda("NeV = %d. Will not deflate source vector!!!\n",NeV);
+    vec_defl.packVector((Float*) tmp_vec);
+    vec_defl.loadVector();
+
+    free(tmp_vec);
+    free(out_vec);
+    free(out_vec_reduce);
+
+    return;
+  }
 
   if( typeid(Float) == typeid(float) ){
     cblas_cgemv(CblasColMajor, CblasConjTrans, NN, NeV, (void*) alpha, (void*) h_elem, NN, tmp_vec, incx, (void*) beta, out_vec, incy );       
