@@ -1867,7 +1867,7 @@ public:
   void polynomialOperator(cudaColorSpinorField &out, const cudaColorSpinorField &in);
   void eigenSolver();
   void Loop_w_One_Der_FullOp_Exact(int n, QudaInvertParam *param, void *gen_uloc,void *std_uloc, void **gen_oneD, void **std_oneD, void **gen_csvC, void **std_csvC);
-  void deflateSrcVec(QKXTM_Vector_Kepler<Float> &vec_defl, QKXTM_Vector_Kepler<Float> &vec_in);
+  void deflateSrcVec(QKXTM_Vector_Kepler<Float> &vec_defl, QKXTM_Vector_Kepler<Float> &vec_in, int is);
   void copyToEigenVector(Float *vec, Float *vals);
 };
 
@@ -1963,7 +1963,7 @@ template<typename Float>
 void QKXTM_Deflation_Kepler<Float>::printInfo(){
   printfQuda("\n======= DEFLATION INFO =======\n"); 
   if(isFullOp){
-    printfQuda("  The EigenVectors are for the Full operator\n");
+    printfQuda("  The EigenVectors are for the Full %smu operator\n", (flavor_sign==QUDA_TWIST_PLUS) ? "+" : "-");
   }
   else{
     printfQuda("  Will calculate EigenVectors for the %s %smu operator\n", isEv ? "even-even" : "odd-odd", (flavor_sign==QUDA_TWIST_PLUS) ? "+" : "-" );
@@ -2501,7 +2501,7 @@ void QKXTM_Deflation_Kepler<Float>::eigenSolver(){
   char *bmat=strdup("I");  // Specifies that the right hand side matrix should be the identity matrix; this makes the problem a standard eigenvalue problem.
                                
   QudaInvertParam *param = invert_param;
-  bool pc_solution = ((param->solution_type == QUDA_MATPC_SOLUTION) ||  (param->solution_type == QUDA_MATPCDAG_MATPC_SOLUTION));
+  //  bool pc_solution = ((param->solution_type == QUDA_MATPC_SOLUTION) ||  (param->solution_type == QUDA_MATPCDAG_MATPC_SOLUTION));
  
   //- matrix dimensions 
   int LDV;
@@ -2769,19 +2769,29 @@ void QKXTM_Deflation_Kepler<Float>::eigenSolver(){
   }
 
   
-  //  FILE *evec_ptr;
-  //  char evec_fname[257];
+//   FILE *evec_ptr;
+//   char evec_fname[257];
 //   for(int i = 0;i<NeV;i++){
-//     //    sprintf(evec_fname,"evec2.%04d.txt",i);
-//     //    if( (evec_ptr=fopen(evec_fname,"w"))==NULL ) errorQuda("Cannot open evec file for writing\n");
+//     sprintf(evec_fname,"evec_EO.%03d.txt",i);
+//     if( (evec_ptr=fopen(evec_fname,"w"))==NULL ) errorQuda("Cannot open evec file %s for writing\n",evec_fname);
     
-//     for(int k=0;k<240;k++){
-//       printfQuda("EIGENSOLVER: i = %04d, k = %04d: %+e  %+e    %+e  %+e      %+e  %+e\n",i,k,real(helem_cplx[i*LDV+k]),imag(helem_cplx[i*LDV+k]),
-// 		 h_elem[2*(LDV*i+k)],h_elem[2*(LDV*i+k)+1],
-// 		 real(helem_cplx[i*LDV+k])/h_elem[2*(LDV*i+k)],imag(helem_cplx[i*LDV+k])/h_elem[2*(LDV*i+k)+1]);
-//     }
-//     printfQuda("\n\n");
-//     //    fclose(evec_ptr);
+//     for(int t=0;  t<GK_localL[3]; t++)
+//       for(int z=0;  z<GK_localL[2]; z++)
+// 	for(int y=0;  y<GK_localL[1]; y++)
+// 	  for(int x=0;  x<GK_localL[0]; x++)
+// 	    for(int mu=0; mu<4; mu++)
+// 	      for(int c1=0; c1<3; c1++){
+// 		int pos = t*GK_localL[2]*GK_localL[1]*GK_localL[0]*4*3*2 + z*GK_localL[1]*GK_localL[0]*4*3*2 + y*GK_localL[0]*4*3*2 + x*4*3*2 + mu*3*2 + c1*2;
+// 		fprintf(evec_ptr,"%02d %02d %02d %02d %02d %02d %+16.15e %+16.15e\n",t,z,y,x,mu,c1,h_elem[i*total_length_per_NeV + pos],h_elem[i*total_length_per_NeV + pos + 1]);
+// 	      }
+
+// //     for(int k=0;k<240;k++){
+// //       printfQuda("EIGENSOLVER: i = %04d, k = %04d: %+e  %+e    %+e  %+e      %+e  %+e\n",i,k,real(helem_cplx[i*LDV+k]),imag(helem_cplx[i*LDV+k]),
+// // 		 h_elem[2*(LDV*i+k)],h_elem[2*(LDV*i+k)+1],
+// // 		 real(helem_cplx[i*LDV+k])/h_elem[2*(LDV*i+k)],imag(helem_cplx[i*LDV+k])/h_elem[2*(LDV*i+k)+1]);
+// //     }
+// //     printfQuda("\n\n");
+//     fclose(evec_ptr);
 //   }
 
 //   FILE *eval_ptr;
@@ -3276,12 +3286,10 @@ void oneEndTrick(cudaColorSpinorField &x,cudaColorSpinorField &tmp3, cudaColorSp
   checkCudaError();
 }
 
-
 template<typename Float>
 void oneEndTrick_w_One_Der(cudaColorSpinorField &x,cudaColorSpinorField &tmp3, cudaColorSpinorField &tmp4,QudaInvertParam *param, void *cnRes_gv,void *cnRes_vv, void **cnD_gv, void **cnD_vv, void **cnC_gv, void **cnC_vv){
-  void *h_ctrn, *ctrnS, *ctrnC;
 
-  double t1,t2;
+  void *h_ctrn, *ctrnS, *ctrnC;
 
   if((cudaMallocHost(&h_ctrn, sizeof(Float)*32*GK_localL[0]*GK_localL[1]*GK_localL[2]*GK_localL[3])) == cudaErrorMemoryAllocation)
     errorQuda("Error allocating memory for contraction results in CPU.\n");
@@ -3296,8 +3304,6 @@ void oneEndTrick_w_One_Der(cudaColorSpinorField &x,cudaColorSpinorField &tmp3, c
   cudaMemset(ctrnC, 0, sizeof(Float)*32*GK_localL[0]*GK_localL[1]*GK_localL[2]*GK_localL[3]);
 
   checkCudaError();
-
-  t1 = MPI_Wtime();
   
   DiracParam dWParam;
   dWParam.matpcType        = QUDA_MATPC_EVEN_EVEN;
@@ -3328,47 +3334,42 @@ void oneEndTrick_w_One_Der(cudaColorSpinorField &x,cudaColorSpinorField &tmp3, c
   }
   checkCudaError();
 
-  t2 = MPI_Wtime();
-  //  printfQuda("Stoch Loop TIME REPORT: Application of Full Wilson Op: %f sec\n",t2-t1);
-
   gamma5Cuda(&(tmp3.Even()), &(tmp4.Even()));
   gamma5Cuda(&(tmp3.Odd()),  &(tmp4.Odd()));
 
   long int sizeBuffer;
   sizeBuffer = sizeof(Float)*32*GK_localL[0]*GK_localL[1]*GK_localL[2]*GK_localL[3];
 
+  int NN = 16*GK_localL[0]*GK_localL[1]*GK_localL[2]*GK_localL[3];
+  int incx = 1;
+  int incy = 1;
+  Float pceval[2] = {1.0,0.0};
+  Float mceval[2] = {-1.0,0.0};
+
   ///////////////// LOCAL ///////////////////////////
-  t1 = MPI_Wtime();
   contract(x, tmp3, ctrnS, QUDA_CONTRACT_GAMMA5);
   cudaMemcpy(h_ctrn, ctrnS, sizeBuffer, cudaMemcpyDeviceToHost);
-  t2 = MPI_Wtime();
-  //  printfQuda("Stoch Loop TIME REPORT: Ultra-local Generalized: %f sec\n",t2-t1);
-
-  t1 = MPI_Wtime();
-  for(int ix=0; ix < 32*GK_localL[0]*GK_localL[1]*GK_localL[2]*GK_localL[3]; ix++)
-    ((Float*) cnRes_gv)[ix] += ((Float*)h_ctrn)[ix]; // generalized one end trick
-  t2 = MPI_Wtime();
-  //  printfQuda("Stoch Loop TIME REPORT: Ultra-local Generalized SUM: %f sec\n",t2-t1);
-
-  t1 = MPI_Wtime();
+  
+  if( typeid(Float) == typeid(float) )       cblas_caxpy(NN, (void*) pceval, (void*) h_ctrn, incx, (void*) cnRes_gv, incy);
+  else if( typeid(Float) == typeid(double) ) cblas_zaxpy(NN, (void*) pceval, (void*) h_ctrn, incx, (void*) cnRes_gv, incy);
+  
+  //    for(int ix=0; ix < 32*GK_localL[0]*GK_localL[1]*GK_localL[2]*GK_localL[3]; ix++)
+  //      ((Float*) cnRes_gv)[ix] += ((Float*)h_ctrn)[ix]; // generalized one end trick
+  
   contract(x, x, ctrnS, QUDA_CONTRACT_GAMMA5);
   cudaMemcpy(h_ctrn, ctrnS, sizeBuffer, cudaMemcpyDeviceToHost);
-  t2 = MPI_Wtime();
-  //  printfQuda("Stoch Loop TIME REPORT: Ultra-local Standard: %f sec\n",t2-t1);
-
-  t1 = MPI_Wtime();
-  for(int ix=0; ix < 32*GK_localL[0]*GK_localL[1]*GK_localL[2]*GK_localL[3]; ix++)
-    ((Float*) cnRes_vv)[ix] -= ((Float*)h_ctrn)[ix]; // standard one end trick
-  t2 = MPI_Wtime();
-  //  printfQuda("Stoch Loop TIME REPORT: Ultra-local Standard SUM: %f sec\n",t2-t1);
-
+  
+  //    for(int ix=0; ix < 32*GK_localL[0]*GK_localL[1]*GK_localL[2]*GK_localL[3]; ix++)
+  //      ((Float*) cnRes_vv)[ix] -= ((Float*)h_ctrn)[ix]; // standard one end trick
+  
+  if( typeid(Float) == typeid(float) )       cblas_caxpy(NN, (void*) mceval, (void*) h_ctrn, incx, (void*) cnRes_vv, incy);
+  else if( typeid(Float) == typeid(double) ) cblas_zaxpy(NN, (void*) mceval, (void*) h_ctrn, incx, (void*) cnRes_vv, incy);
+  
   cudaDeviceSynchronize();
-
-
+  
+  ////////////////// DERIVATIVES //////////////////////////////
   CovD *cov = new CovD(gaugePrecise, profileCovDev);
 
-  t1 = MPI_Wtime();
-  ////////////////// DERIVATIVES //////////////////////////////
   for(int mu=0; mu<4; mu++)	// for generalized one-end trick
     {
       cov->M(tmp4,tmp3,mu);
@@ -3387,20 +3388,21 @@ void oneEndTrick_w_One_Der(cudaColorSpinorField &x,cudaColorSpinorField &tmp3, c
       contract(x, tmp4, ctrnS, QUDA_CONTRACT_GAMMA5_MINUS);                 // Term 0 + Term 3 - Term 2 - Term 1 (D Dif)                                                             
       cudaMemcpy(h_ctrn, ctrnS, sizeBuffer, cudaMemcpyDeviceToHost);
       
-      for(int ix=0; ix < 32*GK_localL[0]*GK_localL[1]*GK_localL[2]*GK_localL[3]; ix++)
-	((Float *) cnD_gv[mu])[ix] += ((Float*)h_ctrn)[ix];
+      if( typeid(Float) == typeid(float) )       cblas_caxpy(NN, (void*) pceval, (void*) h_ctrn, incx, (void*) cnD_gv[mu], incy);
+      else if( typeid(Float) == typeid(double) ) cblas_zaxpy(NN, (void*) pceval, (void*) h_ctrn, incx, (void*) cnD_gv[mu], incy);
+
+      //      for(int ix=0; ix < 32*GK_localL[0]*GK_localL[1]*GK_localL[2]*GK_localL[3]; ix++)
+      //	((Float *) cnD_gv[mu])[ix] += ((Float*)h_ctrn)[ix];
       
       cudaMemcpy(h_ctrn, ctrnC, sizeBuffer, cudaMemcpyDeviceToHost);
+
+      if( typeid(Float) == typeid(float) )       cblas_caxpy(NN, (void*) pceval, (void*) h_ctrn, incx, (void*) cnC_gv[mu], incy);
+      else if( typeid(Float) == typeid(double) ) cblas_zaxpy(NN, (void*) pceval, (void*) h_ctrn, incx, (void*) cnC_gv[mu], incy);
       
-      for(int ix=0; ix < 32*GK_localL[0]*GK_localL[1]*GK_localL[2]*GK_localL[3]; ix++)
-	((Float *) cnC_gv[mu])[ix] += ((Float*)h_ctrn)[ix];
+      //      for(int ix=0; ix < 32*GK_localL[0]*GK_localL[1]*GK_localL[2]*GK_localL[3]; ix++)
+      //	((Float *) cnC_gv[mu])[ix] += ((Float*)h_ctrn)[ix];
     }
-
-  t2 = MPI_Wtime();
-  //  printfQuda("Stoch Loop TIME REPORT: Derivatives Generalized: %f sec\n",t2-t1);
-
   
-  t1 = MPI_Wtime();
   for(int mu=0; mu<4; mu++) // for standard one-end trick
     {
       cov->M  (tmp4, x,  mu);
@@ -3417,19 +3419,20 @@ void oneEndTrick_w_One_Der(cudaColorSpinorField &x,cudaColorSpinorField &tmp3, c
 
       cudaMemcpy(h_ctrn, ctrnS, sizeBuffer, cudaMemcpyDeviceToHost);
       
-      for(int ix=0; ix < 32*GK_localL[0]*GK_localL[1]*GK_localL[2]*GK_localL[3]; ix++)
-	((Float *) cnD_vv[mu])[ix]  -= ((Float*)h_ctrn)[ix];
+      if( typeid(Float) == typeid(float) )       cblas_caxpy(NN, (void*) mceval, (void*) h_ctrn, incx, (void*) cnD_vv[mu], incy);
+      else if( typeid(Float) == typeid(double) ) cblas_zaxpy(NN, (void*) mceval, (void*) h_ctrn, incx, (void*) cnD_vv[mu], incy);
+
+      //      for(int ix=0; ix < 32*GK_localL[0]*GK_localL[1]*GK_localL[2]*GK_localL[3]; ix++)
+      //	((Float *) cnD_vv[mu])[ix]  -= ((Float*)h_ctrn)[ix];
       
       cudaMemcpy(h_ctrn, ctrnC, sizeBuffer, cudaMemcpyDeviceToHost);
       
-      for(int ix=0; ix < 32*GK_localL[0]*GK_localL[1]*GK_localL[2]*GK_localL[3]; ix++)
-	((Float *) cnC_vv[mu])[ix] -= ((Float*)h_ctrn)[ix];
-      
+      if( typeid(Float) == typeid(float) )       cblas_caxpy(NN, (void*) mceval, (void*) h_ctrn, incx, (void*) cnC_vv[mu], incy);
+      else if( typeid(Float) == typeid(double) ) cblas_zaxpy(NN, (void*) mceval, (void*) h_ctrn, incx, (void*) cnC_vv[mu], incy);
+
+      //      for(int ix=0; ix < 32*GK_localL[0]*GK_localL[1]*GK_localL[2]*GK_localL[3]; ix++)
+      //	((Float *) cnC_vv[mu])[ix] -= ((Float*)h_ctrn)[ix];
     }
-
-  t2 = MPI_Wtime();
-  //  printfQuda("Stoch Loop TIME REPORT: Derivatives Standard: %f sec\n",t2-t1);
-
 ///////////////
 
   delete cov;
@@ -3438,6 +3441,8 @@ void oneEndTrick_w_One_Der(cudaColorSpinorField &x,cudaColorSpinorField &tmp3, c
   cudaFree(ctrnC);
   checkCudaError();
 }
+
+
 
 template<typename Float>
 void oneEndTrick_w_One_Der_2(cudaColorSpinorField &s,cudaColorSpinorField &x,cudaColorSpinorField &tmp3, cudaColorSpinorField &tmp4,QudaInvertParam *param, void *cnRes_gv,void *cnRes_vv, void **cnD_gv, void **cnD_vv, void **cnC_gv, void **cnC_vv){
@@ -3912,19 +3917,52 @@ void dumpLoop_oneD_v2(void *cn, const char *Pref,int accumLevel, int Q_sq, int m
 }
 
 
+template<typename Float>
+void dumpVector(Float *vec, int is, char file_base[]){
+  FILE *ptr;
+  char file_name[257];
+
+  sprintf(file_name,"%s.%04d.%d_%d",file_base,is+1,comm_size(), comm_rank());
+  ptr = fopen(file_name,"w");
+  if(ptr == NULL) errorQuda("Cannot open file %s for deflated source\n",file_name);
+
+
+  for(int t=0;  t<GK_localL[3]; t++)
+    for(int z=0;  z<GK_localL[2]; z++)
+      for(int y=0;  y<GK_localL[1]; y++)
+	for(int x=0;  x<GK_localL[0]; x++)
+	  for(int mu=0; mu<4; mu++)
+	    for(int c1=0; c1<3; c1++){
+	      int pos = t*GK_localL[2]*GK_localL[1]*GK_localL[0]*4*3*2 + z*GK_localL[1]*GK_localL[0]*4*3*2 + y*GK_localL[0]*4*3*2 + x*4*3*2 + mu*3*2 + c1*2;
+	      fprintf(ptr,"%02d %02d %02d %02d %02d %02d %+16.15e %+16.15e\n",t,z,y,x,mu,c1,vec[pos+0],vec[pos+1]);
+	    }
+
+  printf("Rank %d: Vector %s dumped\n",comm_rank(),file_name);
+  fclose(ptr);
+}
 
 
 //-C.K: This member function performs the operation vec_defl = vec_in - (U U^dag) vec_in
 template <typename Float>
-void QKXTM_Deflation_Kepler<Float>::deflateSrcVec(QKXTM_Vector_Kepler<Float> &vec_defl, QKXTM_Vector_Kepler<Float> &vec_in){
+void QKXTM_Deflation_Kepler<Float>::deflateSrcVec(QKXTM_Vector_Kepler<Float> &vec_defl, QKXTM_Vector_Kepler<Float> &vec_in, int is){
 
   if(!isFullOp) errorQuda("deflateSrcVec: This function only works with the Full Operator\n");
   
-  Float *tmp_vec = (Float*) calloc((GK_localVolume)*4*3*2,sizeof(Float)) ;
-  Float *out_vec = (Float*) calloc(NeV*2,sizeof(Float)) ;
+  if(NeV == 0){
+    printfQuda("NeV = %d. Will not deflate source vector!!!\n",NeV);
+    vec_defl.packVector((Float*) vec_in.H_elem());
+    vec_defl.loadVector();
+
+    return;
+  }
+
+  Float *ptr_elem = (Float*) calloc((GK_localVolume)*4*3*2,sizeof(Float)) ;
+  Float *tmp_vec  = (Float*) calloc((GK_localVolume)*4*3*2,sizeof(Float)) ;
+
+  Float *out_vec        = (Float*) calloc(NeV*2,sizeof(Float)) ;
   Float *out_vec_reduce = (Float*) calloc(NeV*2,sizeof(Float)) ;
   
-  if(tmp_vec == NULL || out_vec == NULL || out_vec_reduce == NULL)errorQuda("deflateSrcVec: Error with memory allocation\n");
+  if(ptr_elem == NULL || tmp_vec == NULL || out_vec == NULL || out_vec_reduce == NULL) errorQuda("deflateSrcVec: Error with memory allocation\n");
   
   Float alpha[2] = {1.,0.};
   Float beta[2] = {0.,0.};
@@ -3932,38 +3970,80 @@ void QKXTM_Deflation_Kepler<Float>::deflateSrcVec(QKXTM_Vector_Kepler<Float> &ve
   int incx = 1;
   int incy = 1;
   long int NN = (GK_localVolume/fullorHalf)*4*3;
-
-  Float *ptr_elem = (Float*) calloc((GK_localVolume)*4*3*2,sizeof(Float)) ;
   
   memcpy(tmp_vec,vec_in.H_elem(),bytes_total_length_per_NeV); //-C.K. tmp_vec = vec_in
-
-  if(NeV == 0){
-    printfQuda("NeV = %d. Will not deflate source vector!!!\n",NeV);
-    vec_defl.packVector((Float*) tmp_vec);
-    vec_defl.loadVector();
-
-    free(tmp_vec);
-    free(out_vec);
-    free(out_vec_reduce);
-
-    return;
-  }
+  memset(out_vec,0,NeV*2*sizeof(Float));
+  memset(out_vec_reduce,0,NeV*2*sizeof(Float));
+  memset(ptr_elem,0,NN*2*sizeof(Float));
 
   if( typeid(Float) == typeid(float) ){
-    cblas_cgemv(CblasColMajor, CblasConjTrans, NN, NeV, (void*) alpha, (void*) h_elem, NN, tmp_vec, incx, (void*) beta, out_vec, incy );       
-    memset(ptr_elem,0,NN*2*sizeof(Float));
+    cblas_cgemv(CblasColMajor, CblasConjTrans, NN, NeV, (void*) alpha, (void*) h_elem, NN, tmp_vec, incx, (void*) beta, out_vec, incy );       //
     MPI_Allreduce(out_vec,out_vec_reduce,NeV*2,MPI_FLOAT,MPI_SUM,MPI_COMM_WORLD);                                                              //-C.K: out_vec_reduce = h_elem^dag * tmp_vec -> U^dag * vec_in 
-    cblas_cgemv(CblasColMajor, CblasNoTrans, NN, NeV, (void*) alpha, (void*) h_elem, NN, out_vec_reduce, incx, (void*) beta, ptr_elem, incy ); //-C.K: ptr_elem = h_elem * out_vec_reduce -> ptr_elem = U*U^dag * vec_in
-    cblas_caxpy (NN, (void*) al, (void*) ptr_elem, incx, (void*) tmp_vec, incy);                                                               //-C.K. tmp_vec = -1.0*ptr_elem + tmp_vec -> tmp_vec = vec_in - U*U^dag * vec_in
+
+    cblas_cgemv(CblasColMajor, CblasNoTrans, NN, NeV, (void*) alpha, (void*) h_elem, NN, out_vec_reduce, incx, (void*) beta, ptr_elem, incy ); //-C.K: ptr_elem = h_elem * out_vec_reduce -> ptr_elem = U*U^dag * vec_in 
+
+    cblas_caxpy (NN, (void*) al, (void*) ptr_elem, incx, (void*) tmp_vec, incy);                                                        //-C.K. tmp_vec = -1.0*ptr_elem + tmp_vec -> tmp_vec = vec_in - U*U^dag * vec_in
   }
   else if( typeid(Float) == typeid(double) ){
     cblas_zgemv(CblasColMajor, CblasConjTrans, NN, NeV, (void*) alpha, (void*) h_elem, NN, tmp_vec, incx, (void*) beta, out_vec, incy );
-    memset(ptr_elem,0,NN*2*sizeof(Float));
     MPI_Allreduce(out_vec,out_vec_reduce,NeV*2,MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);
+
     cblas_zgemv(CblasColMajor, CblasNoTrans, NN, NeV, (void*) alpha, (void*) h_elem, NN, out_vec_reduce, incx, (void*) beta, ptr_elem, incy );    
+
     cblas_zaxpy (NN, (void*) al, (void*) ptr_elem, incx, (void*) tmp_vec, incy);
   }
+
+
+//   Float udotb[2];
+//   Float udotb_reduce[2];
+//   Float *tmp_vec2 = (Float*) calloc((GK_localVolume)*4*3*2,sizeof(Float)) ;
+
+//   char fbase[257];
   
+//   if(tmp_vec2 == NULL)errorQuda("deflateSrcVec: Error with memory allocation\n");
+
+//   memcpy(tmp_vec,vec_in.H_elem(),bytes_total_length_per_NeV); //-C.K. tmp_vec = vec_in
+//   memset(tmp_vec2,0,NN*2*sizeof(Float));
+
+//   dumpVector(tmp_vec,is,"MdagSource");
+
+//   if( typeid(Float) == typeid(float) ){
+//     printfQuda("typeid is float!\n");
+
+//     for(int iv = 0;iv<NeV;iv++){
+//       memcpy(ptr_elem,&(h_elem[iv*total_length_per_NeV]),bytes_total_length_per_NeV);  //-C.K.: ptr_elem = eVec[iv]
+
+//       cblas_cdotc_sub(NN, ptr_elem, incx, tmp_vec, incy, udotb); 
+//       MPI_Allreduce(udotb,udotb_reduce,2,MPI_FLOAT,MPI_SUM,MPI_COMM_WORLD);  //-C.K.: udotb_reduce = evec[iv]^dag * vec_in
+//       printfQuda("evec[%d]^dag * vec_in = %16.15e + i %16.15e\n",iv,udotb_reduce[0],udotb_reduce[1]); 
+
+//       cblas_caxpy (NN, (void*) udotb_reduce, (void*) ptr_elem, incx, (void*) tmp_vec2, incy);  //-C.K.: tmp_vec2 = (evec[iv]^dag * vec_in)* eVec[iv] + tmp_vec2
+//       sprintf(fbase,"scalarDoteVec_%03d",iv);
+//       dumpVector(tmp_vec2,is,fbase);
+//     }
+
+//     cblas_caxpy (NN, (void*) al, (void*) tmp_vec2, incx, (void*) tmp_vec, incy);
+//   }
+//   else if( typeid(Float) == typeid(double) ){
+//     printfQuda("typeid is double!\n");
+//     for(int iv = 0;iv<1;iv++){  //-CHANGE IT TO NeV !!!!!
+//       memcpy(ptr_elem,&(h_elem[iv*total_length_per_NeV]),bytes_total_length_per_NeV);  //-C.K.: ptr_elem = eVec[iv]
+
+//       cblas_zdotc_sub(NN, ptr_elem, incx, tmp_vec, incy, udotb); 
+//       MPI_Allreduce(udotb,udotb_reduce,2,MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);  //-C.K.: udotb_reduce = evec[iv]^dag * vec_in
+//       printfQuda("*** deflateSrcVec: evec[%d]^dag * vec_in = %16.15e + i %16.15e\n",iv,udotb_reduce[0],udotb_reduce[1]); 
+
+//       cblas_zaxpy (NN, (void*) udotb_reduce, (void*) ptr_elem, incx, (void*) tmp_vec2, incy);  //-C.K.: tmp_vec2 = (evec[iv]^dag * vec_in)* eVec[iv] + tmp_vec2
+//       sprintf(fbase,"scalarDoteVec_%03d",iv);
+//       dumpVector(tmp_vec2,is,fbase);
+//     }
+    
+//     cblas_zaxpy (NN, (void*) al, (void*) tmp_vec2, incx, (void*) tmp_vec, incy);  //-C.K.: tmp_vec = tmp_vec - tmp_vec2 = vec_in  - UU^dag * vec_in
+//   }
+//   free(tmp_vec2);
+
+//   dumpVector(tmp_vec,is,"deflatedSource");
+
   vec_defl.packVector((Float*) tmp_vec);
   vec_defl.loadVector();
 
@@ -4279,5 +4359,3 @@ void dumpLoop_oneD_Exact(void *cn, const char *Pref, int Q_sq, int muDir, int fl
 //     for(int i = 0 ; i < NeV ; i++)
 //       cblas_zaxpy(NN,&(out_vec_reduce[2*i]),H_elem()[i],incx,ptr_elem,incy);
 //   }
-
-
