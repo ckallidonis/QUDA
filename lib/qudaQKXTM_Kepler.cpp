@@ -4005,11 +4005,9 @@ void QKXTM_Deflation_Kepler<Float>::deflateSrcVec(QKXTM_Vector_Kepler<Float> &ve
 //   memcpy(tmp_vec,vec_in.H_elem(),bytes_total_length_per_NeV); //-C.K. tmp_vec = vec_in
 //   memset(tmp_vec2,0,NN*2*sizeof(Float));
 
-//   dumpVector(tmp_vec,is,"MdagSource");
+//   //  dumpVector(tmp_vec,is,"MdagSource");
 
 //   if( typeid(Float) == typeid(float) ){
-//     printfQuda("typeid is float!\n");
-
 //     for(int iv = 0;iv<NeV;iv++){
 //       memcpy(ptr_elem,&(h_elem[iv*total_length_per_NeV]),bytes_total_length_per_NeV);  //-C.K.: ptr_elem = eVec[iv]
 
@@ -4018,15 +4016,13 @@ void QKXTM_Deflation_Kepler<Float>::deflateSrcVec(QKXTM_Vector_Kepler<Float> &ve
 //       printfQuda("evec[%d]^dag * vec_in = %16.15e + i %16.15e\n",iv,udotb_reduce[0],udotb_reduce[1]); 
 
 //       cblas_caxpy (NN, (void*) udotb_reduce, (void*) ptr_elem, incx, (void*) tmp_vec2, incy);  //-C.K.: tmp_vec2 = (evec[iv]^dag * vec_in)* eVec[iv] + tmp_vec2
-//       sprintf(fbase,"scalarDoteVec_%03d",iv);
-//       dumpVector(tmp_vec2,is,fbase);
+//       //      sprintf(fbase,"scalarDoteVec_%03d",iv);
+//       //      dumpVector(tmp_vec2,is,fbase);
 //     }
-
 //     cblas_caxpy (NN, (void*) al, (void*) tmp_vec2, incx, (void*) tmp_vec, incy);
 //   }
 //   else if( typeid(Float) == typeid(double) ){
-//     printfQuda("typeid is double!\n");
-//     for(int iv = 0;iv<1;iv++){  //-CHANGE IT TO NeV !!!!!
+//     for(int iv = 0;iv<NeV;iv++){
 //       memcpy(ptr_elem,&(h_elem[iv*total_length_per_NeV]),bytes_total_length_per_NeV);  //-C.K.: ptr_elem = eVec[iv]
 
 //       cblas_zdotc_sub(NN, ptr_elem, incx, tmp_vec, incy, udotb); 
@@ -4034,15 +4030,14 @@ void QKXTM_Deflation_Kepler<Float>::deflateSrcVec(QKXTM_Vector_Kepler<Float> &ve
 //       printfQuda("*** deflateSrcVec: evec[%d]^dag * vec_in = %16.15e + i %16.15e\n",iv,udotb_reduce[0],udotb_reduce[1]); 
 
 //       cblas_zaxpy (NN, (void*) udotb_reduce, (void*) ptr_elem, incx, (void*) tmp_vec2, incy);  //-C.K.: tmp_vec2 = (evec[iv]^dag * vec_in)* eVec[iv] + tmp_vec2
-//       sprintf(fbase,"scalarDoteVec_%03d",iv);
-//       dumpVector(tmp_vec2,is,fbase);
-//     }
-    
+//       //      sprintf(fbase,"scalarDoteVec_%03d",iv);
+//       //      dumpVector(tmp_vec2,is,fbase);
+//     }    
 //     cblas_zaxpy (NN, (void*) al, (void*) tmp_vec2, incx, (void*) tmp_vec, incy);  //-C.K.: tmp_vec = tmp_vec - tmp_vec2 = vec_in  - UU^dag * vec_in
 //   }
 //   free(tmp_vec2);
 
-//   dumpVector(tmp_vec,is,"deflatedSource");
+  //  dumpVector(tmp_vec,is,"deflatedSource");
 
   vec_defl.packVector((Float*) tmp_vec);
   vec_defl.loadVector();
