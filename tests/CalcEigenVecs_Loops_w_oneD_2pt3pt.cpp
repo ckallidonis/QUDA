@@ -56,6 +56,7 @@ extern int src[];
 extern int Ntsink;
 extern char pathList_tsink[];
 extern int Q_sq;
+extern int Q_sq_loop;
 extern int nsmearAPE;
 extern int nsmearGauss;
 extern double alphaAPE;
@@ -423,6 +424,7 @@ int main(int argc, char **argv)
   info.lL[3] = tdim;
   info.Nsources = numSourcePositions;
   info.Q_sq = Q_sq;
+  info.Q_sq_loop = Q_sq_loop;
   //  info.tsinkSource=t_sinkSource;
   info.Ntsink = Ntsink;
   if( strcmp(source_type,"random")==0 ) info.source_type = RANDOM;

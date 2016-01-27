@@ -1580,6 +1580,7 @@ int src[4] = {0,0,0,0};
 int Ntsink = 1;
 char pathList_tsink[257] = "list_tsinksource.txt";
 int Q_sq = 0;
+int Q_sq_loop = 0;
 int nsmearAPE = 20;
 int nsmearGauss = 50;
 double alphaAPE = 0.5;
@@ -1688,7 +1689,8 @@ void usage(char** argv )
   printf("    --pathListRun3pt                          # Path to find the list of which source positions to run for 2pt- and 3pt- functions (default \" listrun3pt.txt \")\n");
   printf("    --run3pt                                  # Option to choose whether to run for all (=all/ALL) source-positions or only some (=file/FILE, given in --pathListRun3pt) (default \" all \")\n");
   printf("    --Ntsink                                  # Number of sink-source separations (default \" list_tsinksource.txt \")\n");
-  printf("    --Q_sqMax                                 # The maximum Q^2 momentum (default 0)\n");
+  printf("    --Q_sqMax                                 # The maximum Q^2 momentum (loop/correlators) (default 0)\n");
+  printf("    --Q_sqMax_loop                            # The maximum Q^2 momentum (loop) (default 0)\n");
   printf("    --nsmearAPE                               # Number of APE smearing iterations (default 20)\n");
   printf("    --alphaAPE                                # APE smearing parameter (default 0.5)\n");
   printf("    --nsmearGauss                             # Number of Gauss smearing iterations (default 50)\n");
@@ -1963,6 +1965,17 @@ int process_command_line_option(int argc, char** argv, int* idx)
     ret = 0;
     goto out;
   }
+
+  if( strcmp(argv[i], "--Q_sqMax_loop") ==0){
+    if(i+1 >= argc){
+      usage(argv);
+    }
+    Q_sq_loop = atoi(argv[i+1]);
+    i++;
+    ret = 0;
+    goto out;
+  }
+
 
   if( strcmp(argv[i], "--nsmearAPE") ==0){
     if(i+1 >= argc){

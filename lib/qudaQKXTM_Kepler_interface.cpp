@@ -2973,9 +2973,10 @@ void calcEigenVectors_loop_wOneD_FullOp(void **gaugeToPlaquette, QudaInvertParam
   //- Calculate the eigenVectors
   t1 = MPI_Wtime(); 
   deflation->eigenSolver();
-  deflation->MapEvenOddToFull();
   t2 = MPI_Wtime();
   printfQuda("calcEigenVectors_loop_wOneD_FullOp TIME REPORT: EigenVector Calculation: %f sec\n",t2-t1);
+
+  deflation->MapEvenOddToFull();
 
   //- Calculate the exact part of the loop
   for(int n=0;n<NeV;n++){
@@ -4451,19 +4452,19 @@ void calcEigenVectors_loop_wOneD_EvenOdd_noDefl(double *eigVecs_d, double *eigVa
 
     if( (is+1)%NdumpStep == 0){
       doCudaFFT_v2<double>(cnRes_vv,cnTmp);
-      dumpLoop_ultraLocal<double>(cnTmp,filename_out,is+1,info.Q_sq,0); // Scalar
+      dumpLoop_ultraLocal<double>(cnTmp,filename_out,is+1,info.Q_sq_loop,0); // Scalar
       doCudaFFT_v2<double>(cnRes_gv,cnTmp);
-      dumpLoop_ultraLocal<double>(cnTmp,filename_out,is+1,info.Q_sq,1); // dOp
+      dumpLoop_ultraLocal<double>(cnTmp,filename_out,is+1,info.Q_sq_loop,1); // dOp
       for(int mu = 0 ; mu < 4 ; mu++){
 	doCudaFFT_v2<double>(cnD_vv[mu],cnTmp);
-	dumpLoop_oneD<double>(cnTmp,filename_out,is+1,info.Q_sq,mu,0); // Loops
+	dumpLoop_oneD<double>(cnTmp,filename_out,is+1,info.Q_sq_loop,mu,0); // Loops
 	doCudaFFT_v2<double>(cnD_gv[mu],cnTmp);
-	dumpLoop_oneD<double>(cnTmp,filename_out,is+1,info.Q_sq,mu,1); // LpsDw
+	dumpLoop_oneD<double>(cnTmp,filename_out,is+1,info.Q_sq_loop,mu,1); // LpsDw
 
 	doCudaFFT_v2<double>(cnC_vv[mu],cnTmp);
-	dumpLoop_oneD<double>(cnTmp,filename_out,is+1,info.Q_sq,mu,2); // LpsDw noether
+	dumpLoop_oneD<double>(cnTmp,filename_out,is+1,info.Q_sq_loop,mu,2); // LpsDw noether
 	doCudaFFT_v2<double>(cnC_gv[mu],cnTmp);
-	dumpLoop_oneD<double>(cnTmp,filename_out,is+1,info.Q_sq,mu,3); // LpsDw noether
+	dumpLoop_oneD<double>(cnTmp,filename_out,is+1,info.Q_sq_loop,mu,3); // LpsDw noether
       }
     } // close loop for dump loops
   } // close loop over stochastic noise vectors

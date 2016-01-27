@@ -41,6 +41,7 @@ namespace quda {
     int sourcePosition[MAX_NSOURCES][QUDAQKXTM_DIM];
     QudaPrecision Precision;
     int Q_sq;
+    int Q_sq_loop;
     int Ntsink;
     int tsinkSource[MAX_TSINK];
     int run3pt_src[MAX_NSOURCES];
