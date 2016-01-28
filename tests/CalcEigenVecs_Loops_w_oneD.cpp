@@ -65,6 +65,7 @@ extern unsigned long int seed;
 extern char loop_fname[];
 extern int Ndump;
 extern int smethod;
+extern char filename_dSteps[];
 
 //-C.K. ARPACK Parameters
 extern int PolyDeg;
@@ -172,11 +173,14 @@ int main(int argc, char **argv)
   else if(strcmp(spectrumPart,"LM")==0) arpackInfo.spectrumPart = LM;
   else if(strcmp(spectrumPart,"SI")==0) arpackInfo.spectrumPart = SI;
   else if(strcmp(spectrumPart,"LI")==0) arpackInfo.spectrumPart = LI;
-  else errorQuda("Error: Your spectrumPart option is suspicious\n");
+  else{
+    printf("Error: Your spectrumPart option is suspicious\n");
+    exit(-1);
+  }
   //-----------------------------------------------------------------------------------------
 
 
-  //C.K. Pass loop parameters to loopInfo
+  //-C.K. Pass loop parameters to loopInfo
   qudaQKXTM_loopInfo loopInfo;
 
   loopInfo.Nstoch = Nstoch;
@@ -184,6 +188,42 @@ int main(int argc, char **argv)
   loopInfo.Ndump = Ndump;
   loopInfo.smethod = smethod;
   strcpy(loopInfo.loop_fname,loop_fname);
+  if(strcmp(filename_dSteps,"none")==0){
+    loopInfo.nSteps_defl = 1;
+    loopInfo.deflStep[0] = nEv;
+  }
+  else{
+    FILE *ptr_dstep;    
+    if( (ptr_dstep = fopen(filename_dSteps,"r"))==NULL ){
+      fprintf(stderr,"Cannot open %s for reading. Exiting\n",filename_dSteps);
+      exit(-1);
+    }
+    fscanf(ptr_dstep,"%d\n",&loopInfo.nSteps_defl);
+    fscanf(ptr_dstep,"%d\n",&loopInfo.deflStep[0]);
+    if(loopInfo.deflStep[0]>nEv){
+      printf("ERROR: Supplied deflation step is larger than eigenvalues requested. Exiting.\n");
+      exit(-1);
+    }
+    for(int s=1;s<loopInfo.nSteps_defl;s++){
+      fscanf(ptr_dstep,"%d\n",&loopInfo.deflStep[s]);
+      if(loopInfo.deflStep[s]<loopInfo.deflStep[s-1]){
+	printf("ERROR: Deflation steps MUST be in ascending order. Exiting.\n");
+	exit(-1);
+      }
+      if(loopInfo.deflStep[s]>nEv){
+	printf("WARNING: Supplied deflation step %d is larger than eigenvalues requested. Discarding this step.\n",s);
+	s--;
+	loopInfo.nSteps_defl--;
+      }
+    }
+    fclose(ptr_dstep);
+
+    //- This is to always make sure that the total number of eigenvalues is included
+    if(loopInfo.deflStep[loopInfo.nSteps_defl-1] != nEv){
+      loopInfo.nSteps_defl++;
+      loopInfo.deflStep[loopInfo.nSteps_defl-1] = nEv;
+    }
+  }
   //-----------------------------------------------------------------------------------------
 
   QudaGaugeParam gauge_param = newQudaGaugeParam();

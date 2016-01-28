@@ -1868,6 +1868,7 @@ public:
   void eigenSolver();
   void Loop_w_One_Der_FullOp_Exact(int n, QudaInvertParam *param, void *gen_uloc,void *std_uloc, void **gen_oneD, void **std_oneD, void **gen_csvC, void **std_csvC);
   void deflateSrcVec(QKXTM_Vector_Kepler<Float> &vec_defl, QKXTM_Vector_Kepler<Float> &vec_in, int is);
+  void deflateSrcVec(QKXTM_Vector_Kepler<Float> &vec_defl, QKXTM_Vector_Kepler<Float> &vec_in, int is, int NeV_defl);
   void copyToEigenVector(Float *vec, Float *vals);
 };
 
@@ -4024,6 +4025,113 @@ void QKXTM_Deflation_Kepler<Float>::deflateSrcVec(QKXTM_Vector_Kepler<Float> &ve
 //   else if( typeid(Float) == typeid(double) ){
 //     for(int iv = 0;iv<NeV;iv++){
 //       memcpy(ptr_elem,&(h_elem[iv*total_length_per_NeV]),bytes_total_length_per_NeV);  //-C.K.: ptr_elem = eVec[iv]
+
+//       cblas_zdotc_sub(NN, ptr_elem, incx, tmp_vec, incy, udotb); 
+//       MPI_Allreduce(udotb,udotb_reduce,2,MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);  //-C.K.: udotb_reduce = evec[iv]^dag * vec_in
+//       printfQuda("*** deflateSrcVec: evec[%d]^dag * vec_in = %16.15e + i %16.15e\n",iv,udotb_reduce[0],udotb_reduce[1]); 
+
+//       cblas_zaxpy (NN, (void*) udotb_reduce, (void*) ptr_elem, incx, (void*) tmp_vec2, incy);  //-C.K.: tmp_vec2 = (evec[iv]^dag * vec_in)* eVec[iv] + tmp_vec2
+//       //      sprintf(fbase,"scalarDoteVec_%03d",iv);
+//       //      dumpVector(tmp_vec2,is,fbase);
+//     }    
+//     cblas_zaxpy (NN, (void*) al, (void*) tmp_vec2, incx, (void*) tmp_vec, incy);  //-C.K.: tmp_vec = tmp_vec - tmp_vec2 = vec_in  - UU^dag * vec_in
+//   }
+//   free(tmp_vec2);
+
+  //  dumpVector(tmp_vec,is,"deflatedSource");
+
+  vec_defl.packVector((Float*) tmp_vec);
+  vec_defl.loadVector();
+
+  free(tmp_vec);
+  free(out_vec);
+  free(out_vec_reduce);
+
+  //  printfQuda("deflateSrcVec: Deflation of the source vector completed succesfully\n");
+}
+
+//-C.K: This member function performs the operation vec_defl = vec_in - (U U^dag) vec_in
+template <typename Float>
+void QKXTM_Deflation_Kepler<Float>::deflateSrcVec(QKXTM_Vector_Kepler<Float> &vec_defl, QKXTM_Vector_Kepler<Float> &vec_in, int is, int NeV_defl){
+
+  if(!isFullOp) errorQuda("deflateSrcVec: This function only works with the Full Operator\n");
+  
+  if(NeV_defl == 0){
+    printfQuda("NeV = %d. Will not deflate source vector!!!\n",NeV_defl);
+    vec_defl.packVector((Float*) vec_in.H_elem());
+    vec_defl.loadVector();
+
+    return;
+  }
+
+  Float *ptr_elem = (Float*) calloc((GK_localVolume)*4*3*2,sizeof(Float)) ;
+  Float *tmp_vec  = (Float*) calloc((GK_localVolume)*4*3*2,sizeof(Float)) ;
+
+  Float *out_vec        = (Float*) calloc(NeV_defl*2,sizeof(Float)) ;
+  Float *out_vec_reduce = (Float*) calloc(NeV_defl*2,sizeof(Float)) ;
+  
+  if(ptr_elem == NULL || tmp_vec == NULL || out_vec == NULL || out_vec_reduce == NULL) errorQuda("deflateSrcVec: Error with memory allocation\n");
+  
+  Float alpha[2] = {1.,0.};
+  Float beta[2] = {0.,0.};
+  Float al[2] = {-1.0,0.0};
+  int incx = 1;
+  int incy = 1;
+  long int NN = (GK_localVolume/fullorHalf)*4*3;
+  
+  memcpy(tmp_vec,vec_in.H_elem(),bytes_total_length_per_NeV); //-C.K. tmp_vec = vec_in
+  memset(out_vec,0,NeV_defl*2*sizeof(Float));
+  memset(out_vec_reduce,0,NeV_defl*2*sizeof(Float));
+  memset(ptr_elem,0,NN*2*sizeof(Float));
+
+  if( typeid(Float) == typeid(float) ){
+    cblas_cgemv(CblasColMajor, CblasConjTrans, NN, NeV_defl, (void*) alpha, (void*) h_elem, NN, tmp_vec, incx, (void*) beta, out_vec, incy );       //
+    MPI_Allreduce(out_vec,out_vec_reduce,NeV_defl*2,MPI_FLOAT,MPI_SUM,MPI_COMM_WORLD);                                                              //-C.K: out_vec_reduce = h_elem^dag * tmp_vec -> U^dag * vec_in 
+
+    cblas_cgemv(CblasColMajor, CblasNoTrans, NN, NeV_defl, (void*) alpha, (void*) h_elem, NN, out_vec_reduce, incx, (void*) beta, ptr_elem, incy ); //-C.K: ptr_elem = h_elem * out_vec_reduce -> ptr_elem = U*U^dag * vec_in 
+
+    cblas_caxpy (NN, (void*) al, (void*) ptr_elem, incx, (void*) tmp_vec, incy);                                                        //-C.K. tmp_vec = -1.0*ptr_elem + tmp_vec -> tmp_vec = vec_in - U*U^dag * vec_in
+  }
+  else if( typeid(Float) == typeid(double) ){
+    cblas_zgemv(CblasColMajor, CblasConjTrans, NN, NeV_defl, (void*) alpha, (void*) h_elem, NN, tmp_vec, incx, (void*) beta, out_vec, incy );
+    MPI_Allreduce(out_vec,out_vec_reduce,NeV_defl*2,MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);
+
+    cblas_zgemv(CblasColMajor, CblasNoTrans, NN, NeV_defl, (void*) alpha, (void*) h_elem, NN, out_vec_reduce, incx, (void*) beta, ptr_elem, incy );    
+
+    cblas_zaxpy (NN, (void*) al, (void*) ptr_elem, incx, (void*) tmp_vec, incy);
+  }
+
+
+//   Float udotb[2];
+//   Float udotb_reduce[2];
+//   Float *tmp_vec2 = (Float*) calloc((GK_localVolume)*4*3*2,sizeof(Float)) ;
+
+//   char fbase[257];
+  
+//   if(tmp_vec2 == NULL)errorQuda("deflateSrcVec: Error with memory allocation\n");
+
+//   memcpy(tmp_vec,vec_in.H_elem(),bytes_total_length_per_NeV); //-C.K. tmp_vec = vec_in
+//   memset(tmp_vec2,0,NN*2*sizeof(Float));
+
+//   //  dumpVector(tmp_vec,is,"MdagSource");
+
+//   if( typeid(Float) == typeid(float) ){
+//     for(int iv = 0;iv<NeV_defl;iv++){
+//       memcpy(ptr_elem,&(h_elem[iv*total_length_per_NeV_defl]),bytes_total_length_per_NeV_defl);  //-C.K.: ptr_elem = eVec[iv]
+
+//       cblas_cdotc_sub(NN, ptr_elem, incx, tmp_vec, incy, udotb); 
+//       MPI_Allreduce(udotb,udotb_reduce,2,MPI_FLOAT,MPI_SUM,MPI_COMM_WORLD);  //-C.K.: udotb_reduce = evec[iv]^dag * vec_in
+//       printfQuda("evec[%d]^dag * vec_in = %16.15e + i %16.15e\n",iv,udotb_reduce[0],udotb_reduce[1]); 
+
+//       cblas_caxpy (NN, (void*) udotb_reduce, (void*) ptr_elem, incx, (void*) tmp_vec2, incy);  //-C.K.: tmp_vec2 = (evec[iv]^dag * vec_in)* eVec[iv] + tmp_vec2
+//       //      sprintf(fbase,"scalarDoteVec_%03d",iv);
+//       //      dumpVector(tmp_vec2,is,fbase);
+//     }
+//     cblas_caxpy (NN, (void*) al, (void*) tmp_vec2, incx, (void*) tmp_vec, incy);
+//   }
+//   else if( typeid(Float) == typeid(double) ){
+//     for(int iv = 0;iv<NeV_defl;iv++){
+//       memcpy(ptr_elem,&(h_elem[iv*total_length_per_NeV_defl]),bytes_total_length_per_NeV_defl);  //-C.K.: ptr_elem = eVec[iv]
 
 //       cblas_zdotc_sub(NN, ptr_elem, incx, tmp_vec, incy, udotb); 
 //       MPI_Allreduce(udotb,udotb_reduce,2,MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);  //-C.K.: udotb_reduce = evec[iv]^dag * vec_in

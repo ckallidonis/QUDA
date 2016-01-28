@@ -2907,8 +2907,12 @@ void calcEigenVectors_loop_wOneD_FullOp(void **gaugeToPlaquette, QudaInvertParam
   printfQuda("The seed is: %ld\n",seed);
   printfQuda("Will dump every %d noise vectors\n",Ndump);
   printfQuda("The loop base name is %s\n",loopInfo.loop_fname);
-  if(smethod==1) printfQuda("Stochastic part according to: MdagM psi = (1-P)Mdag xi\n");
-  else printfQuda("Stochastic part according to: MdagM phi = Mdag xi\n");
+  printfQuda("Will perform the loop for the following %d numbers of eigenvalues:",loopInfo.nSteps_defl);
+  for(int s=0;s<loopInfo.nSteps_defl;s++){
+    printfQuda("  %d",loopInfo.deflStep[s]);
+  }
+  if(smethod==1) printfQuda("\nStochastic part according to: MdagM psi = (1-P)Mdag xi\n");
+  else printfQuda("\nStochastic part according to: MdagM phi = Mdag xi\n");
   printfQuda("=====================\n");
   
   //- Allocate memory for local loops
@@ -2979,37 +2983,40 @@ void calcEigenVectors_loop_wOneD_FullOp(void **gaugeToPlaquette, QudaInvertParam
   deflation->MapEvenOddToFull();
 
   //- Calculate the exact part of the loop
+  int s = 0;
   for(int n=0;n<NeV;n++){
     t1 = MPI_Wtime();
     deflation->Loop_w_One_Der_FullOp_Exact(n, param, gen_uloc, std_uloc, gen_oneD, std_oneD, gen_csvC, std_csvC);
     t2 = MPI_Wtime();
     printfQuda("TIME_REPORT: Exact part for eigenvector %d done in: %f sec\n",n,t2-t1);
-  }  
-  
-  //- Do the FFT and dump the exact part
-  sprintf(loop_exact_fname,"%s_exact_NeV%d",loopInfo.loop_fname,NeV);
-
-  doCudaFFT_v2<double>(std_uloc,tmp_loop);
-  dumpLoop_ultraLocal_Exact<double>(tmp_loop,loop_exact_fname,info.Q_sq,0); // Std. Ultra-local - Scalar  
-  doCudaFFT_v2<double>(gen_uloc,tmp_loop);
-  dumpLoop_ultraLocal_Exact<double>(tmp_loop,loop_exact_fname,info.Q_sq,1); // Gen. Ultra-local - dOp
-  
-  for(int mu = 0 ; mu < 4 ; mu++){
-    doCudaFFT_v2<double>(std_oneD[mu],tmp_loop);
-    dumpLoop_oneD_Exact<double>(tmp_loop,loop_exact_fname,info.Q_sq,mu,0); // Std. oneD - Loops    
-    doCudaFFT_v2<double>(gen_oneD[mu],tmp_loop);
-    dumpLoop_oneD_Exact<double>(tmp_loop,loop_exact_fname,info.Q_sq,mu,1); // Gen. oneD - LpsDw    
-    doCudaFFT_v2<double>(std_csvC[mu],tmp_loop);
-    dumpLoop_oneD_Exact<double>(tmp_loop,loop_exact_fname,info.Q_sq,mu,2); // Std. Conserved current - LoopsCv    
-    doCudaFFT_v2<double>(gen_csvC[mu],tmp_loop);
-    dumpLoop_oneD_Exact<double>(tmp_loop,loop_exact_fname,info.Q_sq,mu,3); // Gen. Conserved current - LpsDwCv
+    
+    if( ((n+1)%loopInfo.deflStep[s])==0 ){
+      //- Do the FFT and dump the exact part
+      sprintf(loop_exact_fname,"%s_exact_NeV%d",loopInfo.loop_fname,n+1);
+      
+      doCudaFFT_v2<double>(std_uloc,tmp_loop);
+      dumpLoop_ultraLocal_Exact<double>(tmp_loop,loop_exact_fname,info.Q_sq,0); // Std. Ultra-local - Scalar  
+      doCudaFFT_v2<double>(gen_uloc,tmp_loop);
+      dumpLoop_ultraLocal_Exact<double>(tmp_loop,loop_exact_fname,info.Q_sq,1); // Gen. Ultra-local - dOp
+      
+      for(int mu = 0 ; mu < 4 ; mu++){
+	doCudaFFT_v2<double>(std_oneD[mu],tmp_loop);
+	dumpLoop_oneD_Exact<double>(tmp_loop,loop_exact_fname,info.Q_sq,mu,0); // Std. oneD - Loops    
+	doCudaFFT_v2<double>(gen_oneD[mu],tmp_loop);
+	dumpLoop_oneD_Exact<double>(tmp_loop,loop_exact_fname,info.Q_sq,mu,1); // Gen. oneD - LpsDw    
+	doCudaFFT_v2<double>(std_csvC[mu],tmp_loop);
+	dumpLoop_oneD_Exact<double>(tmp_loop,loop_exact_fname,info.Q_sq,mu,2); // Std. Conserved current - LoopsCv    
+	doCudaFFT_v2<double>(gen_csvC[mu],tmp_loop);
+	dumpLoop_oneD_Exact<double>(tmp_loop,loop_exact_fname,info.Q_sq,mu,3); // Gen. Conserved current - LpsDwCv
+      }
+      if((s+1)<loopInfo.nSteps_defl) s++;
+      printfQuda("Exact part of the loop dumped for NeV = %d\n",n+1);
+    }
   }
 
   //=========================================================================================//
   //============================  S T O C H A S T I C   P A R T  ============================//
   //=========================================================================================//
-
-  sprintf(loop_stoch_fname,"%s_stoch_NeV%d",loopInfo.loop_fname,NeV);
 
   cudaGaugeField *cudaGauge = checkGauge(param);
   checkInvertParam(param);
@@ -3086,107 +3093,118 @@ void calcEigenVectors_loop_wOneD_FullOp(void **gaugeToPlaquette, QudaInvertParam
   QKXTM_Vector_Kepler<double> *K_vector = new QKXTM_Vector_Kepler<double>(BOTH,VECTOR);
   QKXTM_Vector_Kepler<double> *K_srcdef = new QKXTM_Vector_Kepler<double>(BOTH,VECTOR);
 
-  //- Prepare the loops for the stochastic part
-  cudaMemset(std_uloc, 0, sizeof(double)*2*16*GK_localVolume);
-  cudaMemset(gen_uloc, 0, sizeof(double)*2*16*GK_localVolume);
-  cudaMemset(tmp_loop, 0, sizeof(double)*2*16*GK_localVolume);
-
-  for(int mu = 0; mu < 4 ; mu++){
-    cudaMemset(std_oneD[mu], 0, sizeof(double)*2*16*GK_localVolume);
-    cudaMemset(gen_oneD[mu], 0, sizeof(double)*2*16*GK_localVolume);
-    cudaMemset(std_csvC[mu], 0, sizeof(double)*2*16*GK_localVolume);
-    cudaMemset(gen_csvC[mu], 0, sizeof(double)*2*16*GK_localVolume);
-  }
-  cudaDeviceSynchronize();
-  //----------------
-
-  gsl_rng *rNum = gsl_rng_alloc(gsl_rng_ranlux);
-  gsl_rng_set(rNum, seed + comm_rank()*seed);
 
   if(info.source_type==RANDOM) printfQuda("Will use RANDOM stochastic sources\n");
   else if (info.source_type==UNITY) printfQuda("Will use UNITY stochastic sources\n");
 
-  for(int is = 0 ; is < Nstoch ; is++){
-    t3 = MPI_Wtime();
-    t1 = MPI_Wtime();
-    memset(input_vector,0,GK_localL[0]*GK_localL[1]*GK_localL[2]*GK_localL[3]*spinorSiteSize*sizeof(double));
-    getStochasticRandomSource<double>(input_vector,rNum,info.source_type);
-    t2 = MPI_Wtime();
-    printfQuda("TIME_REPORT Stoch. %04d - Source creation: %f sec\n",is,t2-t1);
-    t1 = MPI_Wtime();
-    K_vector->packVector((double*) input_vector);
-    K_vector->loadVector();
-    K_vector->uploadToCuda(b,pc_solve);
-    dirac.prepare(in,out,*x,*b,param->solution_type);
-    // in is reference to the b but for a parity sinlet
-    // out is reference to the x but for a parity sinlet
-    cudaColorSpinorField *tmp_up = new cudaColorSpinorField(*in);
-    dirac.Mdag(*in, *tmp_up);  // in = M^dag b
-    delete tmp_up;
-    t2 = MPI_Wtime();
-    printfQuda("TIME_REPORT Stoch. %04d - Source preparation: %f sec\n",is,t2-t1);
-
-    if(smethod==1){  // Deflate the source vector (Christos)
-      K_vector->downloadFromCuda(in,pc_solve);
-      K_vector->download();
-      t1 = MPI_Wtime();
-      deflation->deflateSrcVec(*K_srcdef,*K_vector,is);  
-      t2 = MPI_Wtime();
-      printfQuda("TIME_REPORT Stoch. %04d - Source deflation: %f sec\n",is,t2-t1);
-      K_srcdef->uploadToCuda(in,pc_solve);              // Source Vector is deflated and put into "in", in = (1-UU^dag) M^dag b
-      zeroCuda(*out);                                   // Set the initial guess to zero!
-      t1 = MPI_Wtime();
-      (*solve)(*out,*in);
-      t2 = MPI_Wtime();
-      printfQuda("TIME_REPORT Stoch. %04d - Source inversion: %f sec\n",is,t2-t1);
-      dirac.reconstruct(*x,*b,param->solution_type);
-      t1 = MPI_Wtime();
-      oneEndTrick_w_One_Der<double>(*x,*tmp3,*tmp4,param, gen_uloc, std_uloc, gen_oneD, std_oneD, gen_csvC, std_csvC); //-Christos
-      t2 = MPI_Wtime();
-      printfQuda("TIME_REPORT Stoch. %04d - One-end trick: %f sec\n",is,t2-t1);
+  for(int dstep=0;dstep<loopInfo.nSteps_defl;dstep++){
+    int NeV_defl = loopInfo.deflStep[dstep];
+    sprintf(loop_stoch_fname,"%s_stoch_NeV%d",loopInfo.loop_fname, NeV_defl);
+    printfQuda("\n### Performing the stochastic part of the loop for NeV = %d\n\n",NeV_defl);
+    
+    //- Prepare the loops for the stochastic part
+    cudaMemset(std_uloc, 0, sizeof(double)*2*16*GK_localVolume);
+    cudaMemset(gen_uloc, 0, sizeof(double)*2*16*GK_localVolume);
+    cudaMemset(tmp_loop, 0, sizeof(double)*2*16*GK_localVolume);
+    
+    for(int mu = 0; mu < 4 ; mu++){
+      cudaMemset(std_oneD[mu], 0, sizeof(double)*2*16*GK_localVolume);
+      cudaMemset(gen_oneD[mu], 0, sizeof(double)*2*16*GK_localVolume);
+      cudaMemset(std_csvC[mu], 0, sizeof(double)*2*16*GK_localVolume);
+      cudaMemset(gen_csvC[mu], 0, sizeof(double)*2*16*GK_localVolume);
     }
-    else{  // Deflate the initial guess and solution (Abdou's procedure)
-      K_vector->downloadFromCuda(in,pc_solve);
-      K_vector->download();
-      deflation->deflateVector(*K_srcdef,*K_vector);
-      K_srcdef->uploadToCuda(out,pc_solve);             // Initial guess is deflated and put into "out", out = U(\Lambda^-1)U^dag M^dag b
-      (*solve)(*out,*in);
-      dirac.reconstruct(*x,*b,param->solution_type);
+    cudaDeviceSynchronize();
+    //----------------
+
+    gsl_rng *rNum = gsl_rng_alloc(gsl_rng_ranlux);
+    gsl_rng_set(rNum, seed + comm_rank()*seed);
+   
+    for(int is = 0 ; is < Nstoch ; is++){
+      t3 = MPI_Wtime();
+      t1 = MPI_Wtime();
+      memset(input_vector,0,GK_localL[0]*GK_localL[1]*GK_localL[2]*GK_localL[3]*spinorSiteSize*sizeof(double));
+      getStochasticRandomSource<double>(input_vector,rNum,info.source_type);
+      t2 = MPI_Wtime();
+      printfQuda("TIME_REPORT Stoch. %04d - Source creation: %f sec\n",is,t2-t1);
+      t1 = MPI_Wtime();
+      K_vector->packVector((double*) input_vector);
+      K_vector->loadVector();
+      K_vector->uploadToCuda(b,pc_solve);
+      dirac.prepare(in,out,*x,*b,param->solution_type);
+      // in is reference to the b but for a parity sinlet
+      // out is reference to the x but for a parity sinlet
+      cudaColorSpinorField *tmp_up = new cudaColorSpinorField(*in);
+      dirac.Mdag(*in, *tmp_up);  // in = M^dag b
+      delete tmp_up;
+      t2 = MPI_Wtime();
+      printfQuda("TIME_REPORT Stoch. %04d - Source preparation: %f sec\n",is,t2-t1);
       
-      cudaColorSpinorField *s = new cudaColorSpinorField(*x);
-      cudaColorSpinorField *x1 = new cudaColorSpinorField(*x);
-      K_vector->downloadFromCuda(x,pc_solve);
-      K_vector->download();
-      deflation->deflateSrcVec(*K_srcdef,*K_vector,is);   
-      K_srcdef->uploadToCuda(s,pc_solve);              // Solution is deflated and put into "s", s = (1-UU^dag) x
-      oneEndTrick_w_One_Der_2<double>(*s,*x1,*tmp3,*tmp4,param, gen_uloc, std_uloc, gen_oneD, std_oneD, gen_csvC, std_csvC); //-One-end trick according to Abdou
-      delete s;
-      delete x1;
-    }
-
-    t4 = MPI_Wtime();
-    printfQuda("TIME_REPORT: One-end trick for Stoch. %04d finished in %f sec\n",is,t4-t3);
-
-    //-Dump the loop
-    if( (is+1)%Ndump == 0){
-      doCudaFFT_v2<double>(std_uloc,tmp_loop);
-      dumpLoop_ultraLocal<double>(tmp_loop,loop_stoch_fname,is+1,info.Q_sq,0); // Std. Ultra-local - Scalar
-      doCudaFFT_v2<double>(gen_uloc,tmp_loop);
-      dumpLoop_ultraLocal<double>(tmp_loop,loop_stoch_fname,is+1,info.Q_sq,1); // Gen. Ultra-local - dOp
-
-      for(int mu = 0 ; mu < 4 ; mu++){
-	doCudaFFT_v2<double>(std_oneD[mu],tmp_loop);
-	dumpLoop_oneD<double>(tmp_loop,loop_stoch_fname,is+1,info.Q_sq,mu,0); // Std. oneD - Loops
-	doCudaFFT_v2<double>(gen_oneD[mu],tmp_loop);
-	dumpLoop_oneD<double>(tmp_loop,loop_stoch_fname,is+1,info.Q_sq,mu,1); // Gen. oneD - LpsDw
-	doCudaFFT_v2<double>(std_csvC[mu],tmp_loop);
-	dumpLoop_oneD<double>(tmp_loop,loop_stoch_fname,is+1,info.Q_sq,mu,2); // Std. Conserved current - LoopsCv
-	doCudaFFT_v2<double>(gen_csvC[mu],tmp_loop);
-	dumpLoop_oneD<double>(tmp_loop,loop_stoch_fname,is+1,info.Q_sq,mu,3); // Gen. Conserved current - LpsDwCv
+      if(smethod==1){  // Deflate the source vector (Christos)
+	K_vector->downloadFromCuda(in,pc_solve);
+	K_vector->download();
+	t1 = MPI_Wtime();
+	deflation->deflateSrcVec(*K_srcdef,*K_vector,is,NeV_defl);  
+	t2 = MPI_Wtime();
+	printfQuda("TIME_REPORT Stoch. %04d - Source deflation: %f sec\n",is,t2-t1);
+	K_srcdef->uploadToCuda(in,pc_solve);              // Source Vector is deflated and put into "in", in = (1-UU^dag) M^dag b
+	zeroCuda(*out);                                   // Set the initial guess to zero!
+	t1 = MPI_Wtime();
+	(*solve)(*out,*in);
+	t2 = MPI_Wtime();
+	printfQuda("TIME_REPORT Stoch. %04d - Source inversion: %f sec\n",is,t2-t1);
+	dirac.reconstruct(*x,*b,param->solution_type);
+	t1 = MPI_Wtime();
+	oneEndTrick_w_One_Der<double>(*x,*tmp3,*tmp4,param, gen_uloc, std_uloc, gen_oneD, std_oneD, gen_csvC, std_csvC); //-Christos
+	t2 = MPI_Wtime();
+	printfQuda("TIME_REPORT Stoch. %04d - One-end trick: %f sec\n",is,t2-t1);
       }
-    }
-  } // close loop over noise vectors
-
+      else{  // Deflate the initial guess and solution (Abdou's procedure)
+	if(loopInfo.nSteps_defl>1) errorQuda("Cannot performed stepped-deflation with smethod different than 1. (yet)\n"); 
+	K_vector->downloadFromCuda(in,pc_solve);
+	K_vector->download();
+	deflation->deflateVector(*K_srcdef,*K_vector);
+	K_srcdef->uploadToCuda(out,pc_solve);             // Initial guess is deflated and put into "out", out = U(\Lambda^-1)U^dag M^dag b
+	(*solve)(*out,*in);
+	dirac.reconstruct(*x,*b,param->solution_type);
+	
+	cudaColorSpinorField *s = new cudaColorSpinorField(*x);
+	cudaColorSpinorField *x1 = new cudaColorSpinorField(*x);
+	K_vector->downloadFromCuda(x,pc_solve);
+	K_vector->download();
+	deflation->deflateSrcVec(*K_srcdef,*K_vector,is);   
+	K_srcdef->uploadToCuda(s,pc_solve);              // Solution is deflated and put into "s", s = (1-UU^dag) x
+	oneEndTrick_w_One_Der_2<double>(*s,*x1,*tmp3,*tmp4,param, gen_uloc, std_uloc, gen_oneD, std_oneD, gen_csvC, std_csvC); //-One-end trick according to Abdou
+	delete s;
+	delete x1;
+      }
+      
+      t4 = MPI_Wtime();
+      printfQuda("TIME_REPORT: One-end trick for Stoch. %04d finished in %f sec\n",is,t4-t3);
+      
+      //-Dump the loop
+      if( (is+1)%Ndump == 0){
+	doCudaFFT_v2<double>(std_uloc,tmp_loop);
+	dumpLoop_ultraLocal<double>(tmp_loop,loop_stoch_fname,is+1,info.Q_sq,0); // Std. Ultra-local - Scalar
+	doCudaFFT_v2<double>(gen_uloc,tmp_loop);
+	dumpLoop_ultraLocal<double>(tmp_loop,loop_stoch_fname,is+1,info.Q_sq,1); // Gen. Ultra-local - dOp
+	
+	for(int mu = 0 ; mu < 4 ; mu++){
+	  doCudaFFT_v2<double>(std_oneD[mu],tmp_loop);
+	  dumpLoop_oneD<double>(tmp_loop,loop_stoch_fname,is+1,info.Q_sq,mu,0); // Std. oneD - Loops
+	  doCudaFFT_v2<double>(gen_oneD[mu],tmp_loop);
+	  dumpLoop_oneD<double>(tmp_loop,loop_stoch_fname,is+1,info.Q_sq,mu,1); // Gen. oneD - LpsDw
+	  doCudaFFT_v2<double>(std_csvC[mu],tmp_loop);
+	  dumpLoop_oneD<double>(tmp_loop,loop_stoch_fname,is+1,info.Q_sq,mu,2); // Std. Conserved current - LoopsCv
+	  doCudaFFT_v2<double>(gen_csvC[mu],tmp_loop);
+	  dumpLoop_oneD<double>(tmp_loop,loop_stoch_fname,is+1,info.Q_sq,mu,3); // Gen. Conserved current - LpsDwCv
+	}
+      }
+    } // close loop over noise vectors
+ 
+    gsl_rng_free(rNum);
+  }//-dstep
+    
+   
   cudaFreeHost(std_uloc);
   cudaFreeHost(gen_uloc);
   cudaFreeHost(tmp_loop);
@@ -3205,7 +3223,6 @@ void calcEigenVectors_loop_wOneD_FullOp(void **gaugeToPlaquette, QudaInvertParam
   free(input_vector);
   free(output_vector);
 
-  gsl_rng_free(rNum);
 
   delete solve;
   delete d;
