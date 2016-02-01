@@ -216,7 +216,7 @@ cuda_color_spinor_field.o: cuda_color_spinor_field.cu $(HDRS) $(CSF_INLN)
 cuda_eig_variables.o: cuda_eig_variables.cu $(HDRS) $(CSF_INLN)
 	$(NVCC) $(NVCCFLAGS) $< -c -o $@
 
-dslash_quda.o: dslash_quda.cu $(HDRS) $(DSLASH_INLN) $(CORE)
+dslash_quda.o: dslash_quda.cu contract.cu $(HDRS) $(DSLASH_INLN) $(CORE)
 	$(NVCC) $(NVCCFLAGS) $< -c -o $@
 
 dslash_wilson.o: dslash_wilson.cu $(HDRS) $(DSLASH_INLN) $(CORE)

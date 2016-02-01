@@ -452,6 +452,13 @@ extern "C" {
   void loadGaugeQuda(void *h_gauge, QudaGaugeParam *param);
 
   /**
+   * Load the iAPE'th smeared gauge field from the host.
+   * @param h_gauge Base pointer to host gauge field (regardless of dimensionality)
+   * @param param   Contains all metadata regarding host and device storage
+   */
+  void loadGaugeSmearedQuda(void *h_gauge, QudaGaugeParam *param, int iAPE);
+
+  /**
    * Free QUDA's internal copy of the gauge field.
    */
   void freeGaugeQuda(void);

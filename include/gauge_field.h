@@ -195,6 +195,11 @@ namespace quda {
     QudaStaggeredPhase StaggeredPhase() const { return staggeredPhaseType; }
     bool StaggeredPhaseApplied() const { return staggeredPhaseApplied; }
 
+    void setTBoundary(QudaTboundary tboundary){
+      t_boundary = tboundary;
+    }
+    
+
     /**
        Apply the staggered phase factors to the gauge field.
     */

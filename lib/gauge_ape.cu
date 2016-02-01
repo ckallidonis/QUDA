@@ -8,44 +8,45 @@
 
 #define  DOUBLE_TOL	1e-15
 #define  SINGLE_TOL	2e-6
+#define nDims 4
 
 namespace quda {
 
 #ifdef GPU_GAUGE_TOOLS
 
   template <typename Float, typename GaugeOr, typename GaugeDs>
-  struct GaugeAPEArg {
-    int threads; // number of active threads required
-    int X[4]; // grid dimensions
+    struct GaugeAPEArg {
+      int threads; // number of active threads required
+      int X[4]; // grid dimensions
 #ifdef MULTI_GPU
-    int border[4]; 
+      int border[4]; 
 #endif
-    GaugeOr origin;
-    const Float alpha;
-    const Float tolerance;
+      GaugeOr origin;
+      const Float alpha;
+      const Float tolerance;
     
-    GaugeDs dest;
+      GaugeDs dest;
 
     GaugeAPEArg(GaugeOr &origin, GaugeDs &dest, const GaugeField &data, const Float alpha, const Float tolerance) 
-      : origin(origin), dest(dest), alpha(alpha), tolerance(tolerance) {
+    : origin(origin), dest(dest), alpha(alpha), tolerance(tolerance) {
 #ifdef MULTI_GPU
       for ( int dir = 0; dir < 4; ++dir ) {
         border[dir] = data.R()[dir];
         X[dir] = data.X()[dir] - border[dir] * 2;
       } 
 #else
-        for(int dir=0; dir<4; ++dir) X[dir] = data.X()[dir];
+      for(int dir=0; dir<4; ++dir) X[dir] = data.X()[dir];
 #endif
-	threads = X[0]*X[1]*X[2]*X[3];
+      threads = X[0]*X[1]*X[2]*X[3];
     }
-  };
+    };
 
 
   template <typename Float, typename GaugeOr, typename GaugeDs, typename Float2>
-  __host__ __device__ void computeStaple(GaugeAPEArg<Float,GaugeOr,GaugeDs>& arg, int idx, int parity, int dir, Matrix<Float2,3> &staple) {
+    __host__ __device__ void computeStaple(GaugeAPEArg<Float,GaugeOr,GaugeDs>& arg, int idx, int parity, int dir, Matrix<Float2,3> &staple) {
 
     typedef typename ComplexTypeId<Float>::Type Cmplx;
-      // compute spacetime dimensions and parity
+    // compute spacetime dimensions and parity
 
     int X[4]; 
     for(int dr=0; dr<4; ++dr) X[dr] = arg.X[dr];
@@ -54,14 +55,15 @@ namespace quda {
     getCoords(x, idx, X, parity);
 #ifdef MULTI_GPU
     for(int dr=0; dr<4; ++dr) {
-         x[dr] += arg.border[dr];
-         X[dr] += 2*arg.border[dr];
+      x[dr] += arg.border[dr];
+      X[dr] += 2*arg.border[dr];
     }
 #endif
 
     setZero(&staple);
 
-    for (int mu=0; mu<4; mu++) {
+    
+    for (int mu=0; mu<nDims; mu++) {
       if (mu == dir) {
         continue;
       }
@@ -108,118 +110,119 @@ namespace quda {
 
   template<typename Float, typename GaugeOr, typename GaugeDs>
     __global__ void computeAPEStep(GaugeAPEArg<Float,GaugeOr,GaugeDs> arg){
-      int idx = threadIdx.x + blockIdx.x*blockDim.x;
-      if(idx >= arg.threads) return;
-      typedef typename ComplexTypeId<Float>::Type Cmplx;
+    int idx = threadIdx.x + blockIdx.x*blockDim.x;
+    if(idx >= arg.threads) return;
+    typedef typename ComplexTypeId<Float>::Type Cmplx;
 
-      int parity = 0;
-      if(idx >= arg.threads/2) {
-        parity = 1;
-        idx -= arg.threads/2;
-      }
+    int parity = 0;
+    if(idx >= arg.threads/2) {
+      parity = 1;
+      idx -= arg.threads/2;
+    }
 
-      int X[4]; 
-      for(int dr=0; dr<4; ++dr) X[dr] = arg.X[dr];
+    int X[4]; 
+    for(int dr=0; dr<4; ++dr) X[dr] = arg.X[dr];
 
-      int x[4];
-      getCoords(x, idx, X, parity);
+    int x[4];
+    getCoords(x, idx, X, parity);
 #ifdef MULTI_GPU
-      for(int dr=0; dr<4; ++dr) {
-           x[dr] += arg.border[dr];
-           X[dr] += 2*arg.border[dr];
-      }
+    for(int dr=0; dr<4; ++dr) {
+      x[dr] += arg.border[dr];
+      X[dr] += 2*arg.border[dr];
+    }
 #endif
 
-      int nDims = 4;
-      int dx[4] = {0, 0, 0, 0};
-      for (int dir=0; dir < 4; dir++) {				//Only spatial dimensions are smeared
-        Matrix<Cmplx,3> U, S;
+    int dx[4] = {0, 0, 0, 0};
+    for (int dir=0; dir < nDims; dir++) {
+      Matrix<Cmplx,3> U, S, I, TestU;
+      
+      computeStaple<Float,GaugeOr,GaugeDs,Cmplx>(arg,idx,parity,dir,S);
 
-        computeStaple<Float,GaugeOr,GaugeDs,Cmplx>(arg,idx,parity,dir,S);
+      arg.origin.load((Float*)(U.data),linkIndexShift(x,dx,X), dir, parity);
 
-        arg.origin.load((Float*)(U.data),linkIndexShift(x,dx,X), dir, parity);
-
-        int dDen = nDims*(nDims-1);
-        U  = U * (1. - arg.alpha);
-        S  = S * ( arg.alpha/(Float)dDen );
-
-	U  = U + S;
-
-        polarSu3<Cmplx,Float>(U, arg.tolerance);
-        arg.dest.save((Float*)(U.data),linkIndexShift(x,dx,X), dir, parity); 
+      int dDen = 2*(nDims-1);
+      S  = S * (arg.alpha/((Float) dDen));
+      setIdentity(&I);
+      
+      TestU  = I*(1.-arg.alpha) + S*conj(U);
+      polarSu3<Cmplx,Float>(TestU, arg.tolerance);
+      U = TestU*U;
+      
+      //      polarSu3<Cmplx,Float>(U, arg.tolerance);
+      arg.dest.save((Float*)(U.data),linkIndexShift(x,dx,X), dir, parity); 
     }
   }
 
   template<typename Float, typename GaugeOr, typename GaugeDs>
     class GaugeAPE : Tunable {
-      GaugeAPEArg<Float,GaugeOr,GaugeDs> arg;
-      const QudaFieldLocation location;
+    GaugeAPEArg<Float,GaugeOr,GaugeDs> arg;
+    const QudaFieldLocation location;
 
-      private:
-      unsigned int sharedBytesPerThread() const { return 0; }
-      unsigned int sharedBytesPerBlock(const TuneParam &param) const { return 0; }
+  private:
+    unsigned int sharedBytesPerThread() const { return 0; }
+    unsigned int sharedBytesPerBlock(const TuneParam &param) const { return 0; }
 
-      bool tuneSharedBytes() const { return false; } // Don't tune shared memory
-      bool tuneGridDim() const { return false; } // Don't tune the grid dimensions.
-      unsigned int minThreads() const { return arg.threads; }
+    bool tuneSharedBytes() const { return false; } // Don't tune shared memory
+    bool tuneGridDim() const { return false; } // Don't tune the grid dimensions.
+    unsigned int minThreads() const { return arg.threads; }
 
-      public:
-      GaugeAPE(GaugeAPEArg<Float,GaugeOr, GaugeDs> &arg, QudaFieldLocation location)
-        : arg(arg), location(location) {}
-      virtual ~GaugeAPE () {}
+  public:
+  GaugeAPE(GaugeAPEArg<Float,GaugeOr, GaugeDs> &arg, QudaFieldLocation location)
+    : arg(arg), location(location) {}
+    virtual ~GaugeAPE () {}
 
-      void apply(const cudaStream_t &stream){
-        if(location == QUDA_CUDA_FIELD_LOCATION){
+    void apply(const cudaStream_t &stream){
+      if(location == QUDA_CUDA_FIELD_LOCATION){
 #if (__COMPUTE_CAPABILITY__ >= 200)
-          TuneParam tp = tuneLaunch(*this, getTuning(), getVerbosity());
-          computeAPEStep<<<tp.grid,tp.block,tp.shared_bytes>>>(arg);
+	TuneParam tp = tuneLaunch(*this, getTuning(), getVerbosity());
+	computeAPEStep<<<tp.grid,tp.block,tp.shared_bytes>>>(arg);
 #else
-	  errorQuda("GaugeAPE not supported on pre-Fermi architecture");
+	errorQuda("GaugeAPE not supported on pre-Fermi architecture");
 #endif
-        }else{
-          errorQuda("CPU not supported yet\n");
-          //computeAPEStepCPU(arg);
-        }
+      }else{
+	errorQuda("CPU not supported yet\n");
+	//computeAPEStepCPU(arg);
       }
+    }
 
-      TuneKey tuneKey() const {
-        std::stringstream vol, aux;
-        vol << arg.X[0] << "x";
-        vol << arg.X[1] << "x";
-        vol << arg.X[2] << "x";
-        vol << arg.X[3];
-        aux << "threads=" << arg.threads << ",prec="  << sizeof(Float);
-        return TuneKey(vol.str().c_str(), typeid(*this).name(), aux.str().c_str());
-      }
+    TuneKey tuneKey() const {
+      std::stringstream vol, aux;
+      vol << arg.X[0] << "x";
+      vol << arg.X[1] << "x";
+      vol << arg.X[2] << "x";
+      vol << arg.X[3];
+      aux << "threads=" << arg.threads << ",prec="  << sizeof(Float);
+      return TuneKey(vol.str().c_str(), typeid(*this).name(), aux.str().c_str());
+    }
 
 
-      std::string paramString(const TuneParam &param) const {
-        std::stringstream ps;
-        ps << "block=(" << param.block.x << "," << param.block.y << "," << param.block.z << ")";
-        ps << "shared=" << param.shared_bytes;
-        return ps.str();
-      }
+    std::string paramString(const TuneParam &param) const {
+      std::stringstream ps;
+      ps << "block=(" << param.block.x << "," << param.block.y << "," << param.block.z << ")";
+      ps << "shared=" << param.shared_bytes;
+      return ps.str();
+    }
 
-      void preTune(){}
-      void postTune(){}
-      long long flops() const { return (1)*6*arg.threads; }
-      long long bytes() const { return (1)*6*arg.threads*sizeof(Float); } // Only correct if there is no link reconstruction
+    void preTune(){}
+    void postTune(){}
+    long long flops() const { return (1)*6*arg.threads; }
+    long long bytes() const { return (1)*6*arg.threads*sizeof(Float); } // Only correct if there is no link reconstruction
 
-    }; // GaugeAPE
+  }; // GaugeAPE
 
   template<typename Float,typename GaugeOr, typename GaugeDs>
     void APEStep(GaugeOr origin, GaugeDs dest, const GaugeField& dataOr, Float alpha, QudaFieldLocation location) {
-      if (dataOr.Precision() == QUDA_DOUBLE_PRECISION) {
-        GaugeAPEArg<Float,GaugeOr,GaugeDs> arg(origin, dest, dataOr, alpha, DOUBLE_TOL);
-        GaugeAPE<Float,GaugeOr,GaugeDs> gaugeAPE(arg, location);
-        gaugeAPE.apply(0);
-      } else {
-        GaugeAPEArg<Float,GaugeOr,GaugeDs> arg(origin, dest, dataOr, alpha, SINGLE_TOL);
-        GaugeAPE<Float,GaugeOr,GaugeDs> gaugeAPE(arg, location);
-        gaugeAPE.apply(0);
-      }
-      cudaDeviceSynchronize();
+    if (dataOr.Precision() == QUDA_DOUBLE_PRECISION) {
+      GaugeAPEArg<Float,GaugeOr,GaugeDs> arg(origin, dest, dataOr, alpha, DOUBLE_TOL);
+      GaugeAPE<Float,GaugeOr,GaugeDs> gaugeAPE(arg, location);
+      gaugeAPE.apply(0);
+    } else {
+      GaugeAPEArg<Float,GaugeOr,GaugeDs> arg(origin, dest, dataOr, alpha, SINGLE_TOL);
+      GaugeAPE<Float,GaugeOr,GaugeDs> gaugeAPE(arg, location);
+      gaugeAPE.apply(0);
     }
+    cudaDeviceSynchronize();
+  }
 
   template<typename Float>
     void APEStep(GaugeField &dataDs, const GaugeField& dataOr, Float alpha, QudaFieldLocation location) {
@@ -266,7 +269,7 @@ namespace quda {
 	APEStep(GOr(dataOr), GDs(dataDs), dataOr, alpha, location);
       }else{
 	errorQuda("Reconstruction type %d of origin gauge field not supported", dataOr.Reconstruct());
-            }
+      }
     } else {
       errorQuda("Reconstruction type %d of destination gauge field not supported", dataDs.Reconstruct());
     }
@@ -301,7 +304,7 @@ namespace quda {
     }
     return;
 #else
-  errorQuda("Gauge tools are not build");
+    errorQuda("Gauge tools are not build");
 #endif
   }
 

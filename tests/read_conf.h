@@ -106,9 +106,9 @@ typedef struct
 
 static void read_custom_binary_gauge_field (double **gauge, char *fname, QudaGaugeParam *param, QudaInvertParam *inv_param, int gridSize[4])
 {
-/*
-read gauge fileld config stored in binary file
-*/
+  /*
+    read gauge fileld config stored in binary file
+  */
   FILE *fid;
   int x1, x2, x3, x4, ln[4] = { 0, 0, 0, 0 };
   unsigned long long	lvol, ixh, iy, mu;
@@ -144,12 +144,12 @@ read gauge fileld config stored in binary file
     {
       errorQuda("Error reading configuration! Could not open path for reading");
     }
-	
+  
   if ((limereader = limeCreateReader(fid))==NULL)
     {
       errorQuda("Could not create limeReader");
     }
-	
+
   while(limeReaderNextRecord(limereader)      != LIME_EOF )
     {
       lime_type				       = limeReaderType(limereader);
@@ -159,67 +159,66 @@ read gauge fileld config stored in binary file
       
       if(strcmp(lime_type,"xlf-info")==0)
 	{
-	      lime_data_size = limeReaderBytes(limereader);
-	      lime_data = (char * )malloc(lime_data_size);
-	      limeReaderReadData((void *)lime_data,&lime_data_size, limereader);
+	  lime_data_size = limeReaderBytes(limereader);
+	  lime_data = (char * )malloc(lime_data_size);
+	  limeReaderReadData((void *)lime_data,&lime_data_size, limereader);
 	      
-	      strcpy	(tmpVar, "kappa =");
-	      sscanf(qcd_getParamComma(tmpVar,lime_data, lime_data_size),"%lf",&dDummy);    
-	      printfQuda("Kappa given is : %f \t Kappa conf is : %f \t check them agree\n", inv_param->kappa , dDummy);
+	  strcpy	(tmpVar, "kappa =");
+	  sscanf(qcd_getParamComma(tmpVar,lime_data, lime_data_size),"%lf",&dDummy);    
+	  printfQuda("Kappa given is : %f \t Kappa conf is : %f \t check them agree\n", inv_param->kappa , dDummy);
 	      
-	      strcpy	(tmpVar, "mu =");
-	      sscanf(qcd_getParamComma(tmpVar,lime_data, lime_data_size),"%lf",&dDummy);
-	      printfQuda("Mu given is : %f \t Mu conf is : %f \t may disagree for heavy quark\n" , inv_param->mu , dDummy);
+	  strcpy	(tmpVar, "mu =");
+	  sscanf(qcd_getParamComma(tmpVar,lime_data, lime_data_size),"%lf",&dDummy);
+	  printfQuda("Mu given is : %f \t Mu conf is : %f \t may disagree for heavy quark\n" , inv_param->mu , dDummy);
 	      
-	      free(lime_data);
+	  free(lime_data);
 	}
 	  
-	  if(strcmp(lime_type,"ildg-format")==0)
-	    {
-	      lime_data_size = limeReaderBytes(limereader);
-	      lime_data = (char * )malloc(lime_data_size);
-	      limeReaderReadData((void *)lime_data,&lime_data_size, limereader);
+      if(strcmp(lime_type,"ildg-format")==0)
+	{
+	  lime_data_size = limeReaderBytes(limereader);
+	  lime_data = (char * )malloc(lime_data_size);
+	  limeReaderReadData((void *)lime_data,&lime_data_size, limereader);
 	      
-	      strcpy	(tmpVar, "<precision>");
-	      sscanf(qcd_getParam(tmpVar,lime_data, lime_data_size),"%i",&isDouble);    
-	      printfQuda("Precision:\t%i bit\n",isDouble);
+	  strcpy	(tmpVar, "<precision>");
+	  sscanf(qcd_getParam(tmpVar,lime_data, lime_data_size),"%i",&isDouble);    
+	  printfQuda("Precision:\t%i bit\n",isDouble);
 	      
-	      strcpy	(tmpVar, "<lx>");
-	      sscanf(qcd_getParam(tmpVar,lime_data, lime_data_size),"%i",&iDummy);
-	      param->X[0]	 = iDummy/gridSize[0];
-	      ln[0]		 = iDummy;
+	  strcpy	(tmpVar, "<lx>");
+	  sscanf(qcd_getParam(tmpVar,lime_data, lime_data_size),"%i",&iDummy);
+	  param->X[0]	 = iDummy/gridSize[0];
+	  ln[0]		 = iDummy;
 	      
-	      strcpy	(tmpVar, "<ly>");
-	      sscanf(qcd_getParam(tmpVar,lime_data, lime_data_size),"%i",&iDummy);
-	      param->X[1]	 = iDummy/gridSize[1];
-	      ln[1]		 = iDummy;
+	  strcpy	(tmpVar, "<ly>");
+	  sscanf(qcd_getParam(tmpVar,lime_data, lime_data_size),"%i",&iDummy);
+	  param->X[1]	 = iDummy/gridSize[1];
+	  ln[1]		 = iDummy;
 	      
-	      strcpy	(tmpVar, "<lz>");
-	      sscanf(qcd_getParam(tmpVar,lime_data, lime_data_size),"%i",&iDummy);
-	      param->X[2]	 = iDummy/gridSize[2];
-	      ln[2]		 = iDummy;
+	  strcpy	(tmpVar, "<lz>");
+	  sscanf(qcd_getParam(tmpVar,lime_data, lime_data_size),"%i",&iDummy);
+	  param->X[2]	 = iDummy/gridSize[2];
+	  ln[2]		 = iDummy;
 	      
-	      strcpy	(tmpVar, "<lt>");
-	      sscanf(qcd_getParam(tmpVar,lime_data, lime_data_size),"%i",&iDummy);
-	      param->X[3]	 = iDummy/gridSize[3];
-	      ln[3]		 = iDummy;
+	  strcpy	(tmpVar, "<lt>");
+	  sscanf(qcd_getParam(tmpVar,lime_data, lime_data_size),"%i",&iDummy);
+	  param->X[3]	 = iDummy/gridSize[3];
+	  ln[3]		 = iDummy;
 	      
-	      printfQuda("Volume:   \t%ix%ix%ix%i\n", ln[0], ln[1], ln[2], ln[3]);
-	      printfQuda("Subvolume:\t%ix%ix%ix%i\n", param->X[0], param->X[1], param->X[2], param->X[3]);
+	  printfQuda("Volume:   \t%ix%ix%ix%i\n", ln[0], ln[1], ln[2], ln[3]);
+	  printfQuda("Subvolume:\t%ix%ix%ix%i\n", param->X[0], param->X[1], param->X[2], param->X[3]);
 	      
-	      free(lime_data);
-	    }
+	  free(lime_data);
 	}
-      
-      // Read 1 byte to set file-pointer to start of binary data
+    }
+ 
+  // Read 1 byte to set file-pointer to start of binary data
       
 #ifdef	MULTI_GPU
-      lime_data_size=1;
-      limeReaderReadData(&dummy,&lime_data_size,limereader);
-      offset = ftell(fid)-1;
+  lime_data_size=1;
+  limeReaderReadData(&dummy,&lime_data_size,limereader);
+  offset = ftell(fid)-1;
 #endif
-      limeDestroyReader(limereader);
-     
+  limeDestroyReader(limereader);
   
   MPI_Bcast(&error_occured,1,MPI_INT,0,MPI_COMM_WORLD);
   
@@ -292,10 +291,12 @@ read gauge fileld config stored in binary file
     }
   else
     printf("%d bytes reserved for gauge fields (%d x %u)\n", chunksize*nvh*2, chunksize, nvh*2);
+
   
   if(MPI_File_read_all(mpifid, ftmp, 4*3*3*2*nvh*2, MPI_DOUBLE, &status) == 1)
     printf("Error in MPI_File_read_all\n");
   
+
   if(4*3*3*2*nvh*2*sizeof(double) > 2147483648)
     {
       printf  ("File too large. At least %lu processes are needed to read this file properly.\n", (4*3*3*2*nvh*2*sizeof(double)/2147483648)+1);
@@ -304,6 +305,7 @@ read gauge fileld config stored in binary file
   
   if(!qcd_isBigEndian())
     qcd_swap_8((double*) ftmp,2*4*3*3*nvh*2);
+
 #else
   ftmp = (double*)malloc(lvol*72*sizeof(double));
   
@@ -324,7 +326,7 @@ read gauge fileld config stored in binary file
   if(!qcd_isBigEndian())      
     qcd_swap_8	((double*) ftmp,72*lvol);
 #endif
-  
+
   // reconstruct gauge field
   // - assume index formula idx = (((t*LX+x)*LY+y)*LZ+z)*(4*3*2*2) + mu*(3*2*2) + 2*(3*u+c)+r
   //   with mu=0,1,2,3; u=0,1; c=0,1,2, r=0,1
@@ -338,62 +340,57 @@ read gauge fileld config stored in binary file
 
   int lx1 = 0, lx2 = 0, lx3 = 0, lx4 = 0;
 
-  for(x4 = x4start; x4 < x4end; x4++) 
-    {  // t
-      for(x3 = x3start; x3 < x3end; x3++) 
-	{  // z
-	  for(x2 = x2start; x2 < x2end; x2++) 
-	    {  // y
-	      for(x1 = x1start; x1 < x1end; x1++) 
-		{  // x
-		  int oddBit	 = (x1+x2+x3+x4) & 1;
-		  
+  for(x4 = x4start; x4 < x4end; x4++){  // t
+    for(x3 = x3start; x3 < x3end; x3++){ // z
+      for(x2 = x2start; x2 < x2end; x2++){  // y
+	for(x1 = x1start; x1 < x1end; x1++){  // x
+	  int oddBit = (x1+x2+x3+x4) & 1;		  
 #ifdef	MULTI_GPU
-		  iy		 = ((x1-x1start)+(x2-x2start)*param->X[0]+(x3-x3start)*param->X[1]*param->X[0]+(x4-x4start)*param->X[0]*param->X[1]*param->X[2])/2;
+	  iy = ((x1-x1start)+(x2-x2start)*param->X[0]+(x3-x3start)*param->X[1]*param->X[0]+(x4-x4start)*param->X[0]*param->X[1]*param->X[2])/2;
 #else
-		  iy		 = x1+x2*param->X[0]+x3*param->X[1]*param->X[0]+x4*param->X[0]*param->X[1]*param->X[2];
+	  iy = x1+x2*param->X[0]+x3*param->X[1]*param->X[0]+x4*param->X[0]*param->X[1]*param->X[2];
 #endif
-		  for(mu = 0; mu < 4; mu++)
-		    {  
+	  for(mu = 0; mu < 4; mu++){  
 #ifdef	MULTI_GPU
-		      memcpy(U, &(ftmp[i]), 18*sizeof(double));    
-		      if(oddBit)
-			memcpy(&(resOdd[mu][18*iy]), U, 18*sizeof(double));
-		      else
-			memcpy(&(resEvn[mu][18*iy]), U, 18*sizeof(double));
-		      i	+= 144;
+	    memcpy(U, &(ftmp[i]), 18*sizeof(double));    
+	    if(oddBit)
+	      memcpy(&(resOdd[mu][18*iy]), U, 18*sizeof(double));
+	    else
+	      memcpy(&(resEvn[mu][18*iy]), U, 18*sizeof(double));
+	    i += 144;
 #else
-		      ixh		 = (lx1+lx2*param->X[0]+lx3*param->X[0]*param->X[1]+lx4*param->X[0]*param->X[1]*param->X[2])/2;
-		      idx = mu*18 + 72*iy;
-		      double *links_ptr = ftmp+idx;
-		      memcpy(U, links_ptr, 18*sizeof(double));
-		      if(oddBit)
-			memcpy(resOdd[mu]+18*ixh, U, 18*sizeof(double));
-		      else
-			memcpy(resEvn[mu]+18*ixh, U, 18*sizeof(double));
+	    ixh = (lx1+lx2*param->X[0]+lx3*param->X[0]*param->X[1]+lx4*param->X[0]*param->X[1]*param->X[2])/2;
+	    idx = mu*18 + 72*iy;
+	    double *links_ptr = ftmp+idx;
+	    memcpy(U, links_ptr, 18*sizeof(double));
+	    if(oddBit)
+	      memcpy(resOdd[mu]+18*ixh, U, 18*sizeof(double));
+	    else
+	      memcpy(resEvn[mu]+18*ixh, U, 18*sizeof(double));
 #endif
-		    } 
-		  ++lx1;
-		} 
-	      lx1 = 0;
-	      ++lx2;
-	    } 
-	  lx2 = 0;
-	  ++lx3;				
-	} 
-      lx3 = 0;
-      ++lx4;
-    }
+	  }//-mu 
+	  ++lx1;
+	}//-x1 
+	lx1 = 0;
+	++lx2;
+      }//-x2 
+      lx2 = 0;
+      ++lx3;				
+    }//-x3
+    lx3 = 0;
+    ++lx4;
+  }//-x4
+
   free(ftmp);
   
 #ifdef	MULTI_GPU
   MPI_File_close(&mpifid);
 #endif  
-  
+
   //	Apply BC here
   
   //  applyGaugeFieldScaling<double>((double**)gauge, nvh, param);
-  
+ 
   return;
 }
 

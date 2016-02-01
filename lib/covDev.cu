@@ -136,7 +136,7 @@ namespace quda
     dslashParam.kernel_type = INTERIOR_KERNEL;
 
     PROFILE(dslash.apply(streams[Nstream-1]), profile, QUDA_PROFILE_DSLASH_KERNEL);
-
+    cudaDeviceSynchronize();
     checkCudaError();
 
     #ifdef MULTI_GPU
@@ -148,6 +148,7 @@ namespace quda
 			
         PROFILE(dslash.apply(streams[Nstream-1]), profile, QUDA_PROFILE_DSLASH_KERNEL);
 
+	cudaDeviceSynchronize();
         checkCudaError();
 
         dslashParam.ghostDim[dir] = 0;                           // not sure whether neccessary 
@@ -545,7 +546,7 @@ namespace quda
             // Maybe I should rebind the spinors for the INTERIOR kernels after this???
 
             TuneParam tp = tuneLaunch(*this, getTuning(), getVerbosity());
-            COVDEV(covDevM, mu, tp.grid, tp.block, tp.shared_bytes, stream, dslashParam, (Float2*)out->V(), (Float2*)gauge0, (Float2*)gauge1, (Float2*)in->V());
+            COVDEV(covDevM, mu, tp.grid, tp.block, tp.shared_bytes, stream, dslashParam, (Float2*)out->V(), (Float2*)gauge0, (Float2*)gauge1, (Float2*)ghostBuffer);
           #endif
         } else {
           dslashParam.threads = in->Volume();
