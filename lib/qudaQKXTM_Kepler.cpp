@@ -2484,7 +2484,9 @@ void oneEndTrick(cudaColorSpinorField &x,cudaColorSpinorField &tmp3, cudaColorSp
 
 
 template<typename Float>
-void oneEndTrick_w_One_Der(cudaColorSpinorField &x,cudaColorSpinorField &tmp3, cudaColorSpinorField &tmp4,QudaInvertParam *param, void *cnRes_gv,void *cnRes_vv, void **cnD_gv, void **cnD_vv, void **cnC_gv, void **cnC_vv, int iAPE, bool APE_4D){
+void oneEndTrick_w_One_Der(cudaColorSpinorField &x,cudaColorSpinorField &tmp3, cudaColorSpinorField &tmp4,QudaInvertParam *param,
+			   void *cnRes_gv,void *cnRes_vv, void **cnD_gv, void **cnD_vv, void **cnC_gv, void **cnC_vv, int iAPE, bool APE_4D){
+
   void *h_ctrn, *ctrnS, *ctrnC;
 
   if((cudaMallocHost(&h_ctrn, sizeof(Float)*32*GK_localL[0]*GK_localL[1]*GK_localL[2]*GK_localL[3])) == cudaErrorMemoryAllocation)

@@ -16,7 +16,8 @@
 #define MAX_NSOURCES 1000
 #define MAX_NMOMENTA 1000
 #define MAX_TSINK 10
-#define MAX_STEP 10
+#define MAX_SMEAR_FIELD 10
+
 
 
 #define LEXIC(it,iz,iy,ix,L) ( (it)*L[0]*L[1]*L[2] + (iz)*L[0]*L[1] + (iy)*L[0] + (ix) )
@@ -29,6 +30,8 @@
 
 
 namespace quda {
+
+  enum SOURCE_T{UNITY,RANDOM};
 
   typedef struct {
     int nsmearAPE;
@@ -43,15 +46,18 @@ namespace quda {
     int Ntsink;
     int tsinkSource[MAX_TSINK];
     int run3pt_src[MAX_NSOURCES];
+    SOURCE_T source_type;
   } qudaQKXTMinfo_Kepler;
 
   typedef struct {
     int nAPE;
-    int APESteps[MAX_STEP];
-    float APEalpha[MAX_STEP];
+    int APESteps[MAX_SMEAR_FIELD];
+    float APEalpha[MAX_SMEAR_FIELD];
     int nGauss;
-    int GaussSteps[MAX_STEP];
-    float Gaussalpha[MAX_STEP];
+    int GaussSteps[MAX_SMEAR_FIELD];
+    float Gaussalpha[MAX_SMEAR_FIELD];
+    bool APE_4D;
+    char gaugeSmrdFile[MAX_SMEAR_FIELD][512];
   } smearParams;
 
 

@@ -81,6 +81,8 @@ extern int NdumpStep;
 
 extern char fileAPE[];
 
+extern char source_type[];
+
 void
 display_test_info()
 {
@@ -151,8 +153,6 @@ int main(int argc, char **argv)
 
   QudaGaugeParam gauge_param = newQudaGaugeParam();
   QudaInvertParam inv_param = newQudaInvertParam();
- 
-
 
   gauge_param.X[0] = xdim;
   gauge_param.X[1] = ydim;
@@ -163,8 +163,9 @@ int main(int argc, char **argv)
   gauge_param.anisotropy = 1.0;
   gauge_param.type = QUDA_WILSON_LINKS;
   gauge_param.gauge_order = QUDA_QDP_GAUGE_ORDER;
-  gauge_param.t_boundary = QUDA_ANTI_PERIODIC_T;
-  //  gauge_param.t_boundary = QUDA_PERIODIC_T;
+  gauge_param.t_boundary = QUDA_ANTI_PERIODIC_T;    
+  //  gauge_param.t_boundary = QUDA_PERIODIC_T;    
+ 
 
   gauge_param.cpu_prec = cpu_prec;
   gauge_param.cuda_prec = cuda_prec;
@@ -282,9 +283,33 @@ int main(int argc, char **argv)
 
   // *** Everything between here and the call to initQuda() is
   // *** application-specific.
-
   // set parameters for the reference Dslash, and prepare fields to be loaded
 
+
+  //-Read the APE smearing file, if applicable
+  smearParams smearParam;
+  if(strcmp(fileAPE,"NoSmearing")==0){
+    printfQuda("Will not perform 4D APE Smearing\n");
+    smearParam.APE_4D = false;
+    smearParam.nAPE = 1;
+    smearParam.APESteps[0] = 0;
+    smearParam.APEalpha[0] = 0.0;
+  }
+  else{
+    smearParam.APE_4D = true;
+    FILE *APEptr;
+    APEptr = fopen(fileAPE,"r");
+    if(APEptr==NULL){
+      errorQuda("Cannot open %s for APE smearing params. Exiting.\n",fileAPE);
+      exit(-1);
+    }
+    fscanf(APEptr,"%d\n",&smearParam.nAPE);
+    printfQuda("Will perform 4D APE Smearing with the following %d gauge fields and parameters:\n", smearParam.nAPE);
+    for(int iAPE=0;iAPE<smearParam.nAPE;iAPE++){
+      fscanf(APEptr,"%s %d %f\n",&smearParam.gaugeSmrdFile[iAPE][0],&smearParam.APESteps[iAPE],&smearParam.APEalpha[iAPE]);
+      printfQuda("Gauge: %s  - (nAPE,alpha) = (%d,%5.2f)\n",smearParam.gaugeSmrdFile[iAPE],smearParam.APESteps[iAPE],smearParam.APEalpha[iAPE]);
+    }
+  }
 
   setDims(gauge_param.X);
   setSpinorSiteSize(24);
@@ -294,6 +319,7 @@ int main(int argc, char **argv)
 
   void *gauge[4], *clover_inv=0, *clover=0;
   void *gauge_Plaq[4];
+  void *smrdGauge[smearParam.nAPE][4];//, *smrdGauge_Plaq[smearParam.nAPE][4];
 
   for (int dir = 0; dir < 4; dir++) {
     gauge[dir] = malloc(V*gaugeSiteSize*gSize);
@@ -302,25 +328,27 @@ int main(int argc, char **argv)
 
 
   if (strcmp(latfile,"")) {  // load in the command line supplied gauge field
-    // read_gauge_field(latfile, gauge, gauge_param.cpu_prec, gauge_param.X, argc, argv);
-    //    construct_gauge_field(gauge, 2, gauge_param.cpu_prec, &gauge_param);
-    //    printf("I will read the configuration\n");
     readLimeGauge(gauge, latfile, &gauge_param, &inv_param, gridsize_from_cmdline);
     for(int mu = 0 ; mu < 4 ; mu++)memcpy(gauge_Plaq[mu],gauge[mu],V*9*2*sizeof(double));
     mapEvenOddToNormalGauge(gauge_Plaq,gauge_param,xdim,ydim,zdim,tdim);
     applyBoundaryCondition(gauge, V/2 ,&gauge_param);
+    printfQuda("Original gauge field loaded to host\n");
   } else { // else generate a random SU(3) field
     construct_gauge_field(gauge, 1, gauge_param.cpu_prec, &gauge_param);
   }
 
-  if (strcmp(latfile_smeared,"")) {
-    //readLimeGaugeSmeared(gauge_APE, latfile_smeared, &gauge_param, &inv_param, gridsize_from_cmdline);        // first read gauge field without apply BC
-    //mapEvenOddToNormalGauge(gauge_APE,gauge_param,xdim,ydim,zdim,tdim);
-  } else { // else generate a random SU(3) field
-    // construct_gauge_field(gauge_APE, 1, gauge_param.cpu_prec, &gauge_param);
+  if(smearParam.APE_4D){
+    for(int iAPE=0;iAPE<smearParam.nAPE;iAPE++){
+      for (int dir = 0; dir < 4; dir++) smrdGauge[iAPE][dir] = malloc(V*gaugeSiteSize*gSize);
+
+      printfQuda("Reading Smeared gauge field %s\n", smearParam.gaugeSmrdFile[iAPE]);
+      readLimeGaugeSmeared(smrdGauge[iAPE], smearParam.gaugeSmrdFile[iAPE], &gauge_param, &inv_param, gridsize_from_cmdline);
+      //      for(int mu = 0 ; mu < 4 ; mu++) memcpy(smrdGauge_Plaq[iAPE][mu],smrdGauge[iAPE][mu],V*9*2*sizeof(double));
+      //      mapEvenOddToNormalGauge(smrdGauge_Plaq[iAPE],gauge_param,xdim,ydim,zdim,tdim);
+      applyBoundaryCondition(smrdGauge[iAPE], V/2 ,&gauge_param);
+      printfQuda("Done\n");
+    }
   }
-
-
 
   if (dslash_type == QUDA_CLOVER_WILSON_DSLASH || dslash_type == QUDA_TWISTED_CLOVER_DSLASH) {
     double norm = 0.0; // clover components are random numbers in the range (-norm, norm)
@@ -330,8 +358,6 @@ int main(int argc, char **argv)
     clover_inv = malloc(V*cloverSiteSize*cSize);
     construct_clover_field(clover_inv, norm, diag, inv_param.clover_cpu_prec);
   
-
-
     // The uninverted clover term is only needed when solving the unpreconditioned
     // system or when using "asymmetric" even/odd preconditioning.
     int preconditioned = (inv_param.solve_type == QUDA_DIRECT_PC_SOLVE ||
@@ -357,18 +383,26 @@ int main(int argc, char **argv)
 
   qudaQKXTMinfo_Kepler info;
 
+  info.nsmearAPE = nsmearAPE;
+  info.nsmearGauss = nsmearGauss;
+  info.alphaAPE = alphaAPE;
+  info.alphaGauss = alphaGauss;
   info.lL[0] = xdim;
   info.lL[1] = ydim;
   info.lL[2] = zdim;
   info.lL[3] = tdim;
   info.Q_sq = Q_sq;
+  if( strcmp(source_type,"random")==0 ) info.source_type = RANDOM;
+  else if( strcmp(source_type,"unity")==0 ) info.source_type = UNITY;
+  else{
+    printf("Wrong type for stochastic source type. Must be either random/unity. Exiting.\n");
+    exit(1);
+  }
 
 
   initQuda(device);
   init_qudaQKXTM_Kepler(&info);
   printf_qudaQKXTM_Kepler();
-
-
 
   // load the gauge field
   loadGaugeQuda((void*)gauge, &gauge_param);
@@ -377,34 +411,23 @@ int main(int argc, char **argv)
     free(gauge[i]);
   } 
 
+  if(smearParam.APE_4D){
+    for(int iAPE=0;iAPE<smearParam.nAPE;iAPE++){
+      loadGaugeSmearedQuda((void*)smrdGauge[iAPE], &gauge_param,iAPE);
+      printfQuda("Smeared Gauge field %s loaded to Quda\n", smearParam.gaugeSmrdFile[iAPE]);
+
+      for(int i = 0 ; i < 4 ; i++){
+	free(smrdGauge[iAPE][i]);
+      } 
+    }
+  }
+   
+
   // load the clover term, if desired
   if (dslash_type == QUDA_CLOVER_WILSON_DSLASH) loadCloverQuda(clover, clover_inv, &inv_param);
 
   if (dslash_type == QUDA_TWISTED_CLOVER_DSLASH) loadCloverQuda(NULL, NULL, &inv_param);
   //if (dslash_type == QUDA_TWISTED_CLOVER_DSLASH) loadCloverQuda(clover,clover_inv, &inv_param);
-
-
-
-  //-Read the APE smearing file, if applicable
-  smearParams smearParam;
-  if(strcmp(fileAPE,"NoSmearing")==0){
-    smearParam.nAPE = 1;
-    smearParam.APESteps[0] = 0;
-    smearParam.APEalpha[0] = 0.0;
-  }
-  else{
-    FILE *APEptr;
-    APEptr = fopen(fileAPE,"r");
-    if(APEptr==NULL){
-      errorQuda("Cannot open %s for APE smearing params. Exiting.\n",fileAPE);
-      exit(-1);
-    }
-    fscanf(APEptr,"%d\n",&smearParam.nAPE);
-    for(int iAPE=0;iAPE<smearParam.nAPE;iAPE++){
-      fscanf(APEptr,"%d %f\n",&smearParam.APESteps[iAPE],&smearParam.APEalpha[iAPE]);
-    }
-  }
-
 
   DeflateAndInvert_loop_w_One_Der(gauge_Plaq,&inv_param,gauge_param,pathEigenValuesDown,pathEigenVectorsDown,loop_filename,NeV,Nstoch,seed,NdumpStep,info,smearParam);
   

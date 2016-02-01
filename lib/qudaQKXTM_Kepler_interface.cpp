@@ -1383,10 +1383,41 @@ void getStochasticRandomSource(void *spinorIn, gsl_rng *rNum){
   for(int i = 0; i<GK_localVolume*12; i++){
     int randomNumber = gsl_rng_uniform_int(rNum, 4);
 
-    //    ((Float*) spinorIn)[i*2] = 1.0;
+    //((Float*) spinorIn)[i*2] = 1.0;
     //    ((Float*) spinorIn)[i*2+1] = 0.0;
-
     switch  (randomNumber){
+    case 0:
+      ((Float*) spinorIn)[i*2] = 1.;
+      break;
+    case 1:
+      ((Float*) spinorIn)[i*2] = -1.;
+      break;
+    case 2:
+      ((Float*) spinorIn)[i*2+1] = 1.;
+      break;
+    case 3:
+      ((Float*) spinorIn)[i*2+1] = -1.;
+      break;
+    }
+    
+  }
+
+}
+
+template <typename Float>
+void getStochasticRandomSource(void *spinorIn, gsl_rng *rNum, SOURCE_T source_type){
+  memset(spinorIn,0,GK_localVolume*12*2*sizeof(Float));
+  for(int i = 0; i<GK_localVolume*12; i++){
+    int randomNumber = gsl_rng_uniform_int(rNum, 4);
+
+    if(source_type==UNITY){
+      //      printfQuda("Creating UNITY stochastic source...\n");
+      ((Float*) spinorIn)[i*2] = 1.0;
+      ((Float*) spinorIn)[i*2+1] = 0.0;
+    }
+    else if(source_type==RANDOM){
+      //      printfQuda("Creating RANDOM stochastic source...\n");
+      switch  (randomNumber){
       case 0:
 	((Float*) spinorIn)[i*2] = 1.;
 	break;
@@ -1399,11 +1430,39 @@ void getStochasticRandomSource(void *spinorIn, gsl_rng *rNum){
       case 3:
 	((Float*) spinorIn)[i*2+1] = -1.;
 	break;
+      }
     }
-
+    
   }
 
 }
+
+
+template <typename Float>
+void dumpStochasticRandomSource(Float *source, char *base_name, int is){
+
+  char filename[512];
+  FILE *ptr_out;
+
+  sprintf(filename,"%s_src%d.%d_%d", base_name, is, comm_size(), comm_rank());
+  
+  ptr_out=fopen(filename,"w");
+
+  if( ptr_out==NULL) errorQuda("Cannot open %s for writing. Exiting.\n",filename);
+
+  for(int x=0;x<GK_localL[0];x++)
+    for(int y=0;y<GK_localL[1];y++)
+      for(int z=0;z<GK_localL[2];z++)
+	for(int t=0;t<GK_localL[3];t++)
+	  for(int mu=0;mu<4;mu++)
+	    for(int c1=0;c1<3;c1++){
+	      int pos = t*GK_localL[2]*GK_localL[1]*GK_localL[0]*4*3*2 + z*GK_localL[1]*GK_localL[0]*4*3*2 + y*GK_localL[0]*4*3*2 + x*4*3*2 + mu*3*2 + c1*2;
+	      fprintf(ptr_out,"%d %d %d %d %d %d %+e %+e\n",x,y,z,t,mu,c1,((Float*)source)[pos+0],((Float*)source)[pos+1]);
+	    }
+  
+  fclose(ptr_out);
+}
+
 
 
 void DeflateAndInvert_loop(void **gaugeToPlaquette, QudaInvertParam *param ,QudaGaugeParam *gauge_param, char *filename_eigenValues_down, char *filename_eigenVectors_down,char *filename_out , int NeV , int Nstoch, int seed ,int NdumpStep, qudaQKXTMinfo_Kepler info){
@@ -1784,85 +1843,76 @@ void DeflateAndInvert_loop_w_One_Der(void **gaugeToPlaquette, QudaInvertParam *p
   }
 
   ///////////////////////////////////////////////////
+  if(info.source_type==RANDOM) printfQuda("Will use RANDOM stochastic sources\n");
+  else if (info.source_type==UNITY) printfQuda("Will use UNITY stochastic sources\n");
+
   gsl_rng *rNum = gsl_rng_alloc(gsl_rng_ranlux);
   gsl_rng_set(rNum, seed + comm_rank()*seed);
 
-  bool APE_4D = true;
-  if(smearParam.nAPE==1 && (smearParam.APESteps[0]==0)) APE_4D = false;
+//   bool APE_4D = smearParam.APE_4D;
+//   if(APE_4D){
+//     printfQuda("Will perform 4D APE Smearing for %d sets of parameters\n",smearParam.nAPE);
+    
+//     int nSteps;
+//     float alpha;
+//     double pl[3];
+//     double3 plaq;
+    
+//     plaqQuda(pl);
+//     printfQuda("Plaquette of un-smeared gauge field: %le\n",pl[0]);    
+    
+//     t1 = MPI_Wtime();
+//     for(int iAPE=0;iAPE<smearParam.nAPE; iAPE++){
+//       gaugeSmrd[iAPE] = NULL;
+//       nSteps = smearParam.APESteps[iAPE];
+//       alpha = smearParam.APEalpha[iAPE];
+//       if(nSteps<0 || alpha<0){
+// 	errorQuda("oneEndTrick: APE steps and alpha must be positive!!!");
+// 	exit(-1);
+//       }
+//       printfQuda("APE iter %d, Params: (%d,%4.2f) \n",iAPE,nSteps,alpha);
+      
+//       if(nSteps==0){
+// 	printfQuda("No Smearing performed\n");
+// 	copyGaugeSmrdQuda(gaugePrecise,0);
+//       }
+//       else{      
+// 	performAPEnStep(nSteps, alpha);
+// 	copyGaugeSmrdQuda(gaugeSmeared,iAPE);      
+//       }
+//     }//-for iAPE
+    
+//     plaqQuda(pl);
+//     printfQuda("Plaquette of un-smeared gauge field after redefinition: %le\n",pl[0]);    
+    
+//     t2 = MPI_Wtime();
+//     printfQuda("oneEndTrick: 4D-APE Smearing completed in %f secs\n",t2-t1);    
+//   }
+//   else{
+//     printfQuda("Will not perform 4D APE Smearing\n");
+//   }
 
+
+  bool APE_4D = smearParam.APE_4D;
   if(APE_4D){
-    t1 = MPI_Wtime();
-    int nSteps;
-    float alpha;
-    double3 plaq;
-
-    gaugeSmrd[0] = NULL;
-    printfQuda("Will perform 4D APE Smearing for %d sets of parameters\n",smearParam.nAPE);
-    printfQuda("APE iter 0, Params: (%d,%4.2f) \n",smearParam.APESteps[0],smearParam.APEalpha[0]);
-    if(smearParam.APESteps[0]==0){
-      copyGaugeSmrdQuda(gaugePrecise,0);
-      plaq = plaquette(*gaugeSmrd[0], QUDA_CUDA_FIELD_LOCATION);
-      printfQuda("No Smearing performed. Plaquette  = %le\n",plaq.x);
-      plaq = plaquette(*gaugePrecise, QUDA_CUDA_FIELD_LOCATION);
-      printfQuda("No Smearing performed. Plaquette2 = %le\n",plaq.x);    
-      printfQuda("iAPE 0: Smeared Volume %d\n",gaugeSmrd[0]->Volume());
-      printfQuda("iAPE 0: Smeared VolumeCB %d\n",gaugeSmrd[0]->VolumeCB());
+    printfQuda("Plaquettes of gauge fields used for the loop\n");
+    double plaq[3];
+    for(int iAPE=0;iAPE<smearParam.nAPE; iAPE++){
+      plaqQudaSmeared(plaq,iAPE);
+      printfQuda("Plaquette of Smeared gauge field %d: %le\n", iAPE, plaq[0]);
     }
-    else{
-      nSteps = smearParam.APESteps[0];
-      alpha = smearParam.APEalpha[0];
-      performAPEnStep(nSteps, alpha);
-      copyGaugeSmrdQuda(gaugeSmeared,0);      
-      plaq = plaquette(*gaugeSmrd[0], QUDA_CUDA_FIELD_LOCATION);
-      printfQuda("iAPE 0: Plaquette  = %le\n",plaq.x);
-      printfQuda("iAPE 0: Smeared Volume %d\n",gaugeSmrd[0]->Volume());
-      printfQuda("iAPE 0: Smeared VolumeCB %d\n",gaugeSmrd[0]->VolumeCB());
-    }
-    
-    
-    for(int iAPE=1;iAPE<smearParam.nAPE; iAPE++){
-      gaugeSmrd[iAPE] = NULL;
-      nSteps = smearParam.APESteps[iAPE];// - smearParam.APESteps[iAPE-1];
-      alpha = smearParam.APEalpha[iAPE];
-      if(nSteps<0 || alpha<=0){
-	errorQuda("oneEndTrick: Your Smearing steps must be in ascending order!");
-	errorQuda("oneEndTrick: APE steps and alpha must be positive!!!");
-	exit(-1);
-      }
-      else if(nSteps==0){
-	errorQuda("oneEndTrick: Two identical smearing parameters detected!");
-	exit(-1);
-      }	
-      printfQuda("APE iter %d, Params: (%d,%4.2f) \n",iAPE,smearParam.APESteps[iAPE],smearParam.APEalpha[iAPE]);
-      
-      performAPEnStep(nSteps, alpha);
-      copyGaugeSmrdQuda(gaugeSmeared,iAPE);
-      
-      plaq = plaquette(*gaugeSmrd[iAPE], QUDA_CUDA_FIELD_LOCATION);
-      printfQuda("iAPE %d: Plaquette  = %le\n",iAPE,plaq.x);
-      printfQuda("iAPE %d: Smeared Volume %d\n",iAPE,gaugeSmrd[iAPE]->Volume());
-      printfQuda("iAPE %d: Smeared VolumeCB %d\n",iAPE,gaugeSmrd[iAPE]->VolumeCB());
-    }//-for iAPE
-
-    t2 = MPI_Wtime();
-    printfQuda("oneEndTrick: 4D-APE Smearing completed in %f secs\n",t2-t1);
-    
-    plaq = plaquette(*gaugePrecise, QUDA_CUDA_FIELD_LOCATION);
-    printfQuda("Original plaquette = %le\n",plaq.x);    
-    double plaq2[3];
-    plaqQuda(plaq2);
-    printfQuda("Original plaquette from plaqQuda = %le\n",plaq2[0]);    
-    printfQuda("Original Volume %d\n",gaugePrecise->Volume());
-    printfQuda("Original VolumeCB %d\n",gaugePrecise->VolumeCB());
   }
   else{
     printfQuda("Will not perform 4D APE Smearing\n");
   }
 
+  char source_name[512] = "rand";
+
   for(int is = 0 ; is < Nstoch ; is++){
     t1 = MPI_Wtime();
     memset(input_vector,0,X[0]*X[1]*X[2]*X[3]*spinorSiteSize*sizeof(double));
-    getStochasticRandomSource<double>(input_vector,rNum);
+    getStochasticRandomSource<double>(input_vector,rNum,info.source_type);
+    //    dumpStochasticRandomSource((double*) input_vector, source_name, is);
     K_vector->packVector((double*) input_vector);
     K_vector->loadVector();
     K_vector->uploadToCuda(b,flag_eo);
@@ -1880,6 +1930,9 @@ void DeflateAndInvert_loop_w_One_Der(void **gaugeToPlaquette, QudaInvertParam *p
     //  zeroCuda(*out); // remove it later , just for test
     (*solve)(*out,*in);
     dirac.reconstruct(*x,*b,param->solution_type);
+    t2 = MPI_Wtime();
+    printfQuda("Inversion %d finished in %f sec\n",is,t2-t1);
+    t1 = MPI_Wtime();
 
     if(APE_4D){
       for(int iAPE=0;iAPE<smearParam.nAPE; iAPE++){
@@ -1893,7 +1946,7 @@ void DeflateAndInvert_loop_w_One_Der(void **gaugeToPlaquette, QudaInvertParam *p
     }
 
     t2 = MPI_Wtime();
-    printfQuda("Stoch %d finished in %f sec\n",is,t2-t1);
+    printfQuda("OneEnd %d finished in %f sec\n",is,t2-t1);
     if( (is+1)%NdumpStep == 0){
       doCudaFFT_v2<double>(cnRes_vv,cnTmp);
       dumpLoop_ultraLocal<double>(cnTmp,filename_out,is+1,info.Q_sq,0); // Scalar
@@ -1914,6 +1967,7 @@ void DeflateAndInvert_loop_w_One_Der(void **gaugeToPlaquette, QudaInvertParam *p
 	    doCudaFFT_v2<double>(cnC_gv[iAPE][mu],cnTmp);
 	    dumpLoop_oneD<double>(cnTmp,filename_APE,is+1,info.Q_sq,mu,3); // LpsDw noether
 	  }
+	  printfQuda("iAPE %d: Data dumping done\n",iAPE);
 	}
       }
       else{
@@ -1931,7 +1985,6 @@ void DeflateAndInvert_loop_w_One_Der(void **gaugeToPlaquette, QudaInvertParam *p
 	}
       }
     } // close loop for dump loops
-
   } // close loop over stochastic vectors
 
   cudaFreeHost(cnRes_gv);
