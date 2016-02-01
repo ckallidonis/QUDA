@@ -1163,7 +1163,10 @@ void getStochasticRandomSource(void *spinorIn, gsl_rng *rNum, SOURCE_T source_ty
 	((Float*) spinorIn)[i*2+1] = -1.;
 	break;
       }
-    }    
+    }
+    else{
+      errorQuda("Source type not set correctly!! Aborting.\n");
+    }
   }
 
 }
