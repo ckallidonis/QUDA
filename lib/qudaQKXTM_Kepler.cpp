@@ -2839,6 +2839,31 @@ void dumpLoop(void *cnRes_gv, void *cnRes_vv, const char *Pref,int accumLevel, i
 }
 
 template<typename Float>
+void copyToWriteBuf(Float *writeBuf, void *tmpBuf, int iPrint, int Q_sq, int Nmoms){
+
+  int **mom = allocateMomMatrix(Q_sq);
+  long int SplV = GK_localL[0]*GK_localL[1]*GK_localL[2];
+  int imom = 0;
+
+  for(int ip=0; ip < SplV; ip++){
+    if ((mom[ip][0]*mom[ip][0] + mom[ip][1]*mom[ip][1] + mom[ip][2]*mom[ip][2]) <= Q_sq){
+      for(int lt=0; lt < GK_localL[3]; lt++){
+        for(int gm=0; gm<16; gm++){
+          writeBuf[0+2*imom+2*Nmoms*lt+2*Nmoms*GK_localL[3]*gm+2*Nmoms*GK_localL[3]*16*iPrint] = ((Float*)tmpBuf)[0+2*ip+2*SplV*lt+2*SplV*GK_localL[3]*gm];
+          writeBuf[1+2*imom+2*Nmoms*lt+2*Nmoms*GK_localL[3]*gm+2*Nmoms*GK_localL[3]*16*iPrint] = ((Float*)tmpBuf)[1+2*ip+2*SplV*lt+2*SplV*GK_localL[3]*gm];
+        }//-gm
+      }//-lt
+      imom++;
+    }//-if
+  }//-ip
+
+  for(int ip=0; ip<SplV; ip++)
+    free(mom[ip]);
+  free(mom);
+}
+
+
+template<typename Float>
 void dumpLoop_ultraLocal(void *cn, const char *Pref,int accumLevel, int Q_sq, int flag){
   int **mom = allocateMomMatrix(Q_sq);
   FILE *ptr;
