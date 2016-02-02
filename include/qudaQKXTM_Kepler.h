@@ -61,6 +61,18 @@ namespace quda {
   } smearParams;
 
 
+  typedef struct{
+    int Nstoch;
+    unsigned long int seed;
+    int Ndump;
+    int Nprint;
+    int Nmoms;
+    char loop_fname[512];
+    char *loop_type[6];// = {"Scalar","dOp","Loops","LoopsCv","LpsDw","LpsDwCv"};
+    bool loop_oneD[6];// = {false,false,true,true,true,true};
+  }qudaQKXTM_loopInfo;
+
+
   // forward declaration
 template<typename Float>  class QKXTM_Field_Kepler;
 template<typename Float>  class QKXTM_Gauge_Kepler;
@@ -291,7 +303,7 @@ void checkDeflateVectorQuda(void **gauge,QudaInvertParam *param ,QudaGaugeParam 
 void checkDeflateAndInvert(void **gaugeToPlaquette, QudaInvertParam *param ,QudaGaugeParam *gauge_param, char *filename_eigenValues, char *filename_eigenVectors, char *filename_out,int NeV );
 void DeflateAndInvert_twop(void **gaugeToPlaquette, QudaInvertParam *param ,QudaGaugeParam *gauge_param, char *filename_eigenValues_up, char *filename_eigenVectors_up, char *filename_eigenValues_down, char *filename_eigenVectors_down, char *filename_out,int NeV, quda::qudaQKXTMinfo_Kepler info );
 void DeflateAndInvert_loop(void **gaugeToPlaquette, QudaInvertParam *param ,QudaGaugeParam *gauge_param, char *filename_eigenValues_down, char *filename_eigenVectors_down,char *filename_out , int NeV , int Nstoch, int seed , int NdumpStep, quda::qudaQKXTMinfo_Kepler info);
-void DeflateAndInvert_loop_w_One_Der(void **gaugeToPlaquette, QudaInvertParam *param ,QudaGaugeParam gauge_param, char *filename_eigenValues_down, char *filename_eigenVectors_down,char *filename_out , int NeV , int Nstoch, int seed , int NdumpStep, quda::qudaQKXTMinfo_Kepler info, quda::smearParams smearParam);
+void DeflateAndInvert_loop_w_One_Der(void **gaugeToPlaquette, QudaInvertParam *param ,QudaGaugeParam gauge_param, char *filename_eigenValues_down, char *filename_eigenVectors_down,quda::qudaQKXTM_loopInfo loopInfo, int NeV, quda::qudaQKXTMinfo_Kepler info, quda::smearParams smearParam);
 void DeflateAndInvert_loop_w_One_Der_volumeSource(void **gaugeToPlaquette, QudaInvertParam *param ,QudaGaugeParam *gauge_param,char *filename_eigenValues_up, char *filename_eigenVectors_up, char *filename_eigenValues_down, char *filename_eigenVectors_down,char *filename_out , int NeV , int Nstoch, int seed , int NdumpStep, quda::qudaQKXTMinfo_Kepler info);
 void DeflateAndInvert_threepTwop(void **gaugeSmeared, void **gauge, QudaInvertParam *param ,QudaGaugeParam *gauge_param, char *filename_eigenValues_up, char *filename_eigenVectors_up, char *filename_eigenValues_down, char *filename_eigenVectors_down, char *filename_twop, char *filename_threep,int NeV, quda::qudaQKXTMinfo_Kepler info, quda::WHICHPARTICLE NUCLEON, quda::WHICHPROJECTOR PID );
 #endif

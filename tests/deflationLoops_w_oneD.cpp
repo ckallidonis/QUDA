@@ -285,7 +285,6 @@ int main(int argc, char **argv)
   // *** application-specific.
   // set parameters for the reference Dslash, and prepare fields to be loaded
 
-
   //-Read the APE smearing file, if applicable
   smearParams smearParam;
   if(strcmp(fileAPE,"NoSmearing")==0){
@@ -399,7 +398,6 @@ int main(int argc, char **argv)
     exit(1);
   }
 
-
   initQuda(device);
   init_qudaQKXTM_Kepler(&info);
   printf_qudaQKXTM_Kepler();
@@ -429,7 +427,18 @@ int main(int argc, char **argv)
   if (dslash_type == QUDA_TWISTED_CLOVER_DSLASH) loadCloverQuda(NULL, NULL, &inv_param);
   //if (dslash_type == QUDA_TWISTED_CLOVER_DSLASH) loadCloverQuda(clover,clover_inv, &inv_param);
 
-  DeflateAndInvert_loop_w_One_Der(gauge_Plaq,&inv_param,gauge_param,pathEigenValuesDown,pathEigenVectorsDown,loop_filename,NeV,Nstoch,seed,NdumpStep,info,smearParam);
+
+  qudaQKXTM_loopInfo loopInfo;
+
+  loopInfo.Nstoch = Nstoch;
+  loopInfo.seed = seed;
+  loopInfo.Ndump = NdumpStep;
+  strcpy(loopInfo.loop_fname,loop_filename);
+
+  if(loopInfo.Nstoch%loopInfo.Ndump==0) loopInfo.Nprint = loopInfo.Nstoch/loopInfo.Ndump;
+  else errorQuda("NdumpStep MUST divide Nstoch exactly! Exiting.\n");
+
+  DeflateAndInvert_loop_w_One_Der(gauge_Plaq,&inv_param,gauge_param,pathEigenValuesDown,pathEigenVectorsDown,loopInfo,NeV,info,smearParam);
   
   freeGaugeQuda();
   if (dslash_type == QUDA_CLOVER_WILSON_DSLASH || dslash_type == QUDA_TWISTED_CLOVER_DSLASH) freeCloverQuda();
