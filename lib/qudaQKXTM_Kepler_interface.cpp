@@ -3396,13 +3396,13 @@ void calcEigenVectors_threepTwop_EvenOdd(void **gaugeSmeared, void **gauge, Quda
 
   for(int isource = 0 ; isource < info.Nsources ; isource++){
 
-     sprintf(filename_mesons,"%s.mesons.SS.%02d.%02d.%02d.%02d.dat",filename_twop,info.sourcePosition[isource][0],info.sourcePosition[isource][1],info.sourcePosition[isource][2],info.sourcePosition[isource][3]);
-     sprintf(filename_baryons,"%s.baryons.SS.%02d.%02d.%02d.%02d.dat",filename_twop,info.sourcePosition[isource][0],info.sourcePosition[isource][1],info.sourcePosition[isource][2],info.sourcePosition[isource][3]);
+    sprintf(filename_mesons,"%s.mesons.SS.%02d.%02d.%02d.%02d.dat",filename_twop,info.sourcePosition[isource][0],info.sourcePosition[isource][1],info.sourcePosition[isource][2],info.sourcePosition[isource][3]);
+    sprintf(filename_baryons,"%s.baryons.SS.%02d.%02d.%02d.%02d.dat",filename_twop,info.sourcePosition[isource][0],info.sourcePosition[isource][1],info.sourcePosition[isource][2],info.sourcePosition[isource][3]);
 
-//      bool checkMesons, checkBaryons;
-//      checkMesons = exists_file(filename_mesons);
-//      checkBaryons = exists_file(filename_baryons);
-//      if( (checkMesons == true) && (checkBaryons == true) ) continue; // because threep are written before twop if I checked twop I know that threep are fine
+    bool checkMesons, checkBaryons;
+    checkMesons = exists_file(filename_mesons);
+    checkBaryons = exists_file(filename_baryons);
+    if( (checkMesons == true) && (checkBaryons == true) ) continue; // because threep are written before twop if I checked twop I know that threep are fine
 
     for(int isc = 0 ; isc < 12 ; isc++){
       ///////////////////////////////////////////////////////////////////////////////// forward prop for up quark ///////////////////////////

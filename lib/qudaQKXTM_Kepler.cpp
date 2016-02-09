@@ -4043,6 +4043,7 @@ void QKXTM_Deflation_Kepler<Float>::deflateSrcVec(QKXTM_Vector_Kepler<Float> &ve
   vec_defl.packVector((Float*) tmp_vec);
   vec_defl.loadVector();
 
+  free(ptr_elem);
   free(tmp_vec);
   free(out_vec);
   free(out_vec_reduce);
@@ -4150,6 +4151,7 @@ void QKXTM_Deflation_Kepler<Float>::deflateSrcVec(QKXTM_Vector_Kepler<Float> &ve
   vec_defl.packVector((Float*) tmp_vec);
   vec_defl.loadVector();
 
+  free(ptr_elem);
   free(tmp_vec);
   free(out_vec);
   free(out_vec_reduce);

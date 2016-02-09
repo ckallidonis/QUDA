@@ -1610,7 +1610,7 @@ char pathEigenValuesDown[257] = "evals_d.dat";
 int PolyDeg = 100;     // degree of the Chebysev polynomial
 int nEv = 100;         // Number of the eigenvectors we want
 int nKv = 200;         // total size of Krylov space
-char *spectrumPart; // for which part of the spectrum we want to solve
+char *spectrumPart = "SR"; // for which part of the spectrum we want to solve
 bool isACC = true;
 double tolArpack = 1.0e-5;
 int maxIterArpack = 100000;
@@ -1797,7 +1797,7 @@ int process_command_line_option(int argc, char** argv, int* idx)
     goto out;
   }
 
-  spectrumPart = strdup("SR");
+  //  spectrumPart = strdup("SR");
   if( strcmp(argv[i], "--spectrumPart") ==0){
     if(i+1 >= argc){
       usage(argv);
