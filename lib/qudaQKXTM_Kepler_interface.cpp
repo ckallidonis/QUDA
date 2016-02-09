@@ -1739,12 +1739,12 @@ void DeflateAndInvert_loop_w_One_Der(void **gaugeToPlaquette, QudaInvertParam *p
   char filename_out[512];
   strcpy(filename_out,loopInfo.loop_fname);
 
-  loopInfo.loop_type[0] = "Scalar";      loopInfo.loop_oneD[0] = false; 
-  loopInfo.loop_type[1] = "Loops";       loopInfo.loop_oneD[1] = false; 
-  loopInfo.loop_type[2] = "Loops";       loopInfo.loop_oneD[2] = true;	 
-  loopInfo.loop_type[3] = "LoopsCv";     loopInfo.loop_oneD[3] = true;	 
-  loopInfo.loop_type[4] = "LpsDw";       loopInfo.loop_oneD[4] = true;	 
-  loopInfo.loop_type[5] = "LpsDwCv";     loopInfo.loop_oneD[5] = true;  
+  loopInfo.loop_type[0] = "Scalar";      loopInfo.loop_oneD[0] = false;   // std-ultra_local
+  loopInfo.loop_type[1] = "dOp";         loopInfo.loop_oneD[1] = false;   // gen-ultra_local
+  loopInfo.loop_type[2] = "Loops";       loopInfo.loop_oneD[2] = true;    // std-one_derivative
+  loopInfo.loop_type[3] = "LoopsCv";     loopInfo.loop_oneD[3] = true;    // gen-one_derivative
+  loopInfo.loop_type[4] = "LpsDw";       loopInfo.loop_oneD[4] = true;    // std-conserved current
+  loopInfo.loop_type[5] = "LpsDwCv";     loopInfo.loop_oneD[5] = true;    // gen-conserved current
 
   printfQuda("Loop Calculation Info\n");
   printfQuda("=====================\n");
@@ -1914,14 +1914,27 @@ void DeflateAndInvert_loop_w_One_Der(void **gaugeToPlaquette, QudaInvertParam *p
     printfQuda("Will not perform 4D APE Smearing\n");
   }
 
-  //  char source_name[512] = "rand";
+
+  //-Allocate the momenta
+  int **mom,**momQsq;
+  long int SplV = GK_localL[0]*GK_localL[1]*GK_localL[2];
+  if((mom =    (int**) malloc(sizeof(int*)*SplV )) == NULL) errorQuda("Error in allocating mom\n");
+  if((momQsq = (int**) malloc(sizeof(int*)*Nmoms)) == NULL) errorQuda("Error in allocating momQsq\n");
+  for(int ip=0; ip<SplV; ip++)
+    if((mom[ip] = (int*) malloc(sizeof(int)*3)) == NULL) errorQuda("Error in allocating mom[%d]\n",ip);
+
+  for(int ip=0; ip<Nmoms; ip++)
+    if((momQsq[ip] = (int *) malloc(sizeof(int)*3)) == NULL) errorQuda("Error in allocating momQsq[%d]\n",ip);
+
+  createMomenta(mom,momQsq,info.Q_sq,Nmoms);
+  printfQuda("Momenta created\n");
+  //---------------------------------------------------------------
 
   int iPrint = 0;  
   for(int is = 0 ; is < Nstoch ; is++){
     t1 = MPI_Wtime();
     memset(input_vector,0,X[0]*X[1]*X[2]*X[3]*spinorSiteSize*sizeof(double));
     getStochasticRandomSource<double>(input_vector,rNum,info.source_type);
-    //    dumpStochasticRandomSource((double*) input_vector, source_name, is);
     K_vector->packVector((double*) input_vector);
     K_vector->loadVector();
     K_vector->uploadToCuda(b,flag_eo);
@@ -1959,70 +1972,61 @@ void DeflateAndInvert_loop_w_One_Der(void **gaugeToPlaquette, QudaInvertParam *p
     //-Copy to the write Bufs
     if( (is+1)%NdumpStep == 0){
       doCudaFFT_v2<double>(cnRes_vv,cnTmp); // Scalar
-      copyToWriteBuf(buf_std_uloc,cnTmp,iPrint,info.Q_sq,Nmoms); 
+      copyToWriteBuf(buf_std_uloc,cnTmp,iPrint,info.Q_sq,Nmoms,mom); 
       doCudaFFT_v2<double>(cnRes_gv,cnTmp); // dOp
-      copyToWriteBuf(buf_gen_uloc,cnTmp,iPrint,info.Q_sq,Nmoms); 
+      copyToWriteBuf(buf_gen_uloc,cnTmp,iPrint,info.Q_sq,Nmoms,mom); 
 
       for(int iAPE=0;iAPE<smearParam.nAPE; iAPE++){
 	for(int mu = 0 ; mu < 4 ; mu++){
 	  doCudaFFT_v2<double>(cnD_vv[iAPE][mu],cnTmp); // Loops
-	  copyToWriteBuf(buf_std_oneD[iAPE][mu],cnTmp,iPrint,info.Q_sq,Nmoms); 
+	  copyToWriteBuf(buf_std_oneD[iAPE][mu],cnTmp,iPrint,info.Q_sq,Nmoms,mom); 
 
 	  doCudaFFT_v2<double>(cnD_gv[iAPE][mu],cnTmp); // LpsDw
-	  copyToWriteBuf(buf_gen_oneD[iAPE][mu],cnTmp,iPrint,info.Q_sq,Nmoms); 
+	  copyToWriteBuf(buf_gen_oneD[iAPE][mu],cnTmp,iPrint,info.Q_sq,Nmoms,mom); 
 
 	  doCudaFFT_v2<double>(cnC_vv[iAPE][mu],cnTmp); // LoopsCv
-	  copyToWriteBuf(buf_std_csvC[iAPE][mu],cnTmp,iPrint,info.Q_sq,Nmoms); 
+	  copyToWriteBuf(buf_std_csvC[iAPE][mu],cnTmp,iPrint,info.Q_sq,Nmoms,mom); 
 
 	  doCudaFFT_v2<double>(cnC_gv[iAPE][mu],cnTmp); // LpsDwCv
-	  copyToWriteBuf(buf_gen_csvC[iAPE][mu],cnTmp,iPrint,info.Q_sq,Nmoms); 
+	  copyToWriteBuf(buf_gen_csvC[iAPE][mu],cnTmp,iPrint,info.Q_sq,Nmoms,mom); 
 	}
       }
 
+      printfQuda("Loops for Nstoch = %d copied to write buffers\n",is+1);
       iPrint++;
     }//-if
 
   } // close loop over stochastic vectors
 
-//      dumpLoop_ultraLocal<double>(cnTmp,filename_out,is+1,info.Q_sq,0); // Scalar
-//      dumpLoop_ultraLocal<double>(cnTmp,filename_out,is+1,info.Q_sq,1); // dOp
-//       if(APE_4D){
-// 	for(int iAPE=0;iAPE<smearParam.nAPE; iAPE++){
-// 	  sprintf(filename_APE,"%s_nAPE%d_alphaAPE0p%02.0f",filename_out,smearParam.APESteps[iAPE],smearParam.APEalpha[iAPE]*100);
-// 	  for(int mu = 0 ; mu < 4 ; mu++){
-// 	    doCudaFFT_v2<double>(cnD_vv[iAPE][mu],cnTmp);
-// 	    dumpLoop_oneD<double>(cnTmp,filename_APE,is+1,info.Q_sq,mu,0); // Loops
-// 	    doCudaFFT_v2<double>(cnD_gv[iAPE][mu],cnTmp);
-// 	    dumpLoop_oneD<double>(cnTmp,filename_APE,is+1,info.Q_sq,mu,1); // LpsDw
-	    
-// 	    doCudaFFT_v2<double>(cnC_vv[iAPE][mu],cnTmp);
-// 	    dumpLoop_oneD<double>(cnTmp,filename_APE,is+1,info.Q_sq,mu,2); // LpsDw noether
-// 	    doCudaFFT_v2<double>(cnC_gv[iAPE][mu],cnTmp);
-// 	    dumpLoop_oneD<double>(cnTmp,filename_APE,is+1,info.Q_sq,mu,3); // LpsDw noether
-// 	  }
-// 	  printfQuda("iAPE %d: Data dumping done\n",iAPE);
-// 	}
-//       }
-//       else{
-// 	int iAPE = 0;
-// 	for(int mu = 0 ; mu < 4 ; mu++){
-// 	  doCudaFFT_v2<double>(cnD_vv[iAPE][mu],cnTmp);
-// 	  dumpLoop_oneD<double>(cnTmp,filename_out,is+1,info.Q_sq,mu,0); // Loops
-// 	  doCudaFFT_v2<double>(cnD_gv[iAPE][mu],cnTmp);
-// 	  dumpLoop_oneD<double>(cnTmp,filename_out,is+1,info.Q_sq,mu,1); // LpsDw
-	  
-// 	  doCudaFFT_v2<double>(cnC_vv[iAPE][mu],cnTmp);
-// 	  dumpLoop_oneD<double>(cnTmp,filename_out,is+1,info.Q_sq,mu,2); // LpsDw noether
-// 	  doCudaFFT_v2<double>(cnC_gv[iAPE][mu],cnTmp);
-// 	  dumpLoop_oneD<double>(cnTmp,filename_out,is+1,info.Q_sq,mu,3); // LpsDw noether
-// 	}
-//       }
-//     } // close loop for dump loops
-
-
   //-Write the loops in HDF5 format
   // FIXME: Might need updated arguments
   //  writeLoops_HDF5(buf_std_uloc, buf_gen_uloc, buf_std_oneD, buf_gen_oneD, buf_std_csvC, buf_gen_csvC, loopInfo);
+
+
+  //-Write the loops in ASCII format
+  writeLoops_ASCII(buf_std_uloc, filename_out, loopInfo, momQsq, 0, 0); // Scalar
+  writeLoops_ASCII(buf_gen_uloc, filename_out, loopInfo, momQsq, 1, 0); // dOp
+
+  if(APE_4D){
+    for(int iAPE=0;iAPE<smearParam.nAPE; iAPE++){
+      sprintf(filename_APE,"%s_nAPE%d_alphaAPE0p%02.0f",filename_out,smearParam.APESteps[iAPE],smearParam.APEalpha[iAPE]*100);
+      for(int mu = 0 ; mu < 4 ; mu++){
+	writeLoops_ASCII(buf_std_oneD[iAPE][mu], filename_APE, loopInfo, momQsq, 2, mu); // Loops	 
+	writeLoops_ASCII(buf_std_csvC[iAPE][mu], filename_APE, loopInfo, momQsq, 3, mu); // LoopsCv
+	writeLoops_ASCII(buf_gen_oneD[iAPE][mu], filename_APE, loopInfo, momQsq, 4, mu); // LpsDw	 
+	writeLoops_ASCII(buf_gen_csvC[iAPE][mu], filename_APE, loopInfo, momQsq, 5, mu); // LpsDwCv
+      }
+    }
+  }
+  else{
+    int iAPE = 0;
+    for(int mu = 0 ; mu < 4 ; mu++){
+      writeLoops_ASCII(buf_std_oneD[iAPE][mu], filename_out, loopInfo, momQsq, 2, mu); // Loops	 
+      writeLoops_ASCII(buf_std_csvC[iAPE][mu], filename_out, loopInfo, momQsq, 3, mu); // LoopsCv
+      writeLoops_ASCII(buf_gen_oneD[iAPE][mu], filename_out, loopInfo, momQsq, 4, mu); // LpsDw	 
+      writeLoops_ASCII(buf_gen_csvC[iAPE][mu], filename_out, loopInfo, momQsq, 5, mu); // LpsDwCv
+    }
+  }
 
 
   //-Free loop cuda buffers
@@ -2059,6 +2063,13 @@ void DeflateAndInvert_loop_w_One_Der(void **gaugeToPlaquette, QudaInvertParam *p
     free(buf_gen_csvC[iAPE]);
   }
   //--------------------------------
+
+
+  //-Free the momentum matrices
+  for(int ip=0; ip<SplV; ip++) free(mom[ip]);
+  free(mom);
+  for(int ip=0;ip<Nmoms;ip++) free(momQsq[ip]);
+  free(momQsq);
 
 
   free(input_vector);
@@ -2959,3 +2970,38 @@ void DeflateAndInvert_threepTwop(void **gaugeSmeared, void **gauge, QudaInvertPa
 //     printfQuda("Will not perform 4D APE Smearing\n");
 //   }
 
+// was in loop functions, old style of writing the loops in ASCII format
+//      dumpLoop_ultraLocal<double>(cnTmp,filename_out,is+1,info.Q_sq,0); // Scalar
+//      dumpLoop_ultraLocal<double>(cnTmp,filename_out,is+1,info.Q_sq,1); // dOp
+//       if(APE_4D){
+// 	for(int iAPE=0;iAPE<smearParam.nAPE; iAPE++){
+// 	  sprintf(filename_APE,"%s_nAPE%d_alphaAPE0p%02.0f",filename_out,smearParam.APESteps[iAPE],smearParam.APEalpha[iAPE]*100);
+// 	  for(int mu = 0 ; mu < 4 ; mu++){
+// 	    doCudaFFT_v2<double>(cnD_vv[iAPE][mu],cnTmp);
+// 	    dumpLoop_oneD<double>(cnTmp,filename_APE,is+1,info.Q_sq,mu,0); // Loops
+// 	    doCudaFFT_v2<double>(cnD_gv[iAPE][mu],cnTmp);
+// 	    dumpLoop_oneD<double>(cnTmp,filename_APE,is+1,info.Q_sq,mu,1); // LpsDw
+	    
+// 	    doCudaFFT_v2<double>(cnC_vv[iAPE][mu],cnTmp);
+// 	    dumpLoop_oneD<double>(cnTmp,filename_APE,is+1,info.Q_sq,mu,2); // LpsDw noether
+// 	    doCudaFFT_v2<double>(cnC_gv[iAPE][mu],cnTmp);
+// 	    dumpLoop_oneD<double>(cnTmp,filename_APE,is+1,info.Q_sq,mu,3); // LpsDw noether
+// 	  }
+// 	  printfQuda("iAPE %d: Data dumping done\n",iAPE);
+// 	}
+//       }
+//       else{
+// 	int iAPE = 0;
+// 	for(int mu = 0 ; mu < 4 ; mu++){
+// 	  doCudaFFT_v2<double>(cnD_vv[iAPE][mu],cnTmp);
+// 	  dumpLoop_oneD<double>(cnTmp,filename_out,is+1,info.Q_sq,mu,0); // Loops
+// 	  doCudaFFT_v2<double>(cnD_gv[iAPE][mu],cnTmp);
+// 	  dumpLoop_oneD<double>(cnTmp,filename_out,is+1,info.Q_sq,mu,1); // LpsDw
+	  
+// 	  doCudaFFT_v2<double>(cnC_vv[iAPE][mu],cnTmp);
+// 	  dumpLoop_oneD<double>(cnTmp,filename_out,is+1,info.Q_sq,mu,2); // LpsDw noether
+// 	  doCudaFFT_v2<double>(cnC_gv[iAPE][mu],cnTmp);
+// 	  dumpLoop_oneD<double>(cnTmp,filename_out,is+1,info.Q_sq,mu,3); // LpsDw noether
+// 	}
+//       }
+//     } // close loop for dump loops

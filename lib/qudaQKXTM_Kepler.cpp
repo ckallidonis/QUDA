@@ -2775,6 +2775,7 @@ void doCudaFFT_v2(void *cnIn, void *cnOut){
 
 static int** allocateMomMatrix(int Q_sq){
   int **mom;
+
   if((mom = (int **) malloc(sizeof(int*)*GK_localL[0]*GK_localL[1]*GK_localL[2])) == NULL) errorQuda("Error allocate memory for momenta\n");
   for(int ip=0; ip<GK_localL[0]*GK_localL[1]*GK_localL[2]; ip++)
     if((mom[ip] = (int *) malloc(sizeof(int)*3)) == NULL)errorQuda("Error allocate memory for momenta\n");
@@ -2801,9 +2802,44 @@ static int** allocateMomMatrix(int Q_sq){
 
 	  if((mom[momIdx][0]*mom[momIdx][0]+mom[momIdx][1]*mom[momIdx][1]+mom[momIdx][2]*mom[momIdx][2])<=Q_sq) totMom++;
 	  momIdx++;
-	}
+      }
+
   return mom;
 }
+
+void createMomenta(int **mom, int **momQsq, int Q_sq, int Nmoms){
+
+  int momIdx = 0;
+  int totMom = 0;
+  
+  for(int pz = 0; pz < GK_localL[2]; pz++)
+    for(int py = 0; py < GK_localL[1]; py++)
+      for(int px = 0; px < GK_localL[0]; px++){
+	  if(px < GK_localL[0]/2)
+	    mom[momIdx][0]   = px;
+	  else
+	    mom[momIdx][0]   = px - GK_localL[0];
+
+	  if(py < GK_localL[1]/2)
+	    mom[momIdx][1]   = py;
+	  else
+	    mom[momIdx][1]   = py - GK_localL[1];
+
+	  if(pz < GK_localL[2]/2)
+	    mom[momIdx][2]   = pz;
+	  else
+	    mom[momIdx][2]   = pz - GK_localL[2];
+
+	  if((mom[momIdx][0]*mom[momIdx][0]+mom[momIdx][1]*mom[momIdx][1]+mom[momIdx][2]*mom[momIdx][2])<=Q_sq){
+	    if(totMom>=Nmoms) errorQuda("Inconsistency in Number of Momenta Requested\n");
+	    for(int i=0;i<3;i++) momQsq[totMom][i] = mom[momIdx][i];
+	    totMom++;
+	  }
+
+	  momIdx++;
+      }
+}
+
 
 template<typename Float>
 void dumpLoop(void *cnRes_gv, void *cnRes_vv, const char *Pref,int accumLevel, int Q_sq){
@@ -2838,10 +2874,10 @@ void dumpLoop(void *cnRes_gv, void *cnRes_vv, const char *Pref,int accumLevel, i
   free(mom);
 }
 
-template<typename Float>
-void copyToWriteBuf(Float *writeBuf, void *tmpBuf, int iPrint, int Q_sq, int Nmoms){
 
-  int **mom = allocateMomMatrix(Q_sq);
+template<typename Float>
+void copyToWriteBuf(Float *writeBuf, void *tmpBuf, int iPrint, int Q_sq, int Nmoms, int **mom){
+
   long int SplV = GK_localL[0]*GK_localL[1]*GK_localL[2];
   int imom = 0;
 
@@ -2857,14 +2893,61 @@ void copyToWriteBuf(Float *writeBuf, void *tmpBuf, int iPrint, int Q_sq, int Nmo
     }//-if
   }//-ip
 
-  for(int ip=0; ip<SplV; ip++)
-    free(mom[ip]);
-  free(mom);
+}
+
+
+
+//-C.K. This is a new function to print all the loops in ASCII format
+template<typename Float>
+void writeLoops_ASCII(Float *writeBuf, const char *Pref, qudaQKXTM_loopInfo loopInfo, int **momQsq, int type, int mu){
+  FILE *ptr;
+  char file_name[257];
+
+  for(int iPrint=0;iPrint<loopInfo.Nprint;iPrint++){
+    int stochNo =(iPrint+1)*loopInfo.Ndump;
+    int Nmoms = loopInfo.Nmoms;
+    
+    sprintf(file_name, "%s_%s.loop.%04d.%d_%d",Pref,loopInfo.loop_type[type],stochNo,comm_size(), comm_rank());
+    
+    if(loopInfo.loop_oneD[type] && mu!=0) ptr = fopen(file_name,"a");
+    else ptr = fopen(file_name,"w");
+    if(ptr == NULL) errorQuda("Cannot open %s to write the loop\n",file_name);
+    
+    if(loopInfo.loop_oneD[type]){
+      for(int ip=0; ip < Nmoms; ip++){
+	for(int lt=0; lt < GK_localL[3]; lt++){
+	  int t  = lt+comm_coords(default_topo)[3]*GK_localL[3];
+	  for(int gm=0; gm<16; gm++){
+	    fprintf(ptr, "%02d %02d %02d %+d %+d %+d %+16.15e %+16.15e\n",t, gm, mu, momQsq[ip][0], momQsq[ip][1], momQsq[ip][2],
+		    0.25*writeBuf[0+2*ip+2*Nmoms*lt+2*Nmoms*GK_localL[3]*gm+2*Nmoms*GK_localL[3]*16*iPrint],  
+		    0.25*writeBuf[1+2*ip+2*Nmoms*lt+2*Nmoms*GK_localL[3]*gm+2*Nmoms*GK_localL[3]*16*iPrint]);
+	  }
+	}//-lt
+      }//-ip
+    }
+    else{
+      for(int ip=0; ip < Nmoms; ip++){
+	for(int lt=0; lt < GK_localL[3]; lt++){
+	  int t  = lt+comm_coords(default_topo)[3]*GK_localL[3];
+	  for(int gm=0; gm<16; gm++){
+	    fprintf(ptr, "%02d %02d %+d %+d %+d %+16.15e %+16.15e\n",t, gm, momQsq[ip][0], momQsq[ip][1], momQsq[ip][2],
+		    writeBuf[0+2*ip+2*Nmoms*lt+2*Nmoms*GK_localL[3]*gm+2*Nmoms*GK_localL[3]*16*iPrint],  
+		    writeBuf[1+2*ip+2*Nmoms*lt+2*Nmoms*GK_localL[3]*gm+2*Nmoms*GK_localL[3]*16*iPrint]);
+	  }
+	}//-lt
+      }//-ip
+    }
+    
+    if(loopInfo.loop_oneD[type]) printfQuda("data dumped for loop %s, mu = %d, Nstoch = %d\n",loopInfo.loop_type[type],mu,stochNo);
+    else printfQuda("data dumped for loop %s, Nstoch = %d\n",loopInfo.loop_type[type],stochNo);
+    fclose(ptr);
+  }
+  
 }
 
 
 template<typename Float>
-void dumpLoop_ultraLocal(void *cn, const char *Pref,int accumLevel, int Q_sq, int flag){
+void dumpLoop_ultraLocal(void *cn, const char *Pref,int accumLevel, int flag){
   int **mom = allocateMomMatrix(Q_sq);
   FILE *ptr;
   char file_name[257];
