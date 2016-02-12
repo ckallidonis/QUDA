@@ -50,6 +50,7 @@ extern double mass; // mass of Dirac operator
 
 extern char latfile[];
 extern char latfile_smeared[];
+extern int traj;
 
 extern void usage(char** );
 
@@ -63,6 +64,7 @@ extern double csw;
 extern int Nstoch;
 extern unsigned long int seed;
 extern char loop_fname[];
+extern char loop_file_format[];
 extern int Ndump;
 extern int smethod;
 extern char filename_dSteps[];
@@ -176,53 +178,6 @@ int main(int argc, char **argv)
   else{
     printf("Error: Your spectrumPart option is suspicious\n");
     exit(-1);
-  }
-  //-----------------------------------------------------------------------------------------
-
-
-  //-C.K. Pass loop parameters to loopInfo
-  qudaQKXTM_loopInfo loopInfo;
-
-  loopInfo.Nstoch = Nstoch;
-  loopInfo.seed = seed;
-  loopInfo.Ndump = Ndump;
-  loopInfo.smethod = smethod;
-  strcpy(loopInfo.loop_fname,loop_fname);
-  if(strcmp(filename_dSteps,"none")==0){
-    loopInfo.nSteps_defl = 1;
-    loopInfo.deflStep[0] = nEv;
-  }
-  else{
-    FILE *ptr_dstep;    
-    if( (ptr_dstep = fopen(filename_dSteps,"r"))==NULL ){
-      fprintf(stderr,"Cannot open %s for reading. Exiting\n",filename_dSteps);
-      exit(-1);
-    }
-    fscanf(ptr_dstep,"%d\n",&loopInfo.nSteps_defl);
-    fscanf(ptr_dstep,"%d\n",&loopInfo.deflStep[0]);
-    if(loopInfo.deflStep[0]>nEv){
-      printf("ERROR: Supplied deflation step is larger than eigenvalues requested. Exiting.\n");
-      exit(-1);
-    }
-    for(int s=1;s<loopInfo.nSteps_defl;s++){
-      fscanf(ptr_dstep,"%d\n",&loopInfo.deflStep[s]);
-      if(loopInfo.deflStep[s]<loopInfo.deflStep[s-1]){
-	printf("ERROR: Deflation steps MUST be in ascending order. Exiting.\n");
-	exit(-1);
-      }
-      if(loopInfo.deflStep[s]>nEv){
-	printf("WARNING: Supplied deflation step %d is larger than eigenvalues requested. Discarding this step.\n",s);
-	s--;
-	loopInfo.nSteps_defl--;
-      }
-    }
-    fclose(ptr_dstep);
-
-    //- This is to always make sure that the total number of eigenvalues is included
-    if(loopInfo.deflStep[loopInfo.nSteps_defl-1] != nEv){
-      loopInfo.nSteps_defl++;
-      loopInfo.deflStep[loopInfo.nSteps_defl-1] = nEv;
-    }
   }
   //-----------------------------------------------------------------------------------------
 
@@ -385,9 +340,7 @@ int main(int argc, char **argv)
 
 
   if (strcmp(latfile,"")) {  // load in the command line supplied gauge field
-    // read_gauge_field(latfile, gauge, gauge_param.cpu_prec, gauge_param.X, argc, argv);
-    //    construct_gauge_field(gauge, 2, gauge_param.cpu_prec, &gauge_param);
-    //    printf("I will read the configuration\n");
+    sprintf(latfile,"%s.%04d",latfile,traj);    
     readLimeGauge(gauge, latfile, &gauge_param, &inv_param, gridsize_from_cmdline);
     for(int mu = 0 ; mu < 4 ; mu++)memcpy(gauge_Plaq[mu],gauge[mu],V*9*2*sizeof(double));
     mapEvenOddToNormalGauge(gauge_Plaq,gauge_param,xdim,ydim,zdim,tdim);
@@ -468,6 +421,71 @@ int main(int argc, char **argv)
 
   if (dslash_type == QUDA_TWISTED_CLOVER_DSLASH) loadCloverQuda(NULL, NULL, &inv_param);
   //if (dslash_type == QUDA_TWISTED_CLOVER_DSLASH) loadCloverQuda(clover,clover_inv, &inv_param);
+
+
+  //-C.K. Pass loop parameters to loopInfo
+  qudaQKXTM_loopInfo loopInfo;
+
+  loopInfo.Nstoch = Nstoch;
+  loopInfo.seed = seed;
+  loopInfo.Ndump = Ndump;
+  loopInfo.traj = traj;
+  loopInfo.Qsq = Q_sq;
+  loopInfo.smethod = smethod;
+  strcpy(loopInfo.file_format,loop_file_format);
+  strcpy(loopInfo.loop_fname,loop_fname);
+
+  if(loopInfo.Nstoch%loopInfo.Ndump==0) loopInfo.Nprint = loopInfo.Nstoch/loopInfo.Ndump;
+  else errorQuda("NdumpStep MUST divide Nstoch exactly! Exiting.\n");
+
+  if(strcmp(filename_dSteps,"none")==0){
+    loopInfo.nSteps_defl = 1;
+    loopInfo.deflStep[0] = nEv;
+  }
+  else{
+    FILE *ptr_dstep;    
+    if( (ptr_dstep = fopen(filename_dSteps,"r"))==NULL ){
+      fprintf(stderr,"Cannot open %s for reading. Exiting\n",filename_dSteps);
+      exit(-1);
+    }
+    fscanf(ptr_dstep,"%d\n",&loopInfo.nSteps_defl);
+    fscanf(ptr_dstep,"%d\n",&loopInfo.deflStep[0]);
+    if(loopInfo.deflStep[0]>nEv){
+      printf("ERROR: Supplied deflation step is larger than eigenvalues requested. Exiting.\n");
+      exit(-1);
+    }
+    for(int s=1;s<loopInfo.nSteps_defl;s++){
+      fscanf(ptr_dstep,"%d\n",&loopInfo.deflStep[s]);
+      if(loopInfo.deflStep[s]<loopInfo.deflStep[s-1]){
+	printf("ERROR: Deflation steps MUST be in ascending order. Exiting.\n");
+	exit(-1);
+      }
+      if(loopInfo.deflStep[s]>nEv){
+	printf("WARNING: Supplied deflation step %d is larger than eigenvalues requested. Discarding this step.\n",s);
+	s--;
+	loopInfo.nSteps_defl--;
+      }
+    }
+    fclose(ptr_dstep);
+
+    //- This is to always make sure that the total number of eigenvalues is included
+    if(loopInfo.deflStep[loopInfo.nSteps_defl-1] != nEv){
+      loopInfo.nSteps_defl++;
+      loopInfo.deflStep[loopInfo.nSteps_defl-1] = nEv;
+    }
+  }
+  //-----------------------------------------------------------------------------------------
+
+
+
+
+
+
+
+
+
+
+
 
   if(isFullOp) calcEigenVectors_loop_wOneD_FullOp(gauge_Plaq, &inv_param, &gauge_param, arpackInfo, loopInfo, info);
   else         calcEigenVectors_loop_wOneD_EvenOdd(gauge_Plaq, &inv_param, &gauge_param, arpackInfo, loopInfo, info);

@@ -75,6 +75,13 @@ namespace quda {
     int smethod;
     int nSteps_defl;
     int deflStep[MAX_DEFLSTEPS];
+    int traj;
+    int Nprint;
+    int Nmoms;
+    int Qsq;
+    char file_format[512];
+    char *loop_type[6]; // = {"Scalar", "dOp", "Loops", "LoopsCv", "LpsDw", "LpsDwCv"}
+    bool loop_oneD[6];  // = { false  , false,  true   , true    ,  true  ,  true}
   }qudaQKXTM_loopInfo;
 
 
