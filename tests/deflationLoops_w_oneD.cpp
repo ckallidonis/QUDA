@@ -1,3 +1,4 @@
+
 #include <stdlib.h>
 #include <stdio.h>
 #include <time.h>
@@ -50,6 +51,7 @@ extern double mass; // mass of Dirac operator
 
 extern char latfile[];
 extern char latfile_smeared[];
+extern int traj;
 
 extern void usage(char** );
 
@@ -77,6 +79,7 @@ extern char pathEigenVectorsDown[];
 extern char pathEigenValuesUp[];
 extern char pathEigenValuesDown[];
 extern char loop_filename[];
+extern char loop_file_format[];
 extern int NdumpStep;
 
 extern char fileAPE[];
@@ -327,6 +330,7 @@ int main(int argc, char **argv)
 
 
   if (strcmp(latfile,"")) {  // load in the command line supplied gauge field
+    sprintf(latfile,"%s.%04d",latfile,traj);
     readLimeGauge(gauge, latfile, &gauge_param, &inv_param, gridsize_from_cmdline);
     for(int mu = 0 ; mu < 4 ; mu++)memcpy(gauge_Plaq[mu],gauge[mu],V*9*2*sizeof(double));
     mapEvenOddToNormalGauge(gauge_Plaq,gauge_param,xdim,ydim,zdim,tdim);
@@ -432,8 +436,11 @@ int main(int argc, char **argv)
 
   loopInfo.Nstoch = Nstoch;
   loopInfo.seed = seed;
+  loopInfo.traj = traj;
   loopInfo.Ndump = NdumpStep;
   strcpy(loopInfo.loop_fname,loop_filename);
+  loopInfo.Qsq = Q_sq;
+  strcpy(loopInfo.file_format,loop_file_format);
 
   if(loopInfo.Nstoch%loopInfo.Ndump==0) loopInfo.Nprint = loopInfo.Nstoch/loopInfo.Ndump;
   else errorQuda("NdumpStep MUST divide Nstoch exactly! Exiting.\n");

@@ -1739,10 +1739,10 @@ void DeflateAndInvert_loop_w_One_Der(void **gaugeToPlaquette, QudaInvertParam *p
   char filename_out[512];
   strcpy(filename_out,loopInfo.loop_fname);
 
-  loopInfo.loop_type[0] = "Scalar";      loopInfo.loop_oneD[0] = false;   // std-ultra_local
-  loopInfo.loop_type[1] = "dOp";         loopInfo.loop_oneD[1] = false;   // gen-ultra_local
-  loopInfo.loop_type[2] = "Loops";       loopInfo.loop_oneD[2] = true;    // std-one_derivative
-  loopInfo.loop_type[3] = "LoopsCv";     loopInfo.loop_oneD[3] = true;    // gen-one_derivative
+  loopInfo.loop_type[0] = "Scalar";      loopInfo.loop_oneD[0] = false;   // std-ultra_local	  
+  loopInfo.loop_type[1] = "dOp";         loopInfo.loop_oneD[1] = false;   // gen-ultra_local	  
+  loopInfo.loop_type[2] = "Loops";       loopInfo.loop_oneD[2] = true;    // std-one_derivative	  
+  loopInfo.loop_type[3] = "LoopsCv";     loopInfo.loop_oneD[3] = true;    // gen-one_derivative	  
   loopInfo.loop_type[4] = "LpsDw";       loopInfo.loop_oneD[4] = true;    // std-conserved current
   loopInfo.loop_type[5] = "LpsDwCv";     loopInfo.loop_oneD[5] = true;    // gen-conserved current
 
@@ -1750,8 +1750,10 @@ void DeflateAndInvert_loop_w_One_Der(void **gaugeToPlaquette, QudaInvertParam *p
   printfQuda("=====================\n");
   printfQuda("No. of noise vectors: %d\n",Nstoch);
   printfQuda("The seed is: %ld\n",seed);
+  printfQuda("The conf trajectory is: %04d\n",loopInfo.traj);
   printfQuda("Will produce the loop for %d Momentum Combinations\n",loopInfo.Nmoms);
   printfQuda("Will dump every %d noise vectors, thus %d times\n",NdumpStep,Nprint);
+  printfQuda("The loop file format is %s\n",loopInfo.file_format);
   printfQuda("The loop base name is %s\n",filename_out);
   printfQuda("=====================\n");
 
@@ -1998,34 +2000,37 @@ void DeflateAndInvert_loop_w_One_Der(void **gaugeToPlaquette, QudaInvertParam *p
 
   } // close loop over stochastic vectors
 
-  //-Write the loops in HDF5 format
-  // FIXME: Might need updated arguments
-  //  writeLoops_HDF5(buf_std_uloc, buf_gen_uloc, buf_std_oneD, buf_gen_oneD, buf_std_csvC, buf_gen_csvC, loopInfo);
+  if( (APE_4D && strcmp(loopInfo.file_format,"HDF5")==0) || strcmp(loopInfo.file_format,"ASCII")==0 ){     //-Write the loops in ASCII format
+    if(APE_4D && strcmp(loopInfo.file_format,"HDF5")==0) warningQuda("No support to write APE-smeared loops in HDF5 format! Will write them in ASCII format!\n");
+    else if(strcmp(loopInfo.file_format,"ASCII")==0) printfQuda("Will write loops in %s format\n",loopInfo.file_format);
 
-
-  //-Write the loops in ASCII format
-  writeLoops_ASCII(buf_std_uloc, filename_out, loopInfo, momQsq, 0, 0); // Scalar
-  writeLoops_ASCII(buf_gen_uloc, filename_out, loopInfo, momQsq, 1, 0); // dOp
-
-  if(APE_4D){
-    for(int iAPE=0;iAPE<smearParam.nAPE; iAPE++){
-      sprintf(filename_APE,"%s_nAPE%d_alphaAPE0p%02.0f",filename_out,smearParam.APESteps[iAPE],smearParam.APEalpha[iAPE]*100);
+    writeLoops_ASCII(buf_std_uloc, filename_out, loopInfo, momQsq, 0, 0); // Scalar
+    writeLoops_ASCII(buf_gen_uloc, filename_out, loopInfo, momQsq, 1, 0); // dOp
+    
+    if(APE_4D){
+      for(int iAPE=0;iAPE<smearParam.nAPE; iAPE++){
+	sprintf(filename_APE,"%s_nAPE%d_alphaAPE0p%02.0f",filename_out,smearParam.APESteps[iAPE],smearParam.APEalpha[iAPE]*100);
+	for(int mu = 0 ; mu < 4 ; mu++){
+	  writeLoops_ASCII(buf_std_oneD[iAPE][mu], filename_APE, loopInfo, momQsq, 2, mu); // Loops	 
+	  writeLoops_ASCII(buf_std_csvC[iAPE][mu], filename_APE, loopInfo, momQsq, 3, mu); // LoopsCv
+	  writeLoops_ASCII(buf_gen_oneD[iAPE][mu], filename_APE, loopInfo, momQsq, 4, mu); // LpsDw	 
+	  writeLoops_ASCII(buf_gen_csvC[iAPE][mu], filename_APE, loopInfo, momQsq, 5, mu); // LpsDwCv
+	}
+      }
+    }
+    else{
+      int iAPE = 0;
       for(int mu = 0 ; mu < 4 ; mu++){
-	writeLoops_ASCII(buf_std_oneD[iAPE][mu], filename_APE, loopInfo, momQsq, 2, mu); // Loops	 
-	writeLoops_ASCII(buf_std_csvC[iAPE][mu], filename_APE, loopInfo, momQsq, 3, mu); // LoopsCv
-	writeLoops_ASCII(buf_gen_oneD[iAPE][mu], filename_APE, loopInfo, momQsq, 4, mu); // LpsDw	 
-	writeLoops_ASCII(buf_gen_csvC[iAPE][mu], filename_APE, loopInfo, momQsq, 5, mu); // LpsDwCv
+	writeLoops_ASCII(buf_std_oneD[iAPE][mu], filename_out, loopInfo, momQsq, 2, mu); // Loops	 
+	writeLoops_ASCII(buf_std_csvC[iAPE][mu], filename_out, loopInfo, momQsq, 3, mu); // LoopsCv
+	writeLoops_ASCII(buf_gen_oneD[iAPE][mu], filename_out, loopInfo, momQsq, 4, mu); // LpsDw	 
+	writeLoops_ASCII(buf_gen_csvC[iAPE][mu], filename_out, loopInfo, momQsq, 5, mu); // LpsDwCv
       }
     }
   }
-  else{
-    int iAPE = 0;
-    for(int mu = 0 ; mu < 4 ; mu++){
-      writeLoops_ASCII(buf_std_oneD[iAPE][mu], filename_out, loopInfo, momQsq, 2, mu); // Loops	 
-      writeLoops_ASCII(buf_std_csvC[iAPE][mu], filename_out, loopInfo, momQsq, 3, mu); // LoopsCv
-      writeLoops_ASCII(buf_gen_oneD[iAPE][mu], filename_out, loopInfo, momQsq, 4, mu); // LpsDw	 
-      writeLoops_ASCII(buf_gen_csvC[iAPE][mu], filename_out, loopInfo, momQsq, 5, mu); // LpsDwCv
-    }
+  else if( !APE_4D && strcmp(loopInfo.file_format,"HDF5")==0 ){ //-Write the loops in HDF5 format
+    printfQuda("Will write loops in %s format\n",loopInfo.file_format);
+    writeLoops_HDF5(buf_std_uloc, buf_gen_uloc, buf_std_oneD[0], buf_std_csvC[0], buf_gen_oneD[0], buf_gen_csvC[0], loopInfo, momQsq);
   }
 
 

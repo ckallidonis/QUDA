@@ -64,10 +64,13 @@ namespace quda {
   typedef struct{
     int Nstoch;
     unsigned long int seed;
+    int traj;
     int Ndump;
     int Nprint;
     int Nmoms;
+    int Qsq;
     char loop_fname[512];
+    char file_format[512];
     char *loop_type[6];// = {"Scalar","dOp","Loops","LoopsCv","LpsDw","LpsDwCv"};
     bool loop_oneD[6];// = {false,false,true,true,true,true};
   }qudaQKXTM_loopInfo;

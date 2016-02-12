@@ -1575,6 +1575,7 @@ QudaDagType dagger = QUDA_DAG_NO;
 int gridsize_from_cmdline[4] = {1,1,1,1};
 QudaDslashType dslash_type = QUDA_WILSON_DSLASH;
 char latfile[256] = "";
+int traj;
 bool tune = true;
 int niter = 100;
 int test_type = 0;
@@ -1625,6 +1626,7 @@ char pathEigenVectorsDown[257] = "ev_d.0000";
 char pathEigenValuesUp[257] = "evals_u.dat";
 char pathEigenValuesDown[257] = "evals_d.dat";
 char loop_filename[257] = "loop";
+char loop_file_format[257] = "ASCII";
 int NdumpStep = 1;
 
 char fileAPE[512] = "NoSmearing";
@@ -1670,6 +1672,7 @@ void usage(char** argv )
          "                                                  /asqtad/domain_wall/domain_wall_4d/mobius\n");
   printf("    --flavor <type>                           # Set the twisted mass flavor type (minus (default), plus, deg_doublet, nondeg_doublet)\n");
   printf("    --load-gauge file                         # Load gauge field \"file\" for the test (requires QIO)\n");
+  printf("    --traj                                    # Trajectory of the configuration\n");
   printf("    --niter <n>                               # The number of iterations to perform (default 10)\n");
   printf("    --inv_type <cg/bicgstab/gcr>              # The type of solver to use (default cg)\n");
   printf("    --precon_type <mr/ (unspecified)>         # The type of solver to use (default none (=unspecified))\n");
@@ -1716,6 +1719,7 @@ void usage(char** argv )
   printf("    --pathEigenValuesUp                       # Path where the eigenVectors for up flavor are (default evals_u.dat)\n");
   printf("    --pathEigenValuesDown                     # Path where the eigenVectors for up flavor are (default evals_d.dat)\n");
   printf("    --loop_filename                           # File name to save loops (default \"loop\")\n");
+  printf("    --loop_file_format                        # file format for the loops, ASCII/HDF5 (default \"ASCII_format\")\n");
   printf("    --NdumpStep                               # Every how many noise vectors it will dump the data (default 1)\n");
   printf("    --APESmearFile                            # File containing the parameters for APE smearing (default No Smearing)\n");
   printf("    --source_type                             # Stochastic source type (unity/random) (default random)\n");
@@ -2053,6 +2057,16 @@ int process_command_line_option(int argc, char** argv, int* idx)
       usage(argv);
     }     
     strcpy(loop_filename, argv[i+1]);
+    i++;
+    ret = 0;
+    goto out;
+  }
+
+  if( strcmp(argv[i], "--loop_file_format") == 0){
+    if (i+1 >= argc){
+      usage(argv);
+    }     
+    strcpy(loop_file_format, argv[i+1]);
     i++;
     ret = 0;
     goto out;
@@ -2466,6 +2480,16 @@ int process_command_line_option(int argc, char** argv, int* idx)
       usage(argv);
     }     
     strcpy(latfile, argv[i+1]);
+    i++;
+    ret = 0;
+    goto out;
+  }
+
+  if( strcmp(argv[i], "--traj") == 0){
+    if (i+1 >= argc){
+      usage(argv);
+    }     
+    traj = atoi(argv[i+1]);
     i++;
     ret = 0;
     goto out;
