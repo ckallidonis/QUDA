@@ -17,7 +17,7 @@ LDFLAGS += -L/users/kallidoc/install/lib -larpack -lparpack
 	$(HISQ_UNITARIZE_FORCE_TEST)
 
 #TESTS = deflationLoops_w_oneD deflationLoops_w_oneD_volumeSource deflationTwopThreep
-TESTS = CalcEigenVecs_Loops_w_oneD_2pt3pt CalcEigenVecs_Loops_w_oneD CalcEigenVecs CalcEigenVecs_2pt3pt deflationTwopThreep deflationInverter deflationLoops deflationLoops_w_oneD deflationLoops_w_oneD_volumeSource createWritePropsSLReadApeGauge test_plaquette
+TESTS = CalcEigenVecs_Loops_w_oneD CalcEigenVecs_Loops_w_oneD_2pt3pt CalcEigenVecs CalcEigenVecs_2pt3pt deflationTwopThreep deflationInverter deflationLoops deflationLoops_w_oneD deflationLoops_w_oneD_volumeSource createWritePropsSLReadApeGauge test_plaquette
 
 all: $(TESTS)
 

@@ -3799,15 +3799,22 @@ void copyToWriteBuf(Float *writeBuf, void *tmpBuf, int iPrint, int Q_sq, int Nmo
 
 //-C.K. This is a new function to print all the loops in ASCII format
 template<typename Float>
-void writeLoops_ASCII(Float *writeBuf, const char *Pref, qudaQKXTM_loopInfo loopInfo, int **momQsq, int type, int mu){
+void writeLoops_ASCII(Float *writeBuf, const char *Pref, qudaQKXTM_loopInfo loopInfo, int **momQsq, int type, int mu, bool exact_loop){
+  
   FILE *ptr;
-  char file_name[257];
+  char file_name[512];
+  char *lpart,*ptrVal;
+  int Nprint;
+  int Nmoms = loopInfo.Nmoms;
 
-  for(int iPrint=0;iPrint<loopInfo.Nprint;iPrint++){
-    int stochNo =(iPrint+1)*loopInfo.Ndump;
-    int Nmoms = loopInfo.Nmoms;
+  if(exact_loop) Nprint = 1;
+  else Nprint = loopInfo.Nprint;
 
-    sprintf(file_name, "%s_%s.loop.%04d.%d_%d",Pref,loopInfo.loop_type[type],stochNo,comm_size(), comm_rank());
+  for(int iPrint=0;iPrint<Nprint;iPrint++){
+    if(exact_loop) asprintf(&ptrVal,"%d_%d",comm_size(), comm_rank());
+    else asprintf(&ptrVal,"%04d.%d_%d",(iPrint+1)*loopInfo.Ndump,comm_size(), comm_rank());
+
+    sprintf(file_name, "%s_%s.loop.%s",Pref,loopInfo.loop_type[type],ptrVal);
 
     if(loopInfo.loop_oneD[type] && mu!=0) ptr = fopen(file_name,"a");
     else ptr = fopen(file_name,"w");
@@ -3838,8 +3845,6 @@ void writeLoops_ASCII(Float *writeBuf, const char *Pref, qudaQKXTM_loopInfo loop
       }//-ip
     }
     
-    if(loopInfo.loop_oneD[type]) printfQuda("data dumped for loop %s, mu = %d, Nstoch = %d\n",loopInfo.loop_type[type],mu,stochNo);
-    else printfQuda("data dumped for loop %s, Nstoch = %d\n",loopInfo.loop_type[type],stochNo);
     fclose(ptr);
   }
 }
@@ -3870,10 +3875,19 @@ void getWriteBuf(Float *writeBuf, Float *loopBuf, int iPrint, int Nmoms, int imo
 
 //-C.K: Funtion to write the loops in HDF5 format
 template<typename Float>
-void writeLoops_HDF5(Float *buf_std_uloc, Float *buf_gen_uloc, Float **buf_std_oneD, Float **buf_std_csvC, Float **buf_gen_oneD, Float **buf_gen_csvC, qudaQKXTM_loopInfo loopInfo, int **momQsq){
+void writeLoops_HDF5(Float *buf_std_uloc, Float *buf_gen_uloc, Float **buf_std_oneD, Float **buf_std_csvC, Float **buf_gen_oneD, Float **buf_gen_csvC, char *file_pref, qudaQKXTM_loopInfo loopInfo, int **momQsq, bool exact_loop){
 
   char fname[512];
-  sprintf(fname,"%s_N%04d_step%04d_Qsq%d.h5",loopInfo.loop_fname,loopInfo.Nstoch,loopInfo.Ndump,loopInfo.Qsq);
+  int Nprint;
+
+  if(exact_loop){
+    Nprint = 1;
+    sprintf(fname,"%s_Qsq%d.h5",file_pref,loopInfo.Qsq);
+  }
+  else{
+    Nprint = loopInfo.Nprint;
+    sprintf(fname,"%s_Ns%04d_step%04d_Qsq%d.h5",file_pref,loopInfo.Nstoch,loopInfo.Ndump,loopInfo.Qsq);
+  }
 
   double *loopBuf = NULL;
   double *writeBuf = (double*) malloc(GK_localL[3]*16*2*sizeof(double));
@@ -3902,15 +3916,20 @@ void writeLoops_HDF5(Float *buf_std_uloc, Float *buf_gen_uloc, Float **buf_std_o
   hid_t group4_id;
   hid_t group5_id;
 
-  for(int iPrint=0;iPrint<loopInfo.Nprint;iPrint++){
-    char *group2_tag;
-    asprintf(&group2_tag,"Nstoch_%04d",(iPrint+1)*loopInfo.Ndump);
-    group2_id = H5Gcreate(group1_id, group2_tag, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+  for(int iPrint=0;iPrint<Nprint;iPrint++){
+
+    if(!exact_loop){
+      char *group2_tag;
+      asprintf(&group2_tag,"Nstoch_%04d",(iPrint+1)*loopInfo.Ndump);
+      group2_id = H5Gcreate(group1_id, group2_tag, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+    }
 
     for(int it=0;it<6;it++){
       char *group3_tag;
       asprintf(&group3_tag,"%s",loopInfo.loop_type[it]);
-      group3_id = H5Gcreate(group2_id, group3_tag, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+
+      if(exact_loop) group3_id = H5Gcreate(group1_id, group3_tag, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+      else group3_id = H5Gcreate(group2_id, group3_tag, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
 
       for(int imom=0;imom<loopInfo.Nmoms;imom++){
         char *group4_tag;
@@ -3973,7 +3992,8 @@ void writeLoops_HDF5(Float *buf_std_uloc, Float *buf_gen_uloc, Float **buf_std_o
       }//-imom
       H5Gclose(group3_id);
     }//-it
-    H5Gclose(group2_id);
+
+    if(!exact_loop) H5Gclose(group2_id);
   }//-iPrint
   H5Gclose(group1_id);
   H5Fclose(file_id);
