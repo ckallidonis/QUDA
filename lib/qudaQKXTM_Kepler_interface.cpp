@@ -2441,7 +2441,8 @@ void DeflateAndInvert_threepTwop(void **gaugeSmeared, void **gauge, QudaInvertPa
 
       }//-loop over sink-source separations      
 
-    }
+    }//-if run for 3pt for specific source
+
     ////////// At the very end ///////////////////////
 
 
@@ -3458,7 +3459,7 @@ void calcEigenVectors_loop_wOneD_FullOp(void **gaugeToPlaquette, QudaInvertParam
   profileInvert.Stop(QUDA_PROFILE_TOTAL);
 }
 
-
+//template<typename Float>
 void calcEigenVectors_threepTwop_EvenOdd(void **gaugeSmeared, void **gauge, QudaGaugeParam *gauge_param, QudaInvertParam *param, qudaQKXTM_arpackInfo arpackInfo, qudaQKXTMinfo_Kepler info,
 					 char *filename_twop, char *filename_threep, WHICHPARTICLE NUCLEON, WHICHPROJECTOR PID ){
 
@@ -3605,15 +3606,23 @@ void calcEigenVectors_threepTwop_EvenOdd(void **gaugeSmeared, void **gauge, Quda
   char filename_mesons[257];
   char filename_baryons[257];
 
+
+  //-Allocate the Three-Point function write Buffers
+  void *corrThp_local   = (void*) calloc(GK_localL[3]*GK_Nmoms*16*2,sizeof(double));
+  void *corrThp_noether = (void*) calloc(GK_localL[3]*GK_Nmoms*4*2,sizeof(double));
+  void *corrThp_oneD    = (void*) calloc(GK_localL[3]*GK_Nmoms*4*16*2,sizeof(double));
+  if(corrThp_local == NULL || corrThp_noether == NULL || corrThp_oneD == NULL) errorQuda("Cannot allocate memory for Three-point function write Buffers.");
+
+
   for(int isource = 0 ; isource < info.Nsources ; isource++){
 
     sprintf(filename_mesons,"%s.mesons.SS.%02d.%02d.%02d.%02d.dat",filename_twop,info.sourcePosition[isource][0],info.sourcePosition[isource][1],info.sourcePosition[isource][2],info.sourcePosition[isource][3]);
     sprintf(filename_baryons,"%s.baryons.SS.%02d.%02d.%02d.%02d.dat",filename_twop,info.sourcePosition[isource][0],info.sourcePosition[isource][1],info.sourcePosition[isource][2],info.sourcePosition[isource][3]);
 
-    bool checkMesons, checkBaryons;
-    checkMesons = exists_file(filename_mesons);
-    checkBaryons = exists_file(filename_baryons);
-    if( (checkMesons == true) && (checkBaryons == true) ) continue; // because threep are written before twop if I checked twop I know that threep are fine
+    //bool checkMesons, checkBaryons;
+    //checkMesons = exists_file(filename_mesons);
+    //checkBaryons = exists_file(filename_baryons);
+    //if( (checkMesons == true) && (checkBaryons == true) ) continue; // because threep are written before twop if I checked twop I know that threep are fine
 
     for(int isc = 0 ; isc < 12 ; isc++){
       ///////////////////////////////////////////////////////////////////////////////// forward prop for up quark ///////////////////////////
@@ -3808,13 +3817,17 @@ void calcEigenVectors_threepTwop_EvenOdd(void **gaugeSmeared, void **gauge, Quda
 	////////////////// Contractions for part 1 ////////////////
 	t1 = MPI_Wtime();
 	if(NUCLEON == PROTON){
-	  K_contract->contractFixSink(*K_seqProp, *K_prop_up, *K_gaugeContractions, PID, NUCLEON, 1, filename_threep_tsink, isource, info.tsinkSource[its]);
+	  K_contract->contractFixSink(*K_seqProp, *K_prop_up  , *K_gaugeContractions, corrThp_local, corrThp_noether, corrThp_oneD, PID, NUCLEON, 1, isource);
 	}
 	if(NUCLEON == NEUTRON){
-	  K_contract->contractFixSink(*K_seqProp, *K_prop_down, *K_gaugeContractions, PID, NUCLEON, 1, filename_threep_tsink, isource, info.tsinkSource[its]);
+	  K_contract->contractFixSink(*K_seqProp, *K_prop_down, *K_gaugeContractions, corrThp_local, corrThp_noether, corrThp_oneD, PID, NUCLEON, 1, isource);
 	}                
 	t2 = MPI_Wtime();
 	printfQuda("Time for fix sink contractions for part 1 at sink-source = %d is %f sec\n",info.tsinkSource[its],t2-t1);
+
+	K_contract->writeThrp_ASCII(corrThp_local, corrThp_noether, corrThp_oneD, NUCLEON, 1, filename_threep_tsink, isource, info.tsinkSource[its]);
+	printfQuda("Three-point function for part 1 at sink-source = %d written.\n",info.tsinkSource[its]);
+
 	/////////////////////////////////////////sequential propagator for the part 2
 	for(int nu = 0 ; nu < 4 ; nu++)
 	  for(int c2 = 0 ; c2 < 3 ; c2++){
@@ -3871,12 +3884,14 @@ void calcEigenVectors_threepTwop_EvenOdd(void **gaugeSmeared, void **gauge, Quda
 	////////////////// Contractions for part 2 ////////////////
 	t1 = MPI_Wtime();
 	if(NUCLEON == PROTON)
-	  K_contract->contractFixSink(*K_seqProp, *K_prop_down, *K_gaugeContractions, PID, NUCLEON, 2, filename_threep_tsink, isource, info.tsinkSource[its]);
+	  K_contract->contractFixSink(*K_seqProp, *K_prop_down, *K_gaugeContractions, corrThp_local, corrThp_noether, corrThp_oneD, PID, NUCLEON, 2, isource);
 	if(NUCLEON == NEUTRON)
-	  K_contract->contractFixSink(*K_seqProp, *K_prop_up, *K_gaugeContractions, PID, NUCLEON, 2, filename_threep_tsink, isource, info.tsinkSource[its]);
+	  K_contract->contractFixSink(*K_seqProp, *K_prop_up  , *K_gaugeContractions, corrThp_local, corrThp_noether, corrThp_oneD, PID, NUCLEON, 2, isource);
 	t2 = MPI_Wtime();
-
 	printfQuda("Time for fix sink contractions for part 2 at sink-source = %d is %f sec\n",info.tsinkSource[its],t2-t1);
+
+	K_contract->writeThrp_ASCII(corrThp_local, corrThp_noether, corrThp_oneD, NUCLEON, 2, filename_threep_tsink, isource, info.tsinkSource[its]);
+	printfQuda("Three-point function for part 2 at sink-source = %d written.\n",info.tsinkSource[its]);
 
       }//-loop over sink-source separations      
 
@@ -3908,6 +3923,11 @@ void calcEigenVectors_threepTwop_EvenOdd(void **gaugeSmeared, void **gauge, Quda
     t2 = MPI_Wtime();
     printfQuda("Contractions for source = %d finished in time %f sec\n",isource,t2-t1);
   } // close loop over source positions
+
+
+  free(corrThp_local);
+  free(corrThp_noether);
+  free(corrThp_oneD);
 
 
   free(input_vector);

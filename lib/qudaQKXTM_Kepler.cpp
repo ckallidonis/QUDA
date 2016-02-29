@@ -1462,6 +1462,8 @@ void QKXTM_Contraction_Kepler<Float>::contractMesons(QKXTM_Propagator_Kepler<Flo
   prop2.destroyTexObject(texProp2);
 }
 
+
+
 #define N_BARYONS 10
 template<typename Float>
 void QKXTM_Contraction_Kepler<Float>::contractBaryons(QKXTM_Propagator_Kepler<Float> &prop1,QKXTM_Propagator_Kepler<Float> &prop2, char *filename_out, int isource){
@@ -1546,6 +1548,171 @@ void QKXTM_Contraction_Kepler<Float>::seqSourceFixSinkPart2(QKXTM_Vector_Kepler<
   
   checkCudaError();
 }
+
+
+//-C.K. - New function to write the three-point function in ASCII format
+template<typename Float>
+void QKXTM_Contraction_Kepler<Float>::writeThrp_ASCII(void *corrThp_local, void *corrThp_noether, void *corrThp_oneD, WHICHPARTICLE testParticle, int partflag , char *filename_out, int isource, int tsinkMtsource){
+
+  Float *GLcorrThp_local   = (Float*) calloc(GK_totalL[3]*GK_Nmoms*16  *2,sizeof(Float));
+  Float *GLcorrThp_noether = (Float*) calloc(GK_totalL[3]*GK_Nmoms   *4*2,sizeof(Float));
+  Float *GLcorrThp_oneD    = (Float*) calloc(GK_totalL[3]*GK_Nmoms*16*4*2,sizeof(Float));
+  if(corrThp_local == NULL || corrThp_noether == NULL || corrThp_oneD == NULL) errorQuda("writeThrp_ASCII: Cannot allocate memory for write Buffers.");
+
+  int error;
+  if( typeid(Float) == typeid(float)){
+    if(GK_timeRank >= 0 && GK_timeRank < GK_nProc[3] ){
+      error = MPI_Gather((float*)corrThp_local,GK_localL[3]*GK_Nmoms*16*2, MPI_FLOAT, GLcorrThp_local, GK_localL[3]*GK_Nmoms*16*2, MPI_FLOAT, 0, GK_timeComm);
+      if(error != MPI_SUCCESS) errorQuda("Error in MPI_gather");
+      error = MPI_Gather((float*)corrThp_noether,GK_localL[3]*GK_Nmoms*4*2, MPI_FLOAT, GLcorrThp_noether, GK_localL[3]*GK_Nmoms*4*2, MPI_FLOAT, 0, GK_timeComm);
+      if(error != MPI_SUCCESS) errorQuda("Error in MPI_gather");
+      error = MPI_Gather((float*)corrThp_oneD,GK_localL[3]*GK_Nmoms*4*16*2, MPI_FLOAT, GLcorrThp_oneD, GK_localL[3]*GK_Nmoms*4*16*2, MPI_FLOAT, 0, GK_timeComm);
+      if(error != MPI_SUCCESS) errorQuda("Error in MPI_gather");
+    }
+  }
+  else if( typeid(Float) == typeid(double)){
+    if(GK_timeRank >= 0 && GK_timeRank < GK_nProc[3] ){
+      error = MPI_Gather((double*)corrThp_local,GK_localL[3]*GK_Nmoms*16*2, MPI_DOUBLE, GLcorrThp_local, GK_localL[3]*GK_Nmoms*16*2, MPI_DOUBLE, 0, GK_timeComm);
+      if(error != MPI_SUCCESS) errorQuda("Error in MPI_gather");
+      error = MPI_Gather((double*)corrThp_noether,GK_localL[3]*GK_Nmoms*4*2, MPI_DOUBLE, GLcorrThp_noether, GK_localL[3]*GK_Nmoms*4*2, MPI_DOUBLE, 0, GK_timeComm);
+      if(error != MPI_SUCCESS) errorQuda("Error in MPI_gather");
+      error = MPI_Gather((double*)corrThp_oneD,GK_localL[3]*GK_Nmoms*4*16*2, MPI_DOUBLE, GLcorrThp_oneD, GK_localL[3]*GK_Nmoms*4*16*2, MPI_DOUBLE, 0, GK_timeComm);
+      if(error != MPI_SUCCESS) errorQuda("Error in MPI_gather");
+    }
+  }
+
+  char fname_local[257];
+  char fname_noether[257];
+  char fname_oneD[257];
+  char fname_particle[257];
+  char fname_upORdown[257];
+
+  if(testParticle == PROTON){
+    strcpy(fname_particle,"proton");
+    if(partflag == 1)strcpy(fname_upORdown,"up");
+    else if(partflag == 2)strcpy(fname_upORdown,"down");
+    else errorQuda("writeThrp_ASCII: Got the wrong part! Should be either 1 or 2.");
+  }
+  else{
+    strcpy(fname_particle,"neutron");
+    if(partflag == 1)strcpy(fname_upORdown,"down");
+    else if(partflag == 2)strcpy(fname_upORdown,"up");
+    else errorQuda("writeThrp_ASCII: Got the wrong part! Should be either 1 or 2.");
+  }
+
+  sprintf(fname_local,"%s.%s.%s.%s.SS.%02d.%02d.%02d.%02d.dat",filename_out,fname_particle,fname_upORdown,"ultra_local",GK_sourcePosition[isource][0],GK_sourcePosition[isource][1],GK_sourcePosition[isource][2],GK_sourcePosition[isource][3]);
+  sprintf(fname_noether,"%s.%s.%s.%s.SS.%02d.%02d.%02d.%02d.dat",filename_out,fname_particle,fname_upORdown,"noether",GK_sourcePosition[isource][0],GK_sourcePosition[isource][1],GK_sourcePosition[isource][2],GK_sourcePosition[isource][3]);
+  sprintf(fname_oneD,"%s.%s.%s.%s.SS.%02d.%02d.%02d.%02d.dat",filename_out,fname_particle,fname_upORdown,"oneD",GK_sourcePosition[isource][0],GK_sourcePosition[isource][1],GK_sourcePosition[isource][2],GK_sourcePosition[isource][3]);
+
+  FILE *ptr_local = NULL;
+  FILE *ptr_noether = NULL;
+  FILE *ptr_oneD = NULL;
+
+  if( comm_rank() == 0 ){
+    ptr_local = fopen(fname_local,"w");
+    ptr_noether = fopen(fname_noether,"w");
+    ptr_oneD = fopen(fname_oneD,"w");
+    // local //
+    for(int iop = 0 ; iop < 16 ; iop++)
+      for(int it = 0 ; it < GK_totalL[3] ; it++)
+	for(int imom = 0 ; imom < GK_Nmoms ; imom++){
+	  int it_shift = (it+GK_sourcePosition[isource][3])%GK_totalL[3];
+	  int sign = (tsinkMtsource+GK_sourcePosition[isource][3]) >= GK_totalL[3] ? -1 : +1;
+	  fprintf(ptr_local,"%d \t %d \t %+d %+d %+d \t %+e %+e\n", iop, it, GK_moms[imom][0],GK_moms[imom][1],GK_moms[imom][2],
+		  sign*GLcorrThp_local[it_shift*GK_Nmoms*16*2 + imom*16*2 + iop*2 + 0], sign*GLcorrThp_local[it_shift*GK_Nmoms*16*2 + imom*16*2 + iop*2 + 1]);
+	}
+    // noether //
+    for(int iop = 0 ; iop < 4 ; iop++)
+      for(int it = 0 ; it < GK_totalL[3] ; it++)
+	for(int imom = 0 ; imom < GK_Nmoms ; imom++){
+	  int it_shift = (it+GK_sourcePosition[isource][3])%GK_totalL[3];
+	  int sign = (tsinkMtsource+GK_sourcePosition[isource][3]) >= GK_totalL[3] ? -1 : +1;
+	  fprintf(ptr_noether,"%d \t %d \t %+d %+d %+d \t %+e %+e\n", iop, it, GK_moms[imom][0],GK_moms[imom][1],GK_moms[imom][2],
+		  sign*GLcorrThp_noether[it_shift*GK_Nmoms*4*2 + imom*4*2 + iop*2 + 0], sign*GLcorrThp_noether[it_shift*GK_Nmoms*4*2 + imom*4*2 + iop*2 + 1]);
+	}
+    // oneD //
+    for(int iop = 0 ; iop < 16 ; iop++)
+      for(int dir = 0 ; dir < 4 ; dir++)
+	for(int it = 0 ; it < GK_totalL[3] ; it++)
+	  for(int imom = 0 ; imom < GK_Nmoms ; imom++){
+	    int it_shift = (it+GK_sourcePosition[isource][3])%GK_totalL[3];
+	    int sign = (tsinkMtsource+GK_sourcePosition[isource][3]) >= GK_totalL[3] ? -1 : +1;
+	    fprintf(ptr_oneD,"%d \t %d \t %d \t %+d %+d %+d \t %+e %+e\n", iop, dir, it, GK_moms[imom][0],GK_moms[imom][1],GK_moms[imom][2],
+		    sign*GLcorrThp_oneD[it_shift*GK_Nmoms*4*16*2 + imom*4*16*2 + dir*16*2 + iop*2 + 0], sign*GLcorrThp_oneD[it_shift*GK_Nmoms*4*16*2 + imom*4*16*2 + dir*16*2 + iop*2 + 1]);
+	  }
+    fclose(ptr_local);
+    fclose(ptr_noether);
+    fclose(ptr_oneD);
+  }
+
+}
+
+//-C.K. Overloaded function to perform the contractions without writing the data
+template<typename Float>
+void QKXTM_Contraction_Kepler<Float>::contractFixSink(QKXTM_Propagator_Kepler<Float> &seqProp,QKXTM_Propagator_Kepler<Float> &prop, QKXTM_Gauge_Kepler<Float> &gauge,
+						      void *corrThp_local_reduced, void *corrThp_noether_reduced, void *corrThp_oneD_reduced,
+						      WHICHPROJECTOR typeProj , WHICHPARTICLE testParticle, int partflag, int isource){
+
+  // seq prop apply gamma5 and conjugate
+  // do the communication for gauge, prop and seqProp
+  seqProp.apply_gamma5();
+  seqProp.conjugate();
+
+  gauge.ghostToHost();
+  gauge.cpuExchangeGhost(); // communicate gauge                                                   
+  gauge.ghostToDevice();
+  comm_barrier();          // just in case                                                                                   
+
+
+
+  prop.ghostToHost();
+  prop.cpuExchangeGhost(); // communicate forward propagator
+  prop.ghostToDevice();
+
+  comm_barrier();          // just in case                                                                                                                             
+
+
+  seqProp.ghostToHost();
+  seqProp.cpuExchangeGhost(); // communicate sequential propagator
+  seqProp.ghostToDevice();
+  comm_barrier();          // just in case                 
+
+  cudaTextureObject_t seqTex, fwdTex, gaugeTex;
+  seqProp.createTexObject(&seqTex);
+  prop.createTexObject(&fwdTex);
+  gauge.createTexObject(&gaugeTex);
+
+  Float *corrThp_local_local = (Float*) calloc(GK_localL[3]*GK_Nmoms*16*2,sizeof(Float));
+  Float *corrThp_noether_local = (Float*) calloc(GK_localL[3]*GK_Nmoms*4*2,sizeof(Float));
+  Float *corrThp_oneD_local = (Float*) calloc(GK_localL[3]*GK_Nmoms*4*16*2,sizeof(Float));
+  if(corrThp_local_local == NULL || corrThp_noether_local == NULL || corrThp_oneD_local == NULL) errorQuda("Error problem to allocate memory");
+
+  for(int it = 0 ; it < GK_localL[3] ; it++)
+    run_fixSinkContractions(corrThp_local_local,corrThp_noether_local,corrThp_oneD_local,fwdTex,seqTex,gaugeTex,testParticle,partflag,it,isource,sizeof(Float));
+
+
+  if( typeid(Float) == typeid(float)){
+    MPI_Reduce(corrThp_local_local, (float*)corrThp_local_reduced, GK_localL[3]*GK_Nmoms*16*2, MPI_FLOAT, MPI_SUM, 0, GK_spaceComm);
+    MPI_Reduce(corrThp_noether_local, (float*)corrThp_noether_reduced, GK_localL[3]*GK_Nmoms*4*2, MPI_FLOAT, MPI_SUM, 0, GK_spaceComm);
+    MPI_Reduce(corrThp_oneD_local, (float*)corrThp_oneD_reduced, GK_localL[3]*GK_Nmoms*4*16*2, MPI_FLOAT, MPI_SUM, 0, GK_spaceComm);
+  }
+  else{
+    MPI_Reduce(corrThp_local_local, (double*)corrThp_local_reduced, GK_localL[3]*GK_Nmoms*16*2, MPI_DOUBLE, MPI_SUM, 0, GK_spaceComm);
+    MPI_Reduce(corrThp_noether_local, (double*)corrThp_noether_reduced, GK_localL[3]*GK_Nmoms*4*2, MPI_DOUBLE, MPI_SUM, 0, GK_spaceComm);
+    MPI_Reduce(corrThp_oneD_local, (double*)corrThp_oneD_reduced, GK_localL[3]*GK_Nmoms*4*16*2, MPI_DOUBLE, MPI_SUM, 0, GK_spaceComm);
+  }
+
+  free(corrThp_local_local);
+  free(corrThp_noether_local);
+  free(corrThp_oneD_local);
+
+  seqProp.destroyTexObject(seqTex);
+  prop.destroyTexObject(fwdTex);
+  gauge.destroyTexObject(gaugeTex);
+}
+
+
+
 
 template<typename Float>
 void QKXTM_Contraction_Kepler<Float>::contractFixSink(QKXTM_Propagator_Kepler<Float> &seqProp,QKXTM_Propagator_Kepler<Float> &prop, QKXTM_Gauge_Kepler<Float> &gauge, WHICHPROJECTOR typeProj , WHICHPARTICLE testParticle, int partflag , char *filename_out, int isource, int tsinkMtsource){
