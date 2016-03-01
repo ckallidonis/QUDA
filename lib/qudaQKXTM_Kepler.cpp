@@ -1462,8 +1462,6 @@ void QKXTM_Contraction_Kepler<Float>::contractMesons(QKXTM_Propagator_Kepler<Flo
   prop2.destroyTexObject(texProp2);
 }
 
-
-
 #define N_BARYONS 10
 template<typename Float>
 void QKXTM_Contraction_Kepler<Float>::contractBaryons(QKXTM_Propagator_Kepler<Float> &prop1,QKXTM_Propagator_Kepler<Float> &prop2, char *filename_out, int isource){
@@ -1522,6 +1520,148 @@ void QKXTM_Contraction_Kepler<Float>::contractBaryons(QKXTM_Propagator_Kepler<Fl
   prop2.destroyTexObject(texProp2);
 }
 
+//---------------------------------------------------------------------------------------------------
+
+
+//-C.K. New function to write the mesons two-point function in ASCII format
+template<typename Float>
+void QKXTM_Contraction_Kepler<Float>::writeTwopMesons_ASCII(void *corrMesons, char *filename_out, int isource){
+
+  Float (*GLcorrMesons)[2][N_MESONS] = (Float(*)[2][N_MESONS]) calloc(GK_totalL[3]*GK_Nmoms*2*N_MESONS*2,sizeof(Float));;
+  if( GLcorrMesons == NULL )errorQuda("writeTwopMesons_ASCII: Cannot allocate memory for Meson two-point function buffer.");
+
+  int error;
+  if( typeid(Float) == typeid(float) ){
+    if(GK_timeRank >= 0 && GK_timeRank < GK_nProc[3] ){
+      error = MPI_Gather((float*) corrMesons,GK_localL[3]*GK_Nmoms*2*N_MESONS*2,MPI_FLOAT,GLcorrMesons,GK_localL[3]*GK_Nmoms*2*N_MESONS*2,MPI_FLOAT,0,GK_timeComm);
+      if(error != MPI_SUCCESS) errorQuda("Error in MPI_gather");
+    }
+  }
+  else{
+    if(GK_timeRank >= 0 && GK_timeRank < GK_nProc[3] ){
+      error = MPI_Gather((double*) corrMesons,GK_localL[3]*GK_Nmoms*2*N_MESONS*2,MPI_DOUBLE,GLcorrMesons,GK_localL[3]*GK_Nmoms*2*N_MESONS*2,MPI_DOUBLE,0,GK_timeComm);
+      if(error != MPI_SUCCESS) errorQuda("Error in MPI_gather");
+    }
+  }
+
+  FILE *ptr_out = NULL;
+  if(comm_rank() == 0){
+    ptr_out = fopen(filename_out,"w");
+    if(ptr_out == NULL) errorQuda("Error opening file for writing\n");
+    for(int ip = 0 ; ip < N_MESONS ; ip++)
+      for(int it = 0 ; it < GK_totalL[3] ; it++)
+        for(int imom = 0 ; imom < GK_Nmoms ; imom++){
+	  int it_shift = (it+GK_sourcePosition[isource][3])%GK_totalL[3];
+	  fprintf(ptr_out,"%d \t %d \t %+d %+d %+d \t %+e %+e \t %+e %+e\n",ip,it,GK_moms[imom][0],GK_moms[imom][1],GK_moms[imom][2],
+		  GLcorrMesons[it_shift*GK_Nmoms*2+imom*2+0][0][ip], GLcorrMesons[it_shift*GK_Nmoms*2+imom*2+1][0][ip],
+		  GLcorrMesons[it_shift*GK_Nmoms*2+imom*2+0][1][ip], GLcorrMesons[it_shift*GK_Nmoms*2+imom*2+1][1][ip]);
+	}
+    fclose(ptr_out);
+  }
+
+  free(GLcorrMesons);
+}
+
+//-C.K. Overloaded function to perform the meson contractions without writing the data
+template<typename Float>
+void QKXTM_Contraction_Kepler<Float>::contractMesons(QKXTM_Propagator_Kepler<Float> &prop1,QKXTM_Propagator_Kepler<Float> &prop2, void *corrMesons_reduced, int isource){
+  cudaTextureObject_t texProp1, texProp2;
+  prop1.createTexObject(&texProp1);
+  prop2.createTexObject(&texProp2);
+
+  Float (*corrMesons_local)[2][N_MESONS] =(Float(*)[2][N_MESONS]) calloc(GK_localL[3]*GK_Nmoms*2*N_MESONS*2,sizeof(Float));
+  if( corrMesons_local == NULL )errorQuda("contractMesons: Cannot allocate memory for Meson two-point function contract buffer.");
+
+  for(int it = 0 ; it < GK_localL[3] ; it++)
+    run_contractMesons(texProp1,texProp2,(void*) corrMesons_local,it,isource,sizeof(Float));
+
+  if( typeid(Float) == typeid(float) ){
+    MPI_Reduce(corrMesons_local, (float*)corrMesons_reduced,GK_localL[3]*GK_Nmoms*2*N_MESONS*2,MPI_FLOAT,MPI_SUM,0, GK_spaceComm);
+  }
+  else if( typeid(Float) == typeid(double) ){
+    MPI_Reduce(corrMesons_local, (double*)corrMesons_reduced,GK_localL[3]*GK_Nmoms*2*N_MESONS*2,MPI_DOUBLE,MPI_SUM,0, GK_spaceComm);
+  }
+
+  free(corrMesons_local);
+
+  prop1.destroyTexObject(texProp1);
+  prop2.destroyTexObject(texProp2);
+}
+
+//---------------------------------------------------------------------------------------------------
+
+
+//-C.K. New function to write the baryons two-point function in ASCII format
+template<typename Float>
+void QKXTM_Contraction_Kepler<Float>::writeTwopBaryons_ASCII(void *corrBaryons, char *filename_out, int isource){
+
+  Float (*GLcorrBaryons)[2][N_BARYONS][4][4] = (Float(*)[2][N_BARYONS][4][4]) calloc(GK_totalL[3]*GK_Nmoms*2*N_BARYONS*4*4*2,sizeof(Float));
+  if( GLcorrBaryons == NULL )errorQuda("writeTwopBaryons_ASCII: Cannot allocate memory for Baryon two-point function buffer.");
+
+  int error;
+  if( typeid(Float) == typeid(float) ){
+    if(GK_timeRank >= 0 && GK_timeRank < GK_nProc[3] ){
+      error = MPI_Gather((float*) corrBaryons,GK_localL[3]*GK_Nmoms*2*N_BARYONS*4*4*2,MPI_FLOAT,GLcorrBaryons,GK_localL[3]*GK_Nmoms*2*N_BARYONS*4*4*2,MPI_FLOAT,0,GK_timeComm);
+      if(error != MPI_SUCCESS) errorQuda("Error in MPI_gather");
+    }
+  }
+  else{
+    if(GK_timeRank >= 0 && GK_timeRank < GK_nProc[3] ){
+      error = MPI_Gather((double*) corrBaryons,GK_localL[3]*GK_Nmoms*2*N_BARYONS*4*4*2,MPI_DOUBLE,GLcorrBaryons,GK_localL[3]*GK_Nmoms*2*N_BARYONS*4*4*2,MPI_DOUBLE,0,GK_timeComm);
+      if(error != MPI_SUCCESS) errorQuda("Error in MPI_gather");
+    }
+  }
+
+  FILE *ptr_out = NULL;
+  if(comm_rank() == 0){
+    ptr_out = fopen(filename_out,"w");
+    if(ptr_out == NULL) errorQuda("Error opening file for writing\n");
+    for(int ip = 0 ; ip < N_BARYONS ; ip++)
+      for(int it = 0 ; it < GK_totalL[3] ; it++)
+        for(int imom = 0 ; imom < GK_Nmoms ; imom++)
+	  for(int gamma = 0 ; gamma < 4 ; gamma++)
+	    for(int gammap = 0 ; gammap < 4 ; gammap++){
+	      int it_shift = (it+GK_sourcePosition[isource][3])%GK_totalL[3];
+	      int sign = (it+GK_sourcePosition[isource][3]) >= GK_totalL[3] ? -1 : +1;
+	      fprintf(ptr_out,"%d \t %d \t %+d %+d %+d \t %d %d \t %+e %+e \t %+e %+e\n",ip,it,GK_moms[imom][0],GK_moms[imom][1],GK_moms[imom][2],gamma,gammap,
+		      sign*GLcorrBaryons[it_shift*GK_Nmoms*2+imom*2+0][0][ip][gamma][gammap], sign*GLcorrBaryons[it_shift*GK_Nmoms*2+imom*2+1][0][ip][gamma][gammap],
+		      sign*GLcorrBaryons[it_shift*GK_Nmoms*2+imom*2+0][1][ip][gamma][gammap], sign*GLcorrBaryons[it_shift*GK_Nmoms*2+imom*2+1][1][ip][gamma][gammap]);
+	    }
+    fclose(ptr_out);
+  }
+
+  free(GLcorrBaryons);
+}
+
+
+//-C.K. Overloaded function to perform the baryon contractions without writing the data
+template<typename Float>
+void QKXTM_Contraction_Kepler<Float>::contractBaryons(QKXTM_Propagator_Kepler<Float> &prop1,QKXTM_Propagator_Kepler<Float> &prop2, void *corrBaryons_reduced, int isource){
+  cudaTextureObject_t texProp1, texProp2;
+  prop1.createTexObject(&texProp1);
+  prop2.createTexObject(&texProp2);
+
+  Float (*corrBaryons_local)[2][N_BARYONS][4][4] =(Float(*)[2][N_BARYONS][4][4]) calloc(GK_localL[3]*GK_Nmoms*2*N_BARYONS*4*4*2,sizeof(Float));
+
+  if( corrBaryons_local == NULL )errorQuda("Error problem to allocate memory");
+
+  for(int it = 0 ; it < GK_localL[3] ; it++)
+    run_contractBaryons(texProp1,texProp2,(void*) corrBaryons_local,it,isource,sizeof(Float));
+
+  if( typeid(Float) == typeid(float) ){
+    MPI_Reduce(corrBaryons_local, (float*) corrBaryons_reduced,GK_localL[3]*GK_Nmoms*2*N_BARYONS*4*4*2,MPI_FLOAT,MPI_SUM,0, GK_spaceComm);
+  }
+  else if( typeid(Float) == typeid(double) ){
+    MPI_Reduce(corrBaryons_local, (double*) corrBaryons_reduced,GK_localL[3]*GK_Nmoms*2*N_BARYONS*4*4*2,MPI_DOUBLE,MPI_SUM,0, GK_spaceComm);
+  }
+
+  free(corrBaryons_local);
+  prop1.destroyTexObject(texProp1);
+  prop2.destroyTexObject(texProp2);
+}
+
+//---------------------------------------------------------------------------------------------------
+
 template<typename Float>
 void QKXTM_Contraction_Kepler<Float>::seqSourceFixSinkPart1(QKXTM_Vector_Kepler<Float> &vec, QKXTM_Propagator3D_Kepler<Float> &prop1, QKXTM_Propagator3D_Kepler<Float> &prop2, int tsinkMtsource, int nu, int c2, WHICHPROJECTOR PID, WHICHPARTICLE testParticle){
   
@@ -1549,6 +1689,7 @@ void QKXTM_Contraction_Kepler<Float>::seqSourceFixSinkPart2(QKXTM_Vector_Kepler<
   checkCudaError();
 }
 
+//---------------------------------------------------------------------------------------------------
 
 //-C.K. - New function to write the three-point function in ASCII format
 template<typename Float>
@@ -1711,8 +1852,7 @@ void QKXTM_Contraction_Kepler<Float>::contractFixSink(QKXTM_Propagator_Kepler<Fl
   gauge.destroyTexObject(gaugeTex);
 }
 
-
-
+//---------------------------------------------------------------------------------------------------
 
 template<typename Float>
 void QKXTM_Contraction_Kepler<Float>::contractFixSink(QKXTM_Propagator_Kepler<Float> &seqProp,QKXTM_Propagator_Kepler<Float> &prop, QKXTM_Gauge_Kepler<Float> &gauge, WHICHPROJECTOR typeProj , WHICHPARTICLE testParticle, int partflag , char *filename_out, int isource, int tsinkMtsource){

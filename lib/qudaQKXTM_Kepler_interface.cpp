@@ -3608,10 +3608,17 @@ void calcEigenVectors_threepTwop_EvenOdd(void **gaugeSmeared, void **gauge, Quda
 
 
   //-Allocate the Three-Point function write Buffers
-  void *corrThp_local   = (void*) calloc(GK_localL[3]*GK_Nmoms*16*2,sizeof(double));
-  void *corrThp_noether = (void*) calloc(GK_localL[3]*GK_Nmoms*4*2,sizeof(double));
-  void *corrThp_oneD    = (void*) calloc(GK_localL[3]*GK_Nmoms*4*16*2,sizeof(double));
+  double *corrThp_local   = (double*) calloc(GK_localL[3]*GK_Nmoms*16*2,sizeof(double));
+  double *corrThp_noether = (double*) calloc(GK_localL[3]*GK_Nmoms*4*2,sizeof(double));
+  double *corrThp_oneD    = (double*) calloc(GK_localL[3]*GK_Nmoms*4*16*2,sizeof(double));
   if(corrThp_local == NULL || corrThp_noether == NULL || corrThp_oneD == NULL) errorQuda("Cannot allocate memory for Three-point function write Buffers.");
+
+
+  //-Allocate the Two-point function write buffers
+  double (*corrMesons)[2][N_MESONS] =(double(*)[2][N_MESONS]) calloc(GK_localL[3]*GK_Nmoms*2*N_MESONS*2,sizeof(double));
+  double (*corrBaryons)[2][N_BARYONS][4][4] =(double(*)[2][N_BARYONS][4][4]) calloc(GK_localL[3]*GK_Nmoms*2*N_BARYONS*4*4*2,sizeof(double));
+
+  if(corrMesons == NULL || corrBaryons == NULL) errorQuda("Cannot allocate memory for Two-point function write Buffers.");
 
 
   for(int isource = 0 ; isource < info.Nsources ; isource++){
@@ -3918,10 +3925,16 @@ void calcEigenVectors_threepTwop_EvenOdd(void **gaugeSmeared, void **gauge, Quda
     K_prop_up->rotateToPhysicalBase_device(+1);
     K_prop_down->rotateToPhysicalBase_device(-1);
     t1 = MPI_Wtime();
-    K_contract->contractMesons(*K_prop_up,*K_prop_down,filename_mesons,isource);
-    K_contract->contractBaryons(*K_prop_up,*K_prop_down,filename_baryons,isource);
+    K_contract->contractMesons( *K_prop_up,*K_prop_down, corrMesons , isource);
+    K_contract->contractBaryons(*K_prop_up,*K_prop_down, corrBaryons, isource);
     t2 = MPI_Wtime();
-    printfQuda("Contractions for source = %d finished in time %f sec\n",isource,t2-t1);
+    printfQuda("Two-point Contractions for source = %d finished in time %f sec\n",isource,t2-t1);
+
+    K_contract->writeTwopMesons_ASCII( corrMesons , filename_mesons , isource);
+    K_contract->writeTwopBaryons_ASCII(corrBaryons, filename_baryons, isource);
+    printfQuda("Two-point function for Mesons and Baryons for source = %d written.\n",isource);
+
+
   } // close loop over source positions
 
 
@@ -3929,6 +3942,8 @@ void calcEigenVectors_threepTwop_EvenOdd(void **gaugeSmeared, void **gauge, Quda
   free(corrThp_noether);
   free(corrThp_oneD);
 
+  free(corrMesons);
+  free(corrBaryons);
 
   free(input_vector);
   free(output_vector);

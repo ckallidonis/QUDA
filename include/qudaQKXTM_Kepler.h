@@ -300,14 +300,23 @@ template<typename Float>
  public:
    QKXTM_Contraction_Kepler(){;}
    ~QKXTM_Contraction_Kepler(){;}
-   void contractMesons(QKXTM_Propagator_Kepler<Float> &prop1,QKXTM_Propagator_Kepler<Float> &prop2, char *filename_out, int isource);
+   void contractMesons( QKXTM_Propagator_Kepler<Float> &prop1,QKXTM_Propagator_Kepler<Float> &prop2, char *filename_out, int isource);
    void contractBaryons(QKXTM_Propagator_Kepler<Float> &prop1,QKXTM_Propagator_Kepler<Float> &prop2, char *filename_out, int isource);
+
+   void contractMesons( QKXTM_Propagator_Kepler<Float> &prop1,QKXTM_Propagator_Kepler<Float> &prop2, void *corrMesons_reduced , int isource);
+   void contractBaryons(QKXTM_Propagator_Kepler<Float> &prop1,QKXTM_Propagator_Kepler<Float> &prop2, void *corrBaryons_reduced, int isource);
+
+   void writeTwopMesons_ASCII( void *corrMesons , char *filename_out, int isource);
+   void writeTwopBaryons_ASCII(void *corrBaryons, char *filename_out, int isource);
+
    void seqSourceFixSinkPart1(QKXTM_Vector_Kepler<Float> &vec, QKXTM_Propagator3D_Kepler<Float> &prop1, QKXTM_Propagator3D_Kepler<Float> &prop2, int timeslice,int nu,int c2, WHICHPROJECTOR typeProj, WHICHPARTICLE testParticle);
    void seqSourceFixSinkPart2(QKXTM_Vector_Kepler<Float> &vec, QKXTM_Propagator3D_Kepler<Float> &prop, int timeslice,int nu,int c2, WHICHPROJECTOR typeProj, WHICHPARTICLE testParticle);
+
    void contractFixSink(QKXTM_Propagator_Kepler<Float> &seqProp, QKXTM_Propagator_Kepler<Float> &prop , QKXTM_Gauge_Kepler<Float> &gauge, WHICHPROJECTOR typeProj,
 			WHICHPARTICLE testParticle, int partFlag , char *filename_out, int isource, int tsinkMtsource);
    void contractFixSink(QKXTM_Propagator_Kepler<Float> &seqProp, QKXTM_Propagator_Kepler<Float> &prop , QKXTM_Gauge_Kepler<Float> &gauge, 
 			void *corrThp_local_reduced, void *corrThp_noether_reduced, void *corrThp_oneD_reduced, WHICHPROJECTOR typeProj , WHICHPARTICLE testParticle, int partFlag, int isource);
+
    void writeThrp_ASCII(void *corrThp_local, void *corrThp_noether, void *corrThp_oneD, WHICHPARTICLE testParticle, int partflag , char *filename_out, int isource, int tsinkMtsource);
  };
 }
