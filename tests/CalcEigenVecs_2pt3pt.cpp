@@ -49,6 +49,7 @@ extern double mass; // mass of Dirac operator
 
 extern char latfile[];
 extern char latfile_smeared[];
+extern int traj;
 
 extern void usage(char** );
 
@@ -71,6 +72,8 @@ extern int numSourcePositions;
 extern char pathListSourcePositions[];
 extern char pathListRun3pt[];
 extern char run3pt[];
+extern char corr_file_format[];
+extern char check_file_exist[];
 
 //-C.K. ARPACK Parameters
 extern int PolyDeg;
@@ -409,6 +412,13 @@ int main(int argc, char **argv)
   info.lL[3] = tdim;
   info.Nsources = numSourcePositions;
   info.Q_sq = Q_sq;
+  info.traj = traj;
+
+  if(strcmp(check_file_exist,"yes")==0 || strcmp(check_file_exist,"YES")==0) info.check_files = true;
+  else if(strcmp(check_file_exist,"no")==0 || strcmp(check_file_exist,"NO")==0) info.check_files = false;
+  else errorQuda("Undefined input for option --check_corr_files");
+
+  strcpy(info.corr_file_format,corr_file_format);
   //  info.tsinkSource=t_sinkSource;
   info.Ntsink = Ntsink;
 

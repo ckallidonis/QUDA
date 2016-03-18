@@ -43,8 +43,14 @@ namespace quda {
     int Q_sq;
     int Q_sq_loop;
     int Ntsink;
+    int traj;
+    bool check_files;
+    char *thrp_type[3];
+    char *baryon_type[10];
+    char *meson_type[10];
     int tsinkSource[MAX_TSINK];
     int run3pt_src[MAX_NSOURCES];
+    char corr_file_format[257];
     SOURCE_T source_type;
   } qudaQKXTMinfo_Kepler;
 
@@ -97,6 +103,7 @@ template<typename Float>  class QKXTM_Vector3D_Kepler;
   enum CLASS_ENUM{FIELD,GAUGE,VECTOR,PROPAGATOR,PROPAGATOR3D,VECTOR3D};
   enum WHICHPARTICLE{PROTON,NEUTRON};
   enum WHICHPROJECTOR{G4,G5G123,G5G1,G5G2,G5G3};
+  enum THRP_TYPE{THRP_LOCAL,THRP_NOETHER,THRP_ONED};
 
   enum APEDIM{D3,D4};
 
@@ -302,12 +309,17 @@ template<typename Float>
    ~QKXTM_Contraction_Kepler(){;}
    void contractMesons( QKXTM_Propagator_Kepler<Float> &prop1,QKXTM_Propagator_Kepler<Float> &prop2, char *filename_out, int isource);
    void contractBaryons(QKXTM_Propagator_Kepler<Float> &prop1,QKXTM_Propagator_Kepler<Float> &prop2, char *filename_out, int isource);
-
    void contractMesons( QKXTM_Propagator_Kepler<Float> &prop1,QKXTM_Propagator_Kepler<Float> &prop2, void *corrMesons_reduced , int isource);
    void contractBaryons(QKXTM_Propagator_Kepler<Float> &prop1,QKXTM_Propagator_Kepler<Float> &prop2, void *corrBaryons_reduced, int isource);
 
-   void writeTwopMesons_ASCII( void *corrMesons , char *filename_out, int isource);
+   void writeTwopMesons_ASCII(void *corrMesons, char *filename_out, int isource);
    void writeTwopBaryons_ASCII(void *corrBaryons, char *filename_out, int isource);
+   void copyTwopBaryonsToHDF5_Buf(void *Twop_baryons_HDF5, void *corrBaryons);
+   void copyTwopMesonsToHDF5_Buf(void *Twop_mesons_HDF5, void *corrMesons);
+   void getTwopBaryonTailBuf(void *tailBuf, void *twopBaryons, int t_src, int tail, int bar, int imom, int ip);
+   void getTwopBaryonWriteBuf(void *writeBuf, void *twopBaryons, int src_rank, int t_src, int tail, int bar, int imom, int ip);
+   void writeTwopBaryons_HDF5(void *twopBaryons, char *filename, qudaQKXTMinfo_Kepler info, int isource);
+   void writeTwopMesons_HDF5(void *twopMesons, char *filename, qudaQKXTMinfo_Kepler info, int isource);
 
    void seqSourceFixSinkPart1(QKXTM_Vector_Kepler<Float> &vec, QKXTM_Propagator3D_Kepler<Float> &prop1, QKXTM_Propagator3D_Kepler<Float> &prop2, int timeslice,int nu,int c2, WHICHPROJECTOR typeProj, WHICHPARTICLE testParticle);
    void seqSourceFixSinkPart2(QKXTM_Vector_Kepler<Float> &vec, QKXTM_Propagator3D_Kepler<Float> &prop, int timeslice,int nu,int c2, WHICHPROJECTOR typeProj, WHICHPARTICLE testParticle);
@@ -318,6 +330,9 @@ template<typename Float>
 			void *corrThp_local_reduced, void *corrThp_noether_reduced, void *corrThp_oneD_reduced, WHICHPROJECTOR typeProj , WHICHPARTICLE testParticle, int partFlag, int isource);
 
    void writeThrp_ASCII(void *corrThp_local, void *corrThp_noether, void *corrThp_oneD, WHICHPARTICLE testParticle, int partflag , char *filename_out, int isource, int tsinkMtsource);
+   void copyThrpToHDF5_Buf(void *Thrp_HDF5, void *corrThp,  int mu, int uORd, int its, int Nsink, THRP_TYPE type);
+   void getThrpWriteBuf(void *writeBuf, void *thrpBuf, int its, int Nsink, int part, int imom, int thrp_sign, THRP_TYPE type);
+   void writeThrp_HDF5(void *Thrp_local_HDF5, void *Thrp_noether_HDF5, void **Thrp_oneD_HDF5, char *filename, qudaQKXTMinfo_Kepler info, int isource);
  };
 }
 

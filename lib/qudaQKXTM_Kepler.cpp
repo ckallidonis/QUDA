@@ -1521,6 +1521,480 @@ void QKXTM_Contraction_Kepler<Float>::contractBaryons(QKXTM_Propagator_Kepler<Fl
 }
 
 //---------------------------------------------------------------------------------------------------
+//---------------------------------------------------------------------------------------------------
+
+
+
+//-C.K. - Get the HDF5 dataset chunk into writeBuf for the baryon two-point function
+template<typename Float>
+void QKXTM_Contraction_Kepler<Float>::getTwopBaryonWriteBuf(void *writeBuf, void *twopBaryons, int src_rank, int t_src, int tail, int bar, int imom, int ip){
+
+  if(GK_timeRank >= 0 && GK_timeRank < GK_nProc[3] ){
+    int Lt = GK_localL[3];
+
+    if( (GK_timeRank != src_rank) || (tail==0) ){
+      for(int it=0;it<Lt;it++){
+	int t_glob = GK_timeRank*Lt+it;
+	int sign = t_glob < t_src ? -1 : +1;
+	for(int im=0;im<16;im++){
+	  ((Float*)writeBuf)[0 + 2*im + 2*16*it] = sign*((Float*)twopBaryons)[0 + 2*im + 2*16*imom + 2*16*GK_Nmoms*it + 2*16*GK_Nmoms*Lt*bar + 2*16*GK_Nmoms*Lt*N_BARYONS*ip];
+	  ((Float*)writeBuf)[1 + 2*im + 2*16*it] = sign*((Float*)twopBaryons)[1 + 2*im + 2*16*imom + 2*16*GK_Nmoms*it + 2*16*GK_Nmoms*Lt*bar + 2*16*GK_Nmoms*Lt*N_BARYONS*ip];
+	}
+      }
+    }//-if
+    else if( (GK_timeRank==src_rank) && (tail!=0) ){
+      for(int it=0;it<Lt;it++){
+	int t_glob = GK_timeRank*Lt + (it+tail)%Lt;
+	int sign = t_glob < t_src ? -1 : +1;
+	for(int im=0;im<16;im++){
+	  ((Float*)writeBuf)[0 + 2*im + 2*16*it] = sign*((Float*)twopBaryons)[0 + 2*im + 2*16*imom + 2*16*GK_Nmoms*((it+tail)%Lt) + 2*16*GK_Nmoms*Lt*bar + 2*16*GK_Nmoms*Lt*N_BARYONS*ip];
+	  ((Float*)writeBuf)[1 + 2*im + 2*16*it] = sign*((Float*)twopBaryons)[1 + 2*im + 2*16*imom + 2*16*GK_Nmoms*((it+tail)%Lt) + 2*16*GK_Nmoms*Lt*bar + 2*16*GK_Nmoms*Lt*N_BARYONS*ip];
+	}
+      }
+    }//-else
+
+  }//-if
+
+}
+
+//-C.K. - Get the tail HDF5 dataset chunk into tailBuf for the baryon two-point function (significant only for src_rank/sink_rank)
+template<typename Float>
+void QKXTM_Contraction_Kepler<Float>::getTwopBaryonTailBuf(void *tailBuf, void *twopBaryons, int t_src, int tail, int bar, int imom, int ip){
+
+  int Lt = GK_localL[3];
+
+  for(int it=0;it<tail;it++){
+    int t_glob = GK_timeRank*Lt+it;
+    int sign = t_glob < t_src ? -1 : +1;
+    for(int im=0;im<16;im++){
+      ((Float*)tailBuf)[0 + 2*im + 2*16*it] = sign*((Float*)twopBaryons)[0 + 2*im + 2*16*imom + 2*16*GK_Nmoms*it + 2*16*GK_Nmoms*Lt*bar + 2*16*GK_Nmoms*Lt*N_BARYONS*ip];
+      ((Float*)tailBuf)[1 + 2*im + 2*16*it] = sign*((Float*)twopBaryons)[1 + 2*im + 2*16*imom + 2*16*GK_Nmoms*it + 2*16*GK_Nmoms*Lt*bar + 2*16*GK_Nmoms*Lt*N_BARYONS*ip];
+    }
+  }
+
+}
+
+//-C.K. - New function to write the baryons two-point function in HDF5 format
+template<typename Float>
+void QKXTM_Contraction_Kepler<Float>::writeTwopBaryons_HDF5(void *twopBaryons, char *filename, qudaQKXTMinfo_Kepler info, int isource){
+
+  if(GK_timeRank >= 0 && GK_timeRank < GK_nProc[3] ){
+
+    hid_t DATATYPE_H5;
+    if( typeid(Float) == typeid(float) ){
+      DATATYPE_H5 = H5T_NATIVE_FLOAT;
+      printfQuda("**** writeTwopBaryons_HDF5: typeid is float ****\n");
+    }
+    if( typeid(Float) == typeid(double)){
+      DATATYPE_H5 = H5T_NATIVE_DOUBLE;
+      printfQuda("**** writeTwopBaryons_HDF5: typeid is double ****\n");
+    }
+
+    int t_src = GK_sourcePosition[isource][3];
+    int Lt = GK_localL[3];
+    int T  = GK_totalL[3];
+
+    int src_rank = t_src/Lt;
+    int sink_rank = ((t_src-1)%T)/Lt;
+    int h = Lt - t_src%Lt;
+    int tail = t_src%Lt;
+
+    Float *writeTwopBuf = NULL;
+    writeTwopBuf = (Float*) malloc(Lt*16*2*sizeof(Float));
+    if (writeTwopBuf == NULL) errorQuda("writeTwopBaryons_HDF5: Cannot allocate writeTwopBuf.\n");
+    memset(writeTwopBuf,0,Lt*16*2*sizeof(Float));
+
+    hid_t fapl_id = H5Pcreate(H5P_FILE_ACCESS);
+    H5Pset_fapl_mpio(fapl_id, GK_timeComm, MPI_INFO_NULL);
+    hid_t file_id = H5Fcreate(filename, H5F_ACC_TRUNC, H5P_DEFAULT, fapl_id);
+    H5Pclose(fapl_id);
+
+    char *group1_tag;
+    asprintf(&group1_tag,"conf_%04d",info.traj);
+    hid_t group1_id = H5Gcreate(file_id, group1_tag, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+
+    char *group2_tag;
+    asprintf(&group2_tag,"sx%02dsy%02dsz%02dst%02d",GK_sourcePosition[isource][0],GK_sourcePosition[isource][1],GK_sourcePosition[isource][2],GK_sourcePosition[isource][3]);
+    hid_t group2_id = H5Gcreate(group1_id, group2_tag, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+
+    hid_t group3_id;
+    hid_t group4_id;
+
+    hsize_t dims[3] = {T,16,2}; // Size of the dataspace
+
+    //-Determine the ldims for each rank (tail not taken into account)
+    hsize_t ldims[3];
+    ldims[1] = dims[1];
+    ldims[2] = dims[2];
+    if(GK_timeRank==src_rank) ldims[0] = h;
+    else ldims[0] = Lt;
+
+    //-Determine the start position for each rank
+    hsize_t start[3];
+    if(GK_timeRank==src_rank) start[0] = 0; // if src_rank = sink_rank then this is the same
+    else{
+      int offs;
+      for(offs=0;offs<GK_nProc[3];offs++){
+	if( GK_timeRank == ((src_rank+offs)%GK_nProc[3]) ) break;
+      }
+      offs--;
+      start[0] = h + offs*Lt;
+    }
+    start[1] = 0; //
+    start[2] = 0; //-These are common among all ranks
+
+    for(int bar=0;bar<N_BARYONS;bar++){
+      char *group3_tag;
+      asprintf(&group3_tag,"%s",info.baryon_type[bar]);
+      group3_id = H5Gcreate(group2_id, group3_tag, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+
+      for(int imom=0;imom<GK_Nmoms;imom++){
+	char *group4_tag;
+	asprintf(&group4_tag,"mom_xyz_%+d_%+d_%+d",GK_moms[imom][0],GK_moms[imom][1],GK_moms[imom][2]);
+	group4_id = H5Gcreate(group3_id, group4_tag, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+	
+	hid_t filespace  = H5Screate_simple(3, dims, NULL);
+	hid_t subspace   = H5Screate_simple(3, ldims, NULL);
+
+	for(int ip=0;ip<2;ip++){
+	  char *dset_tag;
+	  asprintf(&dset_tag,"twop_baryon_%d",ip+1);
+
+	  hid_t dataset_id = H5Dcreate(group4_id, dset_tag, DATATYPE_H5, filespace, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+	  filespace = H5Dget_space(dataset_id);
+	  H5Sselect_hyperslab(filespace, H5S_SELECT_SET, start, NULL, ldims, NULL);
+	  hid_t plist_id = H5Pcreate(H5P_DATASET_XFER);
+	  H5Pset_dxpl_mpio(plist_id, H5FD_MPIO_COLLECTIVE);
+
+	  getTwopBaryonWriteBuf((void*)writeTwopBuf, twopBaryons, src_rank, t_src, tail, bar, imom, ip);
+	
+	  herr_t status = H5Dwrite(dataset_id, DATATYPE_H5, subspace, filespace, plist_id, writeTwopBuf);
+	  
+	  H5Dclose(dataset_id);
+	  H5Pclose(plist_id);
+	}//-ip
+	H5Sclose(subspace);
+	H5Sclose(filespace);
+	H5Gclose(group4_id);
+      }//-imom
+      H5Gclose(group3_id);
+    }//-bar
+
+    H5Gclose(group2_id);
+    H5Gclose(group1_id);
+    H5Fclose(file_id);
+
+    //-Write the tail, sink_ranks's task
+    if(tail!=0 && GK_timeRank==sink_rank){ 
+      Float *tailBuf = NULL;
+      tailBuf = (Float*) malloc(tail*16*2*sizeof(Float));
+      if (tailBuf == NULL) errorQuda("writeTwopBaryons_HDF5: Cannot allocate tailBuf.\n");
+      memset(tailBuf,0,tail*16*2*sizeof(Float));
+
+      hid_t file_idt = H5Fopen(filename, H5F_ACC_RDWR, H5P_DEFAULT);
+
+      ldims[0] = tail;
+      ldims[1] = 16;
+      ldims[2] = 2;
+      start[0] = T-tail;
+      start[1] = 0;
+      start[2] = 0;
+
+      for(int bar=0;bar<N_BARYONS;bar++){
+	for(int imom=0;imom<GK_Nmoms;imom++){
+	  char *group_tag;
+	  asprintf(&group_tag,"conf_%04d/sx%02dsy%02dsz%02dst%02d/%s/mom_xyz_%+d_%+d_%+d",info.traj,GK_sourcePosition[isource][0],GK_sourcePosition[isource][1],GK_sourcePosition[isource][2],GK_sourcePosition[isource][3],info.baryon_type[bar],GK_moms[imom][0],GK_moms[imom][1],GK_moms[imom][2]);  
+	  hid_t group_id = H5Gopen(file_idt, group_tag, H5P_DEFAULT);
+
+	  for(int ip=0;ip<2;ip++){
+	    char *dset_tag;
+	    asprintf(&dset_tag,"twop_baryon_%d",ip+1);
+
+	    hid_t dset_id  = H5Dopen(group_id, dset_tag, H5P_DEFAULT);
+	    hid_t mspace_id  = H5Screate_simple(3, ldims, NULL);
+	    hid_t dspace_id = H5Dget_space(dset_id);
+
+	    H5Sselect_hyperslab(dspace_id, H5S_SELECT_SET, start, NULL, ldims, NULL);
+	  
+	    getTwopBaryonTailBuf((void*)tailBuf, twopBaryons, t_src, tail, bar, imom, ip);
+
+	    herr_t status = H5Dwrite(dset_id, DATATYPE_H5, mspace_id, dspace_id, H5P_DEFAULT, tailBuf);
+
+	    H5Dclose(dset_id);
+	    H5Sclose(mspace_id);
+	    H5Sclose(dspace_id);
+	  }
+	  H5Gclose(group_id);
+	}//-imom
+      }//-bar
+
+      H5Fclose(file_idt);
+      free(tailBuf);
+    }//-tail!=0
+
+    free(writeTwopBuf);
+  }//-if GK_timeRank >=0 && GK_timeRank < GK_nProc[3]
+
+}
+
+//-C.K. - New function to copy the baryon two-point functions into write Buffers for writing in HDF5 format
+template<typename Float>
+void QKXTM_Contraction_Kepler<Float>::copyTwopBaryonsToHDF5_Buf(void *Twop_baryons_HDF5, void *corrBaryons){
+
+  if(GK_timeRank >= 0 && GK_timeRank < GK_nProc[3] ){
+    for(int ip=0;ip<2;ip++)
+      for(int bar=0;bar<N_BARYONS;bar++)
+	for(int it=0;it<GK_localL[3];it++)
+	  for(int imom=0;imom<GK_Nmoms;imom++)
+	    for(int ga=0;ga<4;ga++)
+	      for(int gap=0;gap<4;gap++){
+		int im=gap+4*ga;
+		((Float*)Twop_baryons_HDF5)[0 + 2*im + 2*16*imom + 2*16*GK_Nmoms*it + 2*16*GK_Nmoms*GK_localL[3]*bar + 2*16*GK_Nmoms*GK_localL[3]*N_BARYONS*ip] = 
+		  ((Float(*)[2][N_BARYONS][4][4])corrBaryons)[0 + 2*imom + 2*GK_Nmoms*it][ip][bar][ga][gap];
+		((Float*)Twop_baryons_HDF5)[1 + 2*im + 2*16*imom + 2*16*GK_Nmoms*it + 2*16*GK_Nmoms*GK_localL[3]*bar + 2*16*GK_Nmoms*GK_localL[3]*N_BARYONS*ip] =
+		  ((Float(*)[2][N_BARYONS][4][4])corrBaryons)[1 + 2*imom + 2*GK_Nmoms*it][ip][bar][ga][gap];
+	      }
+  }//-if
+
+}
+
+
+//-C.K. New function to write the baryons two-point function in ASCII format
+template<typename Float>
+void QKXTM_Contraction_Kepler<Float>::writeTwopBaryons_ASCII(void *corrBaryons, char *filename_out, int isource){
+
+  Float (*GLcorrBaryons)[2][N_BARYONS][4][4] = (Float(*)[2][N_BARYONS][4][4]) calloc(GK_totalL[3]*GK_Nmoms*2*N_BARYONS*4*4*2,sizeof(Float));
+  if( GLcorrBaryons == NULL )errorQuda("writeTwopBaryons_ASCII: Cannot allocate memory for Baryon two-point function buffer.");
+
+  MPI_Datatype DATATYPE = -1;
+  if( typeid(Float) == typeid(float))  DATATYPE = MPI_FLOAT;
+  if( typeid(Float) == typeid(double)) DATATYPE = MPI_DOUBLE;
+
+  int error;
+  if(GK_timeRank >= 0 && GK_timeRank < GK_nProc[3] ){
+    error = MPI_Gather((Float*)corrBaryons,GK_localL[3]*GK_Nmoms*2*N_BARYONS*4*4*2,DATATYPE,GLcorrBaryons,GK_localL[3]*GK_Nmoms*2*N_BARYONS*4*4*2,DATATYPE,0,GK_timeComm);
+    if(error != MPI_SUCCESS) errorQuda("Error in MPI_gather");
+  }
+
+  FILE *ptr_out = NULL;
+  if(comm_rank() == 0){
+    ptr_out = fopen(filename_out,"w");
+    if(ptr_out == NULL) errorQuda("Error opening file for writing\n");
+    for(int ip = 0 ; ip < N_BARYONS ; ip++)
+      for(int it = 0 ; it < GK_totalL[3] ; it++)
+        for(int imom = 0 ; imom < GK_Nmoms ; imom++)
+	  for(int gamma = 0 ; gamma < 4 ; gamma++)
+	    for(int gammap = 0 ; gammap < 4 ; gammap++){
+	      int it_shift = (it+GK_sourcePosition[isource][3])%GK_totalL[3];
+	      int sign = (it+GK_sourcePosition[isource][3]) >= GK_totalL[3] ? -1 : +1;
+	      fprintf(ptr_out,"%d \t %d \t %+d %+d %+d \t %d %d \t %+e %+e \t %+e %+e\n",ip,it,GK_moms[imom][0],GK_moms[imom][1],GK_moms[imom][2],gamma,gammap,
+		      sign*GLcorrBaryons[it_shift*GK_Nmoms*2+imom*2+0][0][ip][gamma][gammap], sign*GLcorrBaryons[it_shift*GK_Nmoms*2+imom*2+1][0][ip][gamma][gammap],
+		      sign*GLcorrBaryons[it_shift*GK_Nmoms*2+imom*2+0][1][ip][gamma][gammap], sign*GLcorrBaryons[it_shift*GK_Nmoms*2+imom*2+1][1][ip][gamma][gammap]);
+	    }
+    fclose(ptr_out);
+  }
+
+  free(GLcorrBaryons);
+}
+
+//-C.K. Overloaded function to perform the baryon contractions without writing the data
+template<typename Float>
+void QKXTM_Contraction_Kepler<Float>::contractBaryons(QKXTM_Propagator_Kepler<Float> &prop1,QKXTM_Propagator_Kepler<Float> &prop2, void *corrBaryons_reduced, int isource){
+  cudaTextureObject_t texProp1, texProp2;
+  prop1.createTexObject(&texProp1);
+  prop2.createTexObject(&texProp2);
+
+  Float (*corrBaryons_local)[2][N_BARYONS][4][4] =(Float(*)[2][N_BARYONS][4][4]) calloc(GK_localL[3]*GK_Nmoms*2*N_BARYONS*4*4*2,sizeof(Float));
+
+  if( corrBaryons_local == NULL )errorQuda("Error problem to allocate memory");
+
+  for(int it = 0 ; it < GK_localL[3] ; it++)
+    run_contractBaryons(texProp1,texProp2,(void*) corrBaryons_local,it,isource,sizeof(Float));
+
+  MPI_Datatype DATATYPE = -1;
+  if( typeid(Float) == typeid(float))  DATATYPE = MPI_FLOAT;
+  if( typeid(Float) == typeid(double)) DATATYPE = MPI_DOUBLE;
+
+  MPI_Reduce(corrBaryons_local, (Float*) corrBaryons_reduced,GK_localL[3]*GK_Nmoms*2*N_BARYONS*4*4*2,DATATYPE,MPI_SUM,0, GK_spaceComm);
+
+  free(corrBaryons_local);
+  prop1.destroyTexObject(texProp1);
+  prop2.destroyTexObject(texProp2);
+}
+
+//---------------------------------------------------------------------------------------------------
+//---------------------------------------------------------------------------------------------------
+//---------------------------------------------------------------------------------------------------
+
+
+//-C.K. - New function to write the mesons two-point function in HDF5 format
+template<typename Float>
+void QKXTM_Contraction_Kepler<Float>::writeTwopMesons_HDF5(void *twopMesons, char *filename, qudaQKXTMinfo_Kepler info, int isource){
+
+  if(GK_timeRank >= 0 && GK_timeRank < GK_nProc[3] ){
+
+    hid_t DATATYPE_H5;
+    if( typeid(Float) == typeid(float) ){
+      DATATYPE_H5 = H5T_NATIVE_FLOAT;
+      printfQuda("**** writeTwopMesons_HDF5: typeid is float ****\n");
+    }
+    if( typeid(Float) == typeid(double)){
+      DATATYPE_H5 = H5T_NATIVE_DOUBLE;
+      printfQuda("**** writeTwopMesons_HDF5: typeid is double ****\n");
+    }
+
+    int t_src = GK_sourcePosition[isource][3];
+    int Lt = GK_localL[3];
+    int T  = GK_totalL[3];
+
+    int src_rank = t_src/Lt;
+    int sink_rank = ((t_src-1)%T)/Lt;
+    int h = Lt - t_src%Lt;
+    int tail = t_src%Lt;
+
+    Float *writeTwopBuf;
+
+    hid_t fapl_id = H5Pcreate(H5P_FILE_ACCESS);
+    H5Pset_fapl_mpio(fapl_id, GK_timeComm, MPI_INFO_NULL);
+    hid_t file_id = H5Fcreate(filename, H5F_ACC_TRUNC, H5P_DEFAULT, fapl_id);
+    H5Pclose(fapl_id);
+
+    char *group1_tag;
+    asprintf(&group1_tag,"conf_%04d",info.traj);
+    hid_t group1_id = H5Gcreate(file_id, group1_tag, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+
+    char *group2_tag;
+    asprintf(&group2_tag,"sx%02dsy%02dsz%02dst%02d",GK_sourcePosition[isource][0],GK_sourcePosition[isource][1],GK_sourcePosition[isource][2],GK_sourcePosition[isource][3]);
+    hid_t group2_id = H5Gcreate(group1_id, group2_tag, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+
+    hid_t group3_id;
+    hid_t group4_id;
+
+    hsize_t dims[2] = {T,2}; // Size of the dataspace
+
+    //-Determine the ldims for each rank (tail not taken into account)
+    hsize_t ldims[2];
+    ldims[1] = dims[1];
+    if(GK_timeRank==src_rank) ldims[0] = h;
+    else ldims[0] = Lt;
+
+    //-Determine the start position for each rank
+    hsize_t start[2];
+    if(GK_timeRank==src_rank) start[0] = 0; // if src_rank = sink_rank then this is the same
+    else{
+      int offs;
+      for(offs=0;offs<GK_nProc[3];offs++){
+	if( GK_timeRank == ((src_rank+offs)%GK_nProc[3]) ) break;
+      }
+      offs--;
+      start[0] = h + offs*Lt;
+    }
+    start[1] = 0; //-This is common among all ranks
+
+    for(int mes=0;mes<N_MESONS;mes++){
+      char *group3_tag;
+      asprintf(&group3_tag,"%s",info.meson_type[mes]);
+      group3_id = H5Gcreate(group2_id, group3_tag, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+
+      for(int imom=0;imom<GK_Nmoms;imom++){
+	char *group4_tag;
+	asprintf(&group4_tag,"mom_xyz_%+d_%+d_%+d",GK_moms[imom][0],GK_moms[imom][1],GK_moms[imom][2]);
+	group4_id = H5Gcreate(group3_id, group4_tag, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+	
+	hid_t filespace  = H5Screate_simple(2, dims, NULL);
+	hid_t subspace   = H5Screate_simple(2, ldims, NULL);
+
+	for(int ip=0;ip<2;ip++){
+	  char *dset_tag;
+	  asprintf(&dset_tag,"twop_meson_%d",ip+1);
+
+	  hid_t dataset_id = H5Dcreate(group4_id, dset_tag, DATATYPE_H5, filespace, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+	  filespace = H5Dget_space(dataset_id);
+	  H5Sselect_hyperslab(filespace, H5S_SELECT_SET, start, NULL, ldims, NULL);
+	  hid_t plist_id = H5Pcreate(H5P_DATASET_XFER);
+	  H5Pset_dxpl_mpio(plist_id, H5FD_MPIO_COLLECTIVE);
+
+	  if(GK_timeRank==src_rank) writeTwopBuf = &(((Float*)twopMesons)[2*tail + 2*Lt*imom + 2*Lt*GK_Nmoms*mes + 2*Lt*GK_Nmoms*N_MESONS*ip]);
+	  else writeTwopBuf = &(((Float*)twopMesons)[2*Lt*imom + 2*Lt*GK_Nmoms*mes + 2*Lt*GK_Nmoms*N_MESONS*ip]);
+	
+	  herr_t status = H5Dwrite(dataset_id, DATATYPE_H5, subspace, filespace, plist_id, writeTwopBuf);
+	  
+	  H5Dclose(dataset_id);
+	  H5Pclose(plist_id);
+	}//-ip
+	H5Sclose(subspace);
+	H5Sclose(filespace);
+	H5Gclose(group4_id);
+      }//-imom
+      H5Gclose(group3_id);
+    }//-mes
+
+    H5Gclose(group2_id);
+    H5Gclose(group1_id);
+    H5Fclose(file_id);
+
+    //-Write the tail, sink_ranks's task
+    if(tail!=0 && GK_timeRank==sink_rank){ 
+      Float *tailBuf;
+
+      hid_t file_idt = H5Fopen(filename, H5F_ACC_RDWR, H5P_DEFAULT);
+
+      ldims[0] = tail;
+      ldims[1] = 2;
+      start[0] = T-tail;
+      start[1] = 0;
+
+      for(int mes=0;mes<N_MESONS;mes++){
+	for(int imom=0;imom<GK_Nmoms;imom++){
+	  char *group_tag;
+	  asprintf(&group_tag,"conf_%04d/sx%02dsy%02dsz%02dst%02d/%s/mom_xyz_%+d_%+d_%+d",info.traj,GK_sourcePosition[isource][0],GK_sourcePosition[isource][1],GK_sourcePosition[isource][2],GK_sourcePosition[isource][3],
+		   info.meson_type[mes],GK_moms[imom][0],GK_moms[imom][1],GK_moms[imom][2]);  
+	  hid_t group_id = H5Gopen(file_idt, group_tag, H5P_DEFAULT);
+
+	  for(int ip=0;ip<2;ip++){
+	    char *dset_tag;
+	    asprintf(&dset_tag,"twop_meson_%d",ip+1);
+
+	    hid_t dset_id  = H5Dopen(group_id, dset_tag, H5P_DEFAULT);
+	    hid_t mspace_id  = H5Screate_simple(2, ldims, NULL);
+	    hid_t dspace_id = H5Dget_space(dset_id);
+
+	    H5Sselect_hyperslab(dspace_id, H5S_SELECT_SET, start, NULL, ldims, NULL);
+	  
+	    tailBuf = &(((Float*)twopMesons)[2*Lt*imom + 2*Lt*GK_Nmoms*mes + 2*Lt*GK_Nmoms*N_MESONS*ip]);
+
+	    herr_t status = H5Dwrite(dset_id, DATATYPE_H5, mspace_id, dspace_id, H5P_DEFAULT, tailBuf);
+	    
+	    H5Dclose(dset_id);
+	    H5Sclose(mspace_id);
+	    H5Sclose(dspace_id);
+	  }
+	  H5Gclose(group_id);
+	}//-imom
+      }//-mes
+
+      H5Fclose(file_idt);
+    }//-tail!=0
+
+  }//-if GK_timeRank >=0 && GK_timeRank < GK_nProc[3]
+
+}
+
+//-C.K. - New function to copy the meson two-point functions into write Buffers for writing in HDF5 format
+template<typename Float>
+void QKXTM_Contraction_Kepler<Float>::copyTwopMesonsToHDF5_Buf(void *Twop_mesons_HDF5, void *corrMesons){
+
+  if(GK_timeRank >= 0 && GK_timeRank < GK_nProc[3] ){
+    for(int ip=0;ip<2;ip++)
+      for(int mes=0;mes<N_MESONS;mes++)
+	for(int imom=0;imom<GK_Nmoms;imom++)
+	  for(int it=0;it<GK_localL[3];it++){
+	    ((Float*)Twop_mesons_HDF5)[0 + 2*it + 2*GK_localL[3]*imom + 2*GK_localL[3]*GK_Nmoms*mes + 2*GK_localL[3]*GK_Nmoms*N_MESONS*ip] = ((Float(*)[2][N_MESONS])corrMesons)[0 + 2*imom + 2*GK_Nmoms*it][ip][mes];
+	    ((Float*)Twop_mesons_HDF5)[1 + 2*it + 2*GK_localL[3]*imom + 2*GK_localL[3]*GK_Nmoms*mes + 2*GK_localL[3]*GK_Nmoms*N_MESONS*ip] = ((Float(*)[2][N_MESONS])corrMesons)[1 + 2*imom + 2*GK_Nmoms*it][ip][mes];
+	  }
+  }//-if
+
+}
 
 
 //-C.K. New function to write the mesons two-point function in ASCII format
@@ -1530,18 +2004,14 @@ void QKXTM_Contraction_Kepler<Float>::writeTwopMesons_ASCII(void *corrMesons, ch
   Float (*GLcorrMesons)[2][N_MESONS] = (Float(*)[2][N_MESONS]) calloc(GK_totalL[3]*GK_Nmoms*2*N_MESONS*2,sizeof(Float));;
   if( GLcorrMesons == NULL )errorQuda("writeTwopMesons_ASCII: Cannot allocate memory for Meson two-point function buffer.");
 
+  MPI_Datatype DATATYPE = -1;
+  if( typeid(Float) == typeid(float))  DATATYPE = MPI_FLOAT;
+  if( typeid(Float) == typeid(double)) DATATYPE = MPI_DOUBLE;
+
   int error;
-  if( typeid(Float) == typeid(float) ){
-    if(GK_timeRank >= 0 && GK_timeRank < GK_nProc[3] ){
-      error = MPI_Gather((float*) corrMesons,GK_localL[3]*GK_Nmoms*2*N_MESONS*2,MPI_FLOAT,GLcorrMesons,GK_localL[3]*GK_Nmoms*2*N_MESONS*2,MPI_FLOAT,0,GK_timeComm);
-      if(error != MPI_SUCCESS) errorQuda("Error in MPI_gather");
-    }
-  }
-  else{
-    if(GK_timeRank >= 0 && GK_timeRank < GK_nProc[3] ){
-      error = MPI_Gather((double*) corrMesons,GK_localL[3]*GK_Nmoms*2*N_MESONS*2,MPI_DOUBLE,GLcorrMesons,GK_localL[3]*GK_Nmoms*2*N_MESONS*2,MPI_DOUBLE,0,GK_timeComm);
-      if(error != MPI_SUCCESS) errorQuda("Error in MPI_gather");
-    }
+  if(GK_timeRank >= 0 && GK_timeRank < GK_nProc[3] ){
+    error = MPI_Gather((Float*) corrMesons,GK_localL[3]*GK_Nmoms*2*N_MESONS*2,DATATYPE,GLcorrMesons,GK_localL[3]*GK_Nmoms*2*N_MESONS*2,DATATYPE,0,GK_timeComm);
+    if(error != MPI_SUCCESS) errorQuda("Error in MPI_gather");
   }
 
   FILE *ptr_out = NULL;
@@ -1575,12 +2045,11 @@ void QKXTM_Contraction_Kepler<Float>::contractMesons(QKXTM_Propagator_Kepler<Flo
   for(int it = 0 ; it < GK_localL[3] ; it++)
     run_contractMesons(texProp1,texProp2,(void*) corrMesons_local,it,isource,sizeof(Float));
 
-  if( typeid(Float) == typeid(float) ){
-    MPI_Reduce(corrMesons_local, (float*)corrMesons_reduced,GK_localL[3]*GK_Nmoms*2*N_MESONS*2,MPI_FLOAT,MPI_SUM,0, GK_spaceComm);
-  }
-  else if( typeid(Float) == typeid(double) ){
-    MPI_Reduce(corrMesons_local, (double*)corrMesons_reduced,GK_localL[3]*GK_Nmoms*2*N_MESONS*2,MPI_DOUBLE,MPI_SUM,0, GK_spaceComm);
-  }
+  MPI_Datatype DATATYPE = -1;
+  if( typeid(Float) == typeid(float))  DATATYPE = MPI_FLOAT;
+  if( typeid(Float) == typeid(double)) DATATYPE = MPI_DOUBLE;
+
+  MPI_Reduce(corrMesons_local, (Float*)corrMesons_reduced,GK_localL[3]*GK_Nmoms*2*N_MESONS*2,DATATYPE,MPI_SUM,0, GK_spaceComm);
 
   free(corrMesons_local);
 
@@ -1589,77 +2058,7 @@ void QKXTM_Contraction_Kepler<Float>::contractMesons(QKXTM_Propagator_Kepler<Flo
 }
 
 //---------------------------------------------------------------------------------------------------
-
-
-//-C.K. New function to write the baryons two-point function in ASCII format
-template<typename Float>
-void QKXTM_Contraction_Kepler<Float>::writeTwopBaryons_ASCII(void *corrBaryons, char *filename_out, int isource){
-
-  Float (*GLcorrBaryons)[2][N_BARYONS][4][4] = (Float(*)[2][N_BARYONS][4][4]) calloc(GK_totalL[3]*GK_Nmoms*2*N_BARYONS*4*4*2,sizeof(Float));
-  if( GLcorrBaryons == NULL )errorQuda("writeTwopBaryons_ASCII: Cannot allocate memory for Baryon two-point function buffer.");
-
-  int error;
-  if( typeid(Float) == typeid(float) ){
-    if(GK_timeRank >= 0 && GK_timeRank < GK_nProc[3] ){
-      error = MPI_Gather((float*) corrBaryons,GK_localL[3]*GK_Nmoms*2*N_BARYONS*4*4*2,MPI_FLOAT,GLcorrBaryons,GK_localL[3]*GK_Nmoms*2*N_BARYONS*4*4*2,MPI_FLOAT,0,GK_timeComm);
-      if(error != MPI_SUCCESS) errorQuda("Error in MPI_gather");
-    }
-  }
-  else{
-    if(GK_timeRank >= 0 && GK_timeRank < GK_nProc[3] ){
-      error = MPI_Gather((double*) corrBaryons,GK_localL[3]*GK_Nmoms*2*N_BARYONS*4*4*2,MPI_DOUBLE,GLcorrBaryons,GK_localL[3]*GK_Nmoms*2*N_BARYONS*4*4*2,MPI_DOUBLE,0,GK_timeComm);
-      if(error != MPI_SUCCESS) errorQuda("Error in MPI_gather");
-    }
-  }
-
-  FILE *ptr_out = NULL;
-  if(comm_rank() == 0){
-    ptr_out = fopen(filename_out,"w");
-    if(ptr_out == NULL) errorQuda("Error opening file for writing\n");
-    for(int ip = 0 ; ip < N_BARYONS ; ip++)
-      for(int it = 0 ; it < GK_totalL[3] ; it++)
-        for(int imom = 0 ; imom < GK_Nmoms ; imom++)
-	  for(int gamma = 0 ; gamma < 4 ; gamma++)
-	    for(int gammap = 0 ; gammap < 4 ; gammap++){
-	      int it_shift = (it+GK_sourcePosition[isource][3])%GK_totalL[3];
-	      int sign = (it+GK_sourcePosition[isource][3]) >= GK_totalL[3] ? -1 : +1;
-	      fprintf(ptr_out,"%d \t %d \t %+d %+d %+d \t %d %d \t %+e %+e \t %+e %+e\n",ip,it,GK_moms[imom][0],GK_moms[imom][1],GK_moms[imom][2],gamma,gammap,
-		      sign*GLcorrBaryons[it_shift*GK_Nmoms*2+imom*2+0][0][ip][gamma][gammap], sign*GLcorrBaryons[it_shift*GK_Nmoms*2+imom*2+1][0][ip][gamma][gammap],
-		      sign*GLcorrBaryons[it_shift*GK_Nmoms*2+imom*2+0][1][ip][gamma][gammap], sign*GLcorrBaryons[it_shift*GK_Nmoms*2+imom*2+1][1][ip][gamma][gammap]);
-	    }
-    fclose(ptr_out);
-  }
-
-  free(GLcorrBaryons);
-}
-
-
-//-C.K. Overloaded function to perform the baryon contractions without writing the data
-template<typename Float>
-void QKXTM_Contraction_Kepler<Float>::contractBaryons(QKXTM_Propagator_Kepler<Float> &prop1,QKXTM_Propagator_Kepler<Float> &prop2, void *corrBaryons_reduced, int isource){
-  cudaTextureObject_t texProp1, texProp2;
-  prop1.createTexObject(&texProp1);
-  prop2.createTexObject(&texProp2);
-
-  Float (*corrBaryons_local)[2][N_BARYONS][4][4] =(Float(*)[2][N_BARYONS][4][4]) calloc(GK_localL[3]*GK_Nmoms*2*N_BARYONS*4*4*2,sizeof(Float));
-
-  if( corrBaryons_local == NULL )errorQuda("Error problem to allocate memory");
-
-  for(int it = 0 ; it < GK_localL[3] ; it++)
-    run_contractBaryons(texProp1,texProp2,(void*) corrBaryons_local,it,isource,sizeof(Float));
-
-  if( typeid(Float) == typeid(float) ){
-    MPI_Reduce(corrBaryons_local, (float*) corrBaryons_reduced,GK_localL[3]*GK_Nmoms*2*N_BARYONS*4*4*2,MPI_FLOAT,MPI_SUM,0, GK_spaceComm);
-  }
-  else if( typeid(Float) == typeid(double) ){
-    MPI_Reduce(corrBaryons_local, (double*) corrBaryons_reduced,GK_localL[3]*GK_Nmoms*2*N_BARYONS*4*4*2,MPI_DOUBLE,MPI_SUM,0, GK_spaceComm);
-  }
-
-  free(corrBaryons_local);
-  prop1.destroyTexObject(texProp1);
-  prop2.destroyTexObject(texProp2);
-}
-
+//---------------------------------------------------------------------------------------------------
 //---------------------------------------------------------------------------------------------------
 
 template<typename Float>
@@ -1690,6 +2089,268 @@ void QKXTM_Contraction_Kepler<Float>::seqSourceFixSinkPart2(QKXTM_Vector_Kepler<
 }
 
 //---------------------------------------------------------------------------------------------------
+//---------------------------------------------------------------------------------------------------
+
+
+//-C.K. - Get the HDF5 dataset chunk into writeBuf
+template<typename Float>
+void QKXTM_Contraction_Kepler<Float>::getThrpWriteBuf(void *writeBuf, void *thrpBuf, int its, int Nsink, int part, int imom, int thrp_sign, THRP_TYPE type){
+
+  int Mel;
+  if(type==THRP_LOCAL || type==THRP_ONED) Mel = 16;
+  else if(type==THRP_NOETHER) Mel = 4;
+
+  for(int lt=0;lt<GK_localL[3];lt++){
+    for(int im=0;im<Mel;im++){
+      ((Float*)writeBuf)[0+2*im+2*Mel*lt] = thrp_sign*((Float*)thrpBuf)[0 + 2*im + 2*Mel*imom + 2*Mel*GK_Nmoms*part + 2*Mel*GK_Nmoms*2*its + 2*Mel*GK_Nmoms*2*Nsink*lt];
+      ((Float*)writeBuf)[1+2*im+2*Mel*lt] = thrp_sign*((Float*)thrpBuf)[1 + 2*im + 2*Mel*imom + 2*Mel*GK_Nmoms*part + 2*Mel*GK_Nmoms*2*its + 2*Mel*GK_Nmoms*2*Nsink*lt];
+    }
+  }
+}
+
+//-C.K. - New function to write the three-point function in HDF5 format
+template<typename Float>
+void QKXTM_Contraction_Kepler<Float>::writeThrp_HDF5(void *Thrp_local_HDF5, void *Thrp_noether_HDF5, void **Thrp_oneD_HDF5, char *filename, qudaQKXTMinfo_Kepler info, int isource){
+
+  if(GK_timeRank >= 0 && GK_timeRank < GK_nProc[3] ){
+
+    hid_t DATATYPE_H5;
+    if( typeid(Float) == typeid(float) ){
+      DATATYPE_H5 = H5T_NATIVE_FLOAT;
+      printfQuda("**** writeThrp_HDF5: typeid is float ****\n");
+    }
+    if( typeid(Float) == typeid(double)){
+      DATATYPE_H5 = H5T_NATIVE_DOUBLE;
+      printfQuda("**** writeThrp_HDF5: typeid is double ****\n");
+    }
+
+    void *thrpBuf;
+    Float *bufH5,*writeBuf = NULL;
+
+    int t_src = GK_sourcePosition[isource][3];
+    int Lt = GK_localL[3];
+    int T  = GK_totalL[3];
+    int Mel;
+
+    int src_rank = t_src/Lt;
+    int h = Lt - t_src%Lt;
+    int w = t_src%Lt;
+
+    hid_t fapl_id = H5Pcreate(H5P_FILE_ACCESS);
+    H5Pset_fapl_mpio(fapl_id, GK_timeComm, MPI_INFO_NULL);
+    hid_t file_id = H5Fcreate(filename, H5F_ACC_TRUNC, H5P_DEFAULT, fapl_id);
+    H5Pclose(fapl_id);
+
+    char *group1_tag;
+    asprintf(&group1_tag,"conf_%04d",info.traj);
+    hid_t group1_id = H5Gcreate(file_id, group1_tag, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+
+    char *group2_tag;
+    asprintf(&group2_tag,"sx%02dsy%02dsz%02dst%02d",GK_sourcePosition[isource][0],GK_sourcePosition[isource][1],GK_sourcePosition[isource][2],GK_sourcePosition[isource][3]);
+    hid_t group2_id = H5Gcreate(group1_id, group2_tag, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+
+    hid_t group3_id;
+    hid_t group4_id;
+    hid_t group5_id;
+    hid_t group6_id;
+    hid_t group7_id;
+
+    hsize_t dims[3],ldims[3],start[3];
+
+    for(int its=0;its<info.Ntsink;its++){
+      int tsink = info.tsinkSource[its];
+
+      if( tsink >= (T - t_src%Lt) ){
+	warningQuda("*** writeThrp_HDF5: No support for HDF5 when tsink >= (T - t_src%%Lt). Skipping writing tsink = %d ***\n",tsink);
+	continue;
+      }
+
+      int sink_rank = ((t_src+tsink)%T)/Lt;
+
+      int thrp_sign = (tsink+t_src) >= GK_totalL[3] ? -1 : +1;
+
+      int l = ((t_src+tsink)%T)%Lt + 1; //-Significant only for sink_rank
+
+      //-Determine which processes will print for this tsink
+      bool print_rank = false;
+      for(int i=0;i<GK_nProc[3];i++){
+	if( GK_timeRank == ((src_rank+i)%GK_nProc[3]) ) print_rank = true;
+	if( ((src_rank+i)%GK_nProc[3]) == sink_rank ) break;
+      }
+
+      char *group3_tag;
+      asprintf(&group3_tag,"tsink_%02d",tsink);
+      group3_id = H5Gcreate(group2_id, group3_tag, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+      
+      //-Determine the start position for each rank
+      if(print_rank){
+	if(GK_timeRank==src_rank) start[0] = 0; // if src_rank = sink_rank then this is the same
+	else{
+	  if( src_rank != sink_rank ){ // if src_rank = sink_rank, we don't want start[0] to change
+	    int offs;
+	    for(offs=0;offs<GK_nProc[3];offs++){
+	      if( GK_timeRank == ((src_rank+offs)%GK_nProc[3]) ) break;
+	    }
+	    offs--;
+	    start[0] = h + offs*Lt;
+	  }
+	}
+      }
+      else start[0] = 0; // Need to set this to zero when a given rank does not print. Otherwise the dimensions will not fit   
+      start[1] = 0; //
+      start[2] = 0; //-These are common among all ranks
+      
+      for(int part=0;part<2;part++){
+	char *group4_tag;
+	asprintf(&group4_tag,"%s", (part==0) ? "up" : "down");
+	group4_id = H5Gcreate(group3_id, group4_tag, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+	
+	for(int thrp_int=0;thrp_int<3;thrp_int++){
+	  THRP_TYPE type = (THRP_TYPE) thrp_int;
+
+	  char *group5_tag;
+	  asprintf(&group5_tag,"%s", info.thrp_type[thrp_int]);
+	  group5_id = H5Gcreate(group4_id, group5_tag, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+	  
+	  //-Determine the global dimensions
+	  if(type==THRP_LOCAL || type==THRP_ONED) Mel = 16;
+	  else if (type==THRP_NOETHER) Mel = 4;
+	  else errorQuda("writeThrp_HDF5: Undefined three-point function type.\n");
+
+	  dims[0] = tsink+1;
+	  dims[1] = Mel;
+	  dims[2] = 2;
+
+	  writeBuf = (Float*) malloc(Lt*Mel*2*sizeof(Float));
+	  if (writeBuf == NULL) errorQuda("writeThrp_HDF5: Cannot allocate writeBuf.\n");
+	  memset(writeBuf,0,Lt*Mel*2*sizeof(Float));
+
+	  //-Determine ldims for print ranks
+	  if(print_rank){
+	    ldims[1] = dims[1];
+	    ldims[2] = dims[2];
+	    if(src_rank != sink_rank){
+	      if(GK_timeRank==src_rank) ldims[0] = h;
+	      else if(GK_timeRank==sink_rank) ldims[0] = l;
+	      else ldims[0] = Lt;
+	    }
+	    else ldims[0] = dims[0];
+	  }
+	  else for(int i=0;i<3;i++) ldims[i] = 0; //- Non-print ranks get zero space
+	  
+	  for(int imom=0;imom<GK_Nmoms;imom++){
+	    char *group6_tag;
+	    asprintf(&group6_tag,"mom_xyz_%+d_%+d_%+d",GK_moms[imom][0],GK_moms[imom][1],GK_moms[imom][2]);
+	    group6_id = H5Gcreate(group5_id, group6_tag, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+	    
+	    if(type==THRP_ONED){
+	      for(int mu=0;mu<4;mu++){
+		thrpBuf = Thrp_oneD_HDF5[mu];
+		
+		char *group7_tag;
+		asprintf(&group7_tag,"dir_%02d",mu);
+		group7_id = H5Gcreate(group6_id, group7_tag, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+
+		hid_t filespace  = H5Screate_simple(3, dims, NULL);
+		hid_t dataset_id = H5Dcreate(group7_id, "threep", DATATYPE_H5, filespace, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+		hid_t subspace   = H5Screate_simple(3, ldims, NULL);
+		filespace = H5Dget_space(dataset_id);
+		H5Sselect_hyperslab(filespace, H5S_SELECT_SET, start, NULL, ldims, NULL);
+		hid_t plist_id = H5Pcreate(H5P_DATASET_XFER);
+		H5Pset_dxpl_mpio(plist_id, H5FD_MPIO_COLLECTIVE);
+
+		getThrpWriteBuf((void*)writeBuf, thrpBuf, its, info.Ntsink, part, imom, thrp_sign, type);
+
+		if(GK_timeRank==src_rank) bufH5 = (Float*) (&(writeBuf[2*Mel*w]));
+		else bufH5 = (Float*) (&(writeBuf[0]));
+
+		herr_t status = H5Dwrite(dataset_id, DATATYPE_H5, subspace, filespace, plist_id, bufH5);
+
+		H5Sclose(subspace);
+		H5Dclose(dataset_id);
+		H5Sclose(filespace);
+		H5Pclose(plist_id);
+
+		H5Gclose(group7_id);
+	      }//-mu	      
+	    }//-if
+	    else{
+	      if(type==THRP_LOCAL) thrpBuf = Thrp_local_HDF5;
+	      else if(type==THRP_NOETHER) thrpBuf = Thrp_noether_HDF5;
+
+	      hid_t filespace  = H5Screate_simple(3, dims, NULL);
+	      hid_t dataset_id = H5Dcreate(group6_id, "threep", DATATYPE_H5, filespace, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+	      hid_t subspace   = H5Screate_simple(3, ldims, NULL);
+	      filespace = H5Dget_space(dataset_id);
+	      H5Sselect_hyperslab(filespace, H5S_SELECT_SET, start, NULL, ldims, NULL);
+	      hid_t plist_id = H5Pcreate(H5P_DATASET_XFER);
+	      H5Pset_dxpl_mpio(plist_id, H5FD_MPIO_COLLECTIVE);
+	      
+	      getThrpWriteBuf((void*)writeBuf, thrpBuf, its, info.Ntsink, part, imom, thrp_sign, type);
+
+	      if(GK_timeRank==src_rank)	bufH5 = (Float*) (&(writeBuf[2*Mel*w]));
+	      else bufH5 = (Float*) (&(writeBuf[0]));
+
+	      herr_t status = H5Dwrite(dataset_id, DATATYPE_H5, subspace, filespace, plist_id, bufH5);
+	      
+	      H5Sclose(subspace);
+	      H5Dclose(dataset_id);
+	      H5Sclose(filespace);
+	      H5Pclose(plist_id);
+	    }//-else	  
+
+	    H5Gclose(group6_id);
+	  }//-imom	 
+ 
+	  H5Gclose(group5_id);
+	  free(writeBuf);
+	  writeBuf = NULL;
+	}//-thrp_int
+	H5Gclose(group4_id);
+      }//-part
+      H5Gclose(group3_id);
+    }//-its
+    
+    H5Gclose(group2_id);
+    H5Gclose(group1_id);
+    H5Fclose(file_id);
+  }//-if
+}
+
+
+//-C.K. - New function to copy the three-point data into write Buffers for writing in HDF5 format
+template<typename Float>
+void QKXTM_Contraction_Kepler<Float>::copyThrpToHDF5_Buf(void *Thrp_HDF5, void *corrThp,  int mu, int uORd, int its, int Nsink, THRP_TYPE type){
+
+  int Mel;
+  if(type==THRP_LOCAL || type==THRP_ONED) Mel = 16;
+  else if(type==THRP_NOETHER) Mel = 4;
+  else errorQuda("Undefined THRP_TYPE passed to copyThrpToHDF5_Buf.\n");
+
+  if(GK_timeRank >= 0 && GK_timeRank < GK_nProc[3] ){
+    if(type==THRP_LOCAL || type==THRP_NOETHER){
+      for(int it = 0; it<GK_localL[3]; it++){
+	for(int imom = 0; imom<GK_Nmoms; imom++){
+	  for(int im = 0; im<Mel; im++){
+	    ((Float*)Thrp_HDF5)[0 + 2*im + 2*Mel*imom + 2*Mel*GK_Nmoms*uORd + 2*Mel*GK_Nmoms*2*its + 2*Mel*GK_Nmoms*2*Nsink*it] = ((Float*)corrThp)[0 + 2*im + 2*Mel*imom + 2*Mel*GK_Nmoms*it];
+	    ((Float*)Thrp_HDF5)[1 + 2*im + 2*Mel*imom + 2*Mel*GK_Nmoms*uORd + 2*Mel*GK_Nmoms*2*its + 2*Mel*GK_Nmoms*2*Nsink*it] = ((Float*)corrThp)[1 + 2*im + 2*Mel*imom + 2*Mel*GK_Nmoms*it];
+	  }
+	}
+      }
+    }
+    else if(type==THRP_ONED){
+      for(int it = 0; it<GK_localL[3]; it++){
+	for(int imom = 0; imom<GK_Nmoms; imom++){
+	  for(int im = 0; im<Mel; im++){
+	    ((Float*)Thrp_HDF5)[0 + 2*im + 2*Mel*imom + 2*Mel*GK_Nmoms*uORd + 2*Mel*GK_Nmoms*2*its + 2*Mel*GK_Nmoms*2*Nsink*it] = ((Float*)corrThp)[0 + 2*im + 2*Mel*mu + 2*Mel*4*imom + 2*Mel*4*GK_Nmoms*it];
+	    ((Float*)Thrp_HDF5)[1 + 2*im + 2*Mel*imom + 2*Mel*GK_Nmoms*uORd + 2*Mel*GK_Nmoms*2*its + 2*Mel*GK_Nmoms*2*Nsink*it] = ((Float*)corrThp)[1 + 2*im + 2*Mel*mu + 2*Mel*4*imom + 2*Mel*4*GK_Nmoms*it];
+	  }
+	}
+      }      
+    }
+  }//-if
+}
+
 
 //-C.K. - New function to write the three-point function in ASCII format
 template<typename Float>
@@ -1698,28 +2359,26 @@ void QKXTM_Contraction_Kepler<Float>::writeThrp_ASCII(void *corrThp_local, void 
   Float *GLcorrThp_local   = (Float*) calloc(GK_totalL[3]*GK_Nmoms*16  *2,sizeof(Float));
   Float *GLcorrThp_noether = (Float*) calloc(GK_totalL[3]*GK_Nmoms   *4*2,sizeof(Float));
   Float *GLcorrThp_oneD    = (Float*) calloc(GK_totalL[3]*GK_Nmoms*16*4*2,sizeof(Float));
-  if(corrThp_local == NULL || corrThp_noether == NULL || corrThp_oneD == NULL) errorQuda("writeThrp_ASCII: Cannot allocate memory for write Buffers.");
+  if(GLcorrThp_local == NULL || GLcorrThp_noether == NULL || GLcorrThp_oneD == NULL) errorQuda("writeThrp_ASCII: Cannot allocate memory for write Buffers.");
+
+  MPI_Datatype DATATYPE = -1;
+  if( typeid(Float) == typeid(float)){
+    DATATYPE = MPI_FLOAT;
+    printfQuda("**** writeThrp_ASCII: typeid is float ****\n");
+  }
+  if( typeid(Float) == typeid(double)){
+    DATATYPE = MPI_DOUBLE;
+    printfQuda("**** writeThrp_ASCII: typeid is double ****\n");
+  }
 
   int error;
-  if( typeid(Float) == typeid(float)){
-    if(GK_timeRank >= 0 && GK_timeRank < GK_nProc[3] ){
-      error = MPI_Gather((float*)corrThp_local,GK_localL[3]*GK_Nmoms*16*2, MPI_FLOAT, GLcorrThp_local, GK_localL[3]*GK_Nmoms*16*2, MPI_FLOAT, 0, GK_timeComm);
-      if(error != MPI_SUCCESS) errorQuda("Error in MPI_gather");
-      error = MPI_Gather((float*)corrThp_noether,GK_localL[3]*GK_Nmoms*4*2, MPI_FLOAT, GLcorrThp_noether, GK_localL[3]*GK_Nmoms*4*2, MPI_FLOAT, 0, GK_timeComm);
-      if(error != MPI_SUCCESS) errorQuda("Error in MPI_gather");
-      error = MPI_Gather((float*)corrThp_oneD,GK_localL[3]*GK_Nmoms*4*16*2, MPI_FLOAT, GLcorrThp_oneD, GK_localL[3]*GK_Nmoms*4*16*2, MPI_FLOAT, 0, GK_timeComm);
-      if(error != MPI_SUCCESS) errorQuda("Error in MPI_gather");
-    }
-  }
-  else if( typeid(Float) == typeid(double)){
-    if(GK_timeRank >= 0 && GK_timeRank < GK_nProc[3] ){
-      error = MPI_Gather((double*)corrThp_local,GK_localL[3]*GK_Nmoms*16*2, MPI_DOUBLE, GLcorrThp_local, GK_localL[3]*GK_Nmoms*16*2, MPI_DOUBLE, 0, GK_timeComm);
-      if(error != MPI_SUCCESS) errorQuda("Error in MPI_gather");
-      error = MPI_Gather((double*)corrThp_noether,GK_localL[3]*GK_Nmoms*4*2, MPI_DOUBLE, GLcorrThp_noether, GK_localL[3]*GK_Nmoms*4*2, MPI_DOUBLE, 0, GK_timeComm);
-      if(error != MPI_SUCCESS) errorQuda("Error in MPI_gather");
-      error = MPI_Gather((double*)corrThp_oneD,GK_localL[3]*GK_Nmoms*4*16*2, MPI_DOUBLE, GLcorrThp_oneD, GK_localL[3]*GK_Nmoms*4*16*2, MPI_DOUBLE, 0, GK_timeComm);
-      if(error != MPI_SUCCESS) errorQuda("Error in MPI_gather");
-    }
+  if(GK_timeRank >= 0 && GK_timeRank < GK_nProc[3] ){
+    error = MPI_Gather((Float*)corrThp_local,GK_localL[3]*GK_Nmoms*16*2, DATATYPE, GLcorrThp_local, GK_localL[3]*GK_Nmoms*16*2, DATATYPE, 0, GK_timeComm);
+    if(error != MPI_SUCCESS) errorQuda("Error in MPI_gather");
+    error = MPI_Gather((Float*)corrThp_noether,GK_localL[3]*GK_Nmoms*4*2, DATATYPE, GLcorrThp_noether, GK_localL[3]*GK_Nmoms*4*2, DATATYPE, 0, GK_timeComm);
+    if(error != MPI_SUCCESS) errorQuda("Error in MPI_gather");
+    error = MPI_Gather((Float*)corrThp_oneD,GK_localL[3]*GK_Nmoms*4*16*2, DATATYPE, GLcorrThp_oneD, GK_localL[3]*GK_Nmoms*4*16*2, DATATYPE, 0, GK_timeComm);
+    if(error != MPI_SUCCESS) errorQuda("Error in MPI_gather");
   }
 
   char fname_local[257];
@@ -1786,6 +2445,9 @@ void QKXTM_Contraction_Kepler<Float>::writeThrp_ASCII(void *corrThp_local, void 
     fclose(ptr_oneD);
   }
 
+  free(GLcorrThp_local);
+  free(GLcorrThp_noether);
+  free(GLcorrThp_oneD);
 }
 
 //-C.K. Overloaded function to perform the contractions without writing the data
@@ -1793,6 +2455,14 @@ template<typename Float>
 void QKXTM_Contraction_Kepler<Float>::contractFixSink(QKXTM_Propagator_Kepler<Float> &seqProp,QKXTM_Propagator_Kepler<Float> &prop, QKXTM_Gauge_Kepler<Float> &gauge,
 						      void *corrThp_local_reduced, void *corrThp_noether_reduced, void *corrThp_oneD_reduced,
 						      WHICHPROJECTOR typeProj , WHICHPARTICLE testParticle, int partflag, int isource){
+
+  if( typeid(Float) == typeid(float)){
+    printfQuda("**** contractFixSink: typeid is float ****\n");
+  }
+  if( typeid(Float) == typeid(double)){
+    printfQuda("**** contractFixSink: typeid is double ****\n");
+  }
+
 
   // seq prop apply gamma5 and conjugate
   // do the communication for gauge, prop and seqProp
@@ -1831,17 +2501,14 @@ void QKXTM_Contraction_Kepler<Float>::contractFixSink(QKXTM_Propagator_Kepler<Fl
   for(int it = 0 ; it < GK_localL[3] ; it++)
     run_fixSinkContractions(corrThp_local_local,corrThp_noether_local,corrThp_oneD_local,fwdTex,seqTex,gaugeTex,testParticle,partflag,it,isource,sizeof(Float));
 
+  MPI_Datatype DATATYPE = -1;
+  if( typeid(Float) == typeid(float))  DATATYPE = MPI_FLOAT;
+  if( typeid(Float) == typeid(double)) DATATYPE = MPI_DOUBLE;
 
-  if( typeid(Float) == typeid(float)){
-    MPI_Reduce(corrThp_local_local, (float*)corrThp_local_reduced, GK_localL[3]*GK_Nmoms*16*2, MPI_FLOAT, MPI_SUM, 0, GK_spaceComm);
-    MPI_Reduce(corrThp_noether_local, (float*)corrThp_noether_reduced, GK_localL[3]*GK_Nmoms*4*2, MPI_FLOAT, MPI_SUM, 0, GK_spaceComm);
-    MPI_Reduce(corrThp_oneD_local, (float*)corrThp_oneD_reduced, GK_localL[3]*GK_Nmoms*4*16*2, MPI_FLOAT, MPI_SUM, 0, GK_spaceComm);
-  }
-  else{
-    MPI_Reduce(corrThp_local_local, (double*)corrThp_local_reduced, GK_localL[3]*GK_Nmoms*16*2, MPI_DOUBLE, MPI_SUM, 0, GK_spaceComm);
-    MPI_Reduce(corrThp_noether_local, (double*)corrThp_noether_reduced, GK_localL[3]*GK_Nmoms*4*2, MPI_DOUBLE, MPI_SUM, 0, GK_spaceComm);
-    MPI_Reduce(corrThp_oneD_local, (double*)corrThp_oneD_reduced, GK_localL[3]*GK_Nmoms*4*16*2, MPI_DOUBLE, MPI_SUM, 0, GK_spaceComm);
-  }
+  MPI_Reduce(corrThp_local_local, (Float*)corrThp_local_reduced, GK_localL[3]*GK_Nmoms*16*2, DATATYPE, MPI_SUM, 0, GK_spaceComm);
+  MPI_Reduce(corrThp_noether_local, (Float*)corrThp_noether_reduced, GK_localL[3]*GK_Nmoms*4*2, DATATYPE, MPI_SUM, 0, GK_spaceComm);
+  MPI_Reduce(corrThp_oneD_local, (Float*)corrThp_oneD_reduced, GK_localL[3]*GK_Nmoms*4*16*2, DATATYPE, MPI_SUM, 0, GK_spaceComm);
+
 
   free(corrThp_local_local);
   free(corrThp_noether_local);
@@ -1856,6 +2523,15 @@ void QKXTM_Contraction_Kepler<Float>::contractFixSink(QKXTM_Propagator_Kepler<Fl
 
 template<typename Float>
 void QKXTM_Contraction_Kepler<Float>::contractFixSink(QKXTM_Propagator_Kepler<Float> &seqProp,QKXTM_Propagator_Kepler<Float> &prop, QKXTM_Gauge_Kepler<Float> &gauge, WHICHPROJECTOR typeProj , WHICHPARTICLE testParticle, int partflag , char *filename_out, int isource, int tsinkMtsource){
+
+  if( typeid(Float) == typeid(float)){
+    printfQuda("**** contractFixSink: typeid is float ****\n");
+  }
+  if( typeid(Float) == typeid(double)){
+    printfQuda("**** contractFixSink: typeid is double ****\n");
+  }
+
+
   // seq prop apply gamma5 and conjugate
   // do the communication for gauge, prop and seqProp
   seqProp.apply_gamma5();
@@ -2024,6 +2700,10 @@ void QKXTM_Contraction_Kepler<Float>::contractFixSink(QKXTM_Propagator_Kepler<Fl
   gauge.destroyTexObject(gaugeTex);
 
 }
+
+//---------------------------------------------------------------------------------------------------
+//---------------------------------------------------------------------------------------------------
+//---------------------------------------------------------------------------------------------------
 
 ////////////////////////////////////////////////////////////////////////////////////
 template<typename Float>
@@ -4086,7 +4766,7 @@ void createMomenta(int **mom, int **momQsq, int Q_sq, int Nmoms){
 }
 
 template<typename Float>
-void copyToWriteBuf(Float *writeBuf, void *tmpBuf, int iPrint, int Q_sq, int Nmoms, int **mom){
+void copyLoopToWriteBuf(Float *writeBuf, void *tmpBuf, int iPrint, int Q_sq, int Nmoms, int **mom){
 
   long int SplV = GK_localL[0]*GK_localL[1]*GK_localL[2];
   int imom = 0;
@@ -4159,7 +4839,7 @@ void writeLoops_ASCII(Float *writeBuf, const char *Pref, qudaQKXTM_loopInfo loop
 
 //-C.K: Copy the HDF5 dataset chunk into writeBuf
 template<typename Float>
-void getWriteBuf(Float *writeBuf, Float *loopBuf, int iPrint, int Nmoms, int imom, bool oneD){
+void getLoopWriteBuf(Float *writeBuf, Float *loopBuf, int iPrint, int Nmoms, int imom, bool oneD){
 
   if(oneD){
     for(int lt=0;lt<GK_localL[3];lt++){
@@ -4262,7 +4942,7 @@ void writeLoops_HDF5(Float *buf_std_uloc, Float *buf_gen_uloc, Float **buf_std_o
             hid_t plist_id = H5Pcreate(H5P_DATASET_XFER);
             H5Pset_dxpl_mpio(plist_id, H5FD_MPIO_COLLECTIVE);
 
-            getWriteBuf(writeBuf,loopBuf,iPrint,loopInfo.Nmoms,imom, loopInfo.loop_oneD[it]);
+            getLoopWriteBuf(writeBuf,loopBuf,iPrint,loopInfo.Nmoms,imom, loopInfo.loop_oneD[it]);
 
             herr_t status = H5Dwrite(dataset_id, H5T_NATIVE_DOUBLE, subspace, filespace, plist_id, writeBuf);
 
@@ -4286,7 +4966,7 @@ void writeLoops_HDF5(Float *buf_std_uloc, Float *buf_gen_uloc, Float **buf_std_o
           hid_t plist_id = H5Pcreate(H5P_DATASET_XFER);
           H5Pset_dxpl_mpio(plist_id, H5FD_MPIO_COLLECTIVE);
 
-          getWriteBuf(writeBuf,loopBuf,iPrint,loopInfo.Nmoms,imom, loopInfo.loop_oneD[it]);
+          getLoopWriteBuf(writeBuf,loopBuf,iPrint,loopInfo.Nmoms,imom, loopInfo.loop_oneD[it]);
 
           herr_t status = H5Dwrite(dataset_id, H5T_NATIVE_DOUBLE, subspace, filespace, plist_id, writeBuf);
 

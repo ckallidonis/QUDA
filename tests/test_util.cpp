@@ -1630,7 +1630,8 @@ char loop_fname[512] = "loop";
 int smethod = 1;
 char filename_dSteps[512]="none";
 char loop_file_format[257] = "ASCII";
-
+char corr_file_format[257] = "ASCII";
+char check_file_exist[257] = "no";
 
 char source_type[257] = "random";
 
@@ -1720,6 +1721,8 @@ void usage(char** argv )
   printf("    --pathEigenValuesDown                     # Path where the eigenVectors for up flavor are (default evals_d.dat)\n");
   printf("    --loop_filename                           # File name to save loops (default \"loop\")\n");
   printf("    --loop_file_format                        # file format for the loops, ASCII/HDF5 (default \"ASCII_format\")\n");
+  printf("    --corr_file_format                        # file format for the 2pt-3pt functions, ASCII/HDF5 (default \"ASCII_format\")\n");
+  printf("    --check_corr_files                        # check if 2pt-functions exist to avoid reproducing (default \"no\")\n");
   printf("    --NdumpStep                               # Every how many noise vectors it will dump the data (default 10)\n");
 
 
@@ -2244,6 +2247,27 @@ int process_command_line_option(int argc, char** argv, int* idx)
     ret = 0;
     goto out;
   }
+
+  if( strcmp(argv[i], "--corr_file_format") == 0){
+    if (i+1 >= argc){
+      usage(argv);
+    }
+    strcpy(corr_file_format, argv[i+1]);
+    i++;
+    ret = 0;
+    goto out;
+  }
+
+  if( strcmp(argv[i], "--check_corr_files") == 0){
+    if (i+1 >= argc){
+      usage(argv);
+    }
+    strcpy(check_file_exist, argv[i+1]);
+    i++;
+    ret = 0;
+    goto out;
+  }
+
 
   if( strcmp(argv[i], "--source_type") == 0){
     if (i+1 >= argc){
