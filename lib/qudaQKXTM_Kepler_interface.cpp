@@ -4042,7 +4042,7 @@ void calcEigenVectors_threepTwop_EvenOdd(void **gaugeSmeared, void **gauge, Quda
       printfQuda("Two-point function for Mesons and Baryons for source = %d written in ASCII format.\n",isource);
     }
     else if( strcmp(info.corr_file_format,"HDF5")==0 ){
-      K_contract->copyTwopBaryonsToHDF5_Buf((void*)Twop_baryons_HDF5, (void*)corrBaryons);
+      K_contract->copyTwopBaryonsToHDF5_Buf((void*)Twop_baryons_HDF5, (void*)corrBaryons, isource);
       K_contract->copyTwopMesonsToHDF5_Buf((void*)Twop_mesons_HDF5, (void*)corrMesons);
       printfQuda("Two-point function for baryons and mesons, source = %d copied to HDF5 write buffers.\n",isource);
       

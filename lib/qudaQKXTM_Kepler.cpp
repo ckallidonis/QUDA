@@ -1524,56 +1524,6 @@ void QKXTM_Contraction_Kepler<Float>::contractBaryons(QKXTM_Propagator_Kepler<Fl
 //---------------------------------------------------------------------------------------------------
 
 
-
-//-C.K. - Get the HDF5 dataset chunk into writeBuf for the baryon two-point function
-template<typename Float>
-void QKXTM_Contraction_Kepler<Float>::getTwopBaryonWriteBuf(void *writeBuf, void *twopBaryons, int src_rank, int t_src, int tail, int bar, int imom, int ip){
-
-  if(GK_timeRank >= 0 && GK_timeRank < GK_nProc[3] ){
-    int Lt = GK_localL[3];
-
-    if( (GK_timeRank != src_rank) || (tail==0) ){
-      for(int it=0;it<Lt;it++){
-	int t_glob = GK_timeRank*Lt+it;
-	int sign = t_glob < t_src ? -1 : +1;
-	for(int im=0;im<16;im++){
-	  ((Float*)writeBuf)[0 + 2*im + 2*16*it] = sign*((Float*)twopBaryons)[0 + 2*im + 2*16*imom + 2*16*GK_Nmoms*it + 2*16*GK_Nmoms*Lt*bar + 2*16*GK_Nmoms*Lt*N_BARYONS*ip];
-	  ((Float*)writeBuf)[1 + 2*im + 2*16*it] = sign*((Float*)twopBaryons)[1 + 2*im + 2*16*imom + 2*16*GK_Nmoms*it + 2*16*GK_Nmoms*Lt*bar + 2*16*GK_Nmoms*Lt*N_BARYONS*ip];
-	}
-      }
-    }//-if
-    else if( (GK_timeRank==src_rank) && (tail!=0) ){
-      for(int it=0;it<Lt;it++){
-	int t_glob = GK_timeRank*Lt + (it+tail)%Lt;
-	int sign = t_glob < t_src ? -1 : +1;
-	for(int im=0;im<16;im++){
-	  ((Float*)writeBuf)[0 + 2*im + 2*16*it] = sign*((Float*)twopBaryons)[0 + 2*im + 2*16*imom + 2*16*GK_Nmoms*((it+tail)%Lt) + 2*16*GK_Nmoms*Lt*bar + 2*16*GK_Nmoms*Lt*N_BARYONS*ip];
-	  ((Float*)writeBuf)[1 + 2*im + 2*16*it] = sign*((Float*)twopBaryons)[1 + 2*im + 2*16*imom + 2*16*GK_Nmoms*((it+tail)%Lt) + 2*16*GK_Nmoms*Lt*bar + 2*16*GK_Nmoms*Lt*N_BARYONS*ip];
-	}
-      }
-    }//-else
-
-  }//-if
-
-}
-
-//-C.K. - Get the tail HDF5 dataset chunk into tailBuf for the baryon two-point function (significant only for src_rank/sink_rank)
-template<typename Float>
-void QKXTM_Contraction_Kepler<Float>::getTwopBaryonTailBuf(void *tailBuf, void *twopBaryons, int t_src, int tail, int bar, int imom, int ip){
-
-  int Lt = GK_localL[3];
-
-  for(int it=0;it<tail;it++){
-    int t_glob = GK_timeRank*Lt+it;
-    int sign = t_glob < t_src ? -1 : +1;
-    for(int im=0;im<16;im++){
-      ((Float*)tailBuf)[0 + 2*im + 2*16*it] = sign*((Float*)twopBaryons)[0 + 2*im + 2*16*imom + 2*16*GK_Nmoms*it + 2*16*GK_Nmoms*Lt*bar + 2*16*GK_Nmoms*Lt*N_BARYONS*ip];
-      ((Float*)tailBuf)[1 + 2*im + 2*16*it] = sign*((Float*)twopBaryons)[1 + 2*im + 2*16*imom + 2*16*GK_Nmoms*it + 2*16*GK_Nmoms*Lt*bar + 2*16*GK_Nmoms*Lt*N_BARYONS*ip];
-    }
-  }
-
-}
-
 //-C.K. - New function to write the baryons two-point function in HDF5 format
 template<typename Float>
 void QKXTM_Contraction_Kepler<Float>::writeTwopBaryons_HDF5(void *twopBaryons, char *filename, qudaQKXTMinfo_Kepler info, int isource){
@@ -1599,10 +1549,7 @@ void QKXTM_Contraction_Kepler<Float>::writeTwopBaryons_HDF5(void *twopBaryons, c
     int h = Lt - t_src%Lt;
     int tail = t_src%Lt;
 
-    Float *writeTwopBuf = NULL;
-    writeTwopBuf = (Float*) malloc(Lt*16*2*sizeof(Float));
-    if (writeTwopBuf == NULL) errorQuda("writeTwopBaryons_HDF5: Cannot allocate writeTwopBuf.\n");
-    memset(writeTwopBuf,0,Lt*16*2*sizeof(Float));
+    Float *writeTwopBuf;
 
     hid_t fapl_id = H5Pcreate(H5P_FILE_ACCESS);
     H5Pset_fapl_mpio(fapl_id, GK_timeComm, MPI_INFO_NULL);
@@ -1666,7 +1613,8 @@ void QKXTM_Contraction_Kepler<Float>::writeTwopBaryons_HDF5(void *twopBaryons, c
 	  hid_t plist_id = H5Pcreate(H5P_DATASET_XFER);
 	  H5Pset_dxpl_mpio(plist_id, H5FD_MPIO_COLLECTIVE);
 
-	  getTwopBaryonWriteBuf((void*)writeTwopBuf, twopBaryons, src_rank, t_src, tail, bar, imom, ip);
+          if(GK_timeRank==src_rank) writeTwopBuf = &(((Float*)twopBaryons)[2*16*tail + 2*16*Lt*imom + 2*16*Lt*GK_Nmoms*bar + 2*16*Lt*GK_Nmoms*N_BARYONS*ip]);
+          else writeTwopBuf = &(((Float*)twopBaryons)[2*16*Lt*imom + 2*16*Lt*GK_Nmoms*bar + 2*16*Lt*GK_Nmoms*N_BARYONS*ip]);
 	
 	  herr_t status = H5Dwrite(dataset_id, DATATYPE_H5, subspace, filespace, plist_id, writeTwopBuf);
 	  
@@ -1686,10 +1634,7 @@ void QKXTM_Contraction_Kepler<Float>::writeTwopBaryons_HDF5(void *twopBaryons, c
 
     //-Write the tail, sink_ranks's task
     if(tail!=0 && GK_timeRank==sink_rank){ 
-      Float *tailBuf = NULL;
-      tailBuf = (Float*) malloc(tail*16*2*sizeof(Float));
-      if (tailBuf == NULL) errorQuda("writeTwopBaryons_HDF5: Cannot allocate tailBuf.\n");
-      memset(tailBuf,0,tail*16*2*sizeof(Float));
+      Float *tailBuf;
 
       hid_t file_idt = H5Fopen(filename, H5F_ACC_RDWR, H5P_DEFAULT);
 
@@ -1716,7 +1661,7 @@ void QKXTM_Contraction_Kepler<Float>::writeTwopBaryons_HDF5(void *twopBaryons, c
 
 	    H5Sselect_hyperslab(dspace_id, H5S_SELECT_SET, start, NULL, ldims, NULL);
 	  
-	    getTwopBaryonTailBuf((void*)tailBuf, twopBaryons, t_src, tail, bar, imom, ip);
+	    tailBuf = &(((Float*)twopBaryons)[2*16*Lt*imom + 2*16*Lt*GK_Nmoms*bar + 2*16*Lt*GK_Nmoms*N_BARYONS*ip]);
 
 	    herr_t status = H5Dwrite(dset_id, DATATYPE_H5, mspace_id, dspace_id, H5P_DEFAULT, tailBuf);
 
@@ -1729,31 +1674,32 @@ void QKXTM_Contraction_Kepler<Float>::writeTwopBaryons_HDF5(void *twopBaryons, c
       }//-bar
 
       H5Fclose(file_idt);
-      free(tailBuf);
     }//-tail!=0
-
-    free(writeTwopBuf);
   }//-if GK_timeRank >=0 && GK_timeRank < GK_nProc[3]
 
 }
 
 //-C.K. - New function to copy the baryon two-point functions into write Buffers for writing in HDF5 format
 template<typename Float>
-void QKXTM_Contraction_Kepler<Float>::copyTwopBaryonsToHDF5_Buf(void *Twop_baryons_HDF5, void *corrBaryons){
+void QKXTM_Contraction_Kepler<Float>::copyTwopBaryonsToHDF5_Buf(void *Twop_baryons_HDF5, void *corrBaryons, int isource){
 
   if(GK_timeRank >= 0 && GK_timeRank < GK_nProc[3] ){
-    for(int ip=0;ip<2;ip++)
-      for(int bar=0;bar<N_BARYONS;bar++)
-	for(int it=0;it<GK_localL[3];it++)
-	  for(int imom=0;imom<GK_Nmoms;imom++)
-	    for(int ga=0;ga<4;ga++)
+    int Lt = GK_localL[3];
+    int t_src = GK_sourcePosition[isource][3];
+
+    for(int ip=0;ip<2;ip++){
+      for(int bar=0;bar<N_BARYONS;bar++){
+	for(int imom=0;imom<GK_Nmoms;imom++){
+	  for(int it=0;it<Lt;it++){
+	    int t_glob = GK_timeRank*Lt+it;
+	    int sign = t_glob < t_src ? -1 : +1;
+	    for(int ga=0;ga<4;ga++){
 	      for(int gap=0;gap<4;gap++){
 		int im=gap+4*ga;
-		((Float*)Twop_baryons_HDF5)[0 + 2*im + 2*16*imom + 2*16*GK_Nmoms*it + 2*16*GK_Nmoms*GK_localL[3]*bar + 2*16*GK_Nmoms*GK_localL[3]*N_BARYONS*ip] = 
-		  ((Float(*)[2][N_BARYONS][4][4])corrBaryons)[0 + 2*imom + 2*GK_Nmoms*it][ip][bar][ga][gap];
-		((Float*)Twop_baryons_HDF5)[1 + 2*im + 2*16*imom + 2*16*GK_Nmoms*it + 2*16*GK_Nmoms*GK_localL[3]*bar + 2*16*GK_Nmoms*GK_localL[3]*N_BARYONS*ip] =
-		  ((Float(*)[2][N_BARYONS][4][4])corrBaryons)[1 + 2*imom + 2*GK_Nmoms*it][ip][bar][ga][gap];
-	      }
+		((Float*)Twop_baryons_HDF5)[0 + 2*im + 2*16*it + 2*16*Lt*imom + 2*16*Lt*GK_Nmoms*bar + 2*16*Lt*GK_Nmoms*N_BARYONS*ip] = sign*((Float(*)[2][N_BARYONS][4][4])corrBaryons)[0 + 2*imom + 2*GK_Nmoms*it][ip][bar][ga][gap];
+		((Float*)Twop_baryons_HDF5)[1 + 2*im + 2*16*it + 2*16*Lt*imom + 2*16*Lt*GK_Nmoms*bar + 2*16*Lt*GK_Nmoms*N_BARYONS*ip] = sign*((Float(*)[2][N_BARYONS][4][4])corrBaryons)[1 + 2*imom + 2*GK_Nmoms*it][ip][bar][ga][gap];
+	      }}}}}
+    }//-ip
   }//-if
 
 }

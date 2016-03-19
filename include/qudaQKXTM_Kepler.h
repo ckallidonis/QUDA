@@ -314,10 +314,10 @@ template<typename Float>
 
    void writeTwopMesons_ASCII(void *corrMesons, char *filename_out, int isource);
    void writeTwopBaryons_ASCII(void *corrBaryons, char *filename_out, int isource);
-   void copyTwopBaryonsToHDF5_Buf(void *Twop_baryons_HDF5, void *corrBaryons);
+   void copyTwopBaryonsToHDF5_Buf(void *Twop_baryons_HDF5, void *corrBaryons, int isource);
    void copyTwopMesonsToHDF5_Buf(void *Twop_mesons_HDF5, void *corrMesons);
-   void getTwopBaryonTailBuf(void *tailBuf, void *twopBaryons, int t_src, int tail, int bar, int imom, int ip);
-   void getTwopBaryonWriteBuf(void *writeBuf, void *twopBaryons, int src_rank, int t_src, int tail, int bar, int imom, int ip);
+   //   void getTwopBaryonTailBuf(void *tailBuf, void *twopBaryons, int t_src, int tail, int bar, int imom, int ip);
+   //   void getTwopBaryonWriteBuf(void *writeBuf, void *twopBaryons, int src_rank, int t_src, int tail, int bar, int imom, int ip);
    void writeTwopBaryons_HDF5(void *twopBaryons, char *filename, qudaQKXTMinfo_Kepler info, int isource);
    void writeTwopMesons_HDF5(void *twopMesons, char *filename, qudaQKXTMinfo_Kepler info, int isource);
 
