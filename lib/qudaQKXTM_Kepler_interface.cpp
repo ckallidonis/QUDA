@@ -3906,10 +3906,12 @@ void calcEigenVectors_threepTwop_EvenOdd(void **gaugeSmeared, void **gauge, Quda
 	  if(NUCLEON == PROTON ) uOrd = 0;
 	  if(NUCLEON == NEUTRON) uOrd = 1;
 
-  	  K_contract->copyThrpToHDF5_Buf((void*)Thrp_local_HDF5  , (void*)corrThp_local  , 0, uOrd, its, info.Ntsink, THRP_LOCAL);
- 	  K_contract->copyThrpToHDF5_Buf((void*)Thrp_noether_HDF5, (void*)corrThp_noether, 0, uOrd, its, info.Ntsink, THRP_NOETHER);
+	  int thrp_sign = ( info.tsinkSource[its] + GK_sourcePosition[isource][3] ) >= GK_totalL[3] ? -1 : +1;
+
+  	  K_contract->copyThrpToHDF5_Buf((void*)Thrp_local_HDF5  , (void*)corrThp_local  , 0, uOrd, its, info.Ntsink, thrp_sign, THRP_LOCAL);
+ 	  K_contract->copyThrpToHDF5_Buf((void*)Thrp_noether_HDF5, (void*)corrThp_noether, 0, uOrd, its, info.Ntsink, thrp_sign, THRP_NOETHER);
  	  for(int mu = 0;mu<4;mu++)
- 	    K_contract->copyThrpToHDF5_Buf((void*)Thrp_oneD_HDF5[mu],(void*)corrThp_oneD ,mu, uOrd, its, info.Ntsink, THRP_ONED);
+ 	    K_contract->copyThrpToHDF5_Buf((void*)Thrp_oneD_HDF5[mu],(void*)corrThp_oneD ,mu, uOrd, its, info.Ntsink, thrp_sign, THRP_ONED);
 
 	  printfQuda("Three-point function for part 1, source = %d at sink-source = %d copied to HDF5 write buffers.\n",isource,info.tsinkSource[its]);
 	}
@@ -3985,10 +3987,12 @@ void calcEigenVectors_threepTwop_EvenOdd(void **gaugeSmeared, void **gauge, Quda
 	  if(NUCLEON == PROTON ) uOrd = 1;
 	  if(NUCLEON == NEUTRON) uOrd = 0;
 
-  	  K_contract->copyThrpToHDF5_Buf((void*)Thrp_local_HDF5  , (void*)corrThp_local  , 0, uOrd, its, info.Ntsink, THRP_LOCAL);
- 	  K_contract->copyThrpToHDF5_Buf((void*)Thrp_noether_HDF5, (void*)corrThp_noether, 0, uOrd, its, info.Ntsink, THRP_NOETHER);
+	  int thrp_sign = ( info.tsinkSource[its] + GK_sourcePosition[isource][3] ) >= GK_totalL[3] ? -1 : +1;
+
+  	  K_contract->copyThrpToHDF5_Buf((void*)Thrp_local_HDF5  , (void*)corrThp_local  , 0, uOrd, its, info.Ntsink, thrp_sign, THRP_LOCAL);
+ 	  K_contract->copyThrpToHDF5_Buf((void*)Thrp_noether_HDF5, (void*)corrThp_noether, 0, uOrd, its, info.Ntsink, thrp_sign, THRP_NOETHER);
  	  for(int mu = 0;mu<4;mu++)
- 	    K_contract->copyThrpToHDF5_Buf((void*)Thrp_oneD_HDF5[mu],(void*)corrThp_oneD ,mu, uOrd, its, info.Ntsink, THRP_ONED);
+ 	    K_contract->copyThrpToHDF5_Buf((void*)Thrp_oneD_HDF5[mu],(void*)corrThp_oneD ,mu, uOrd, its, info.Ntsink, thrp_sign, THRP_ONED);
 	  
 	  printfQuda("Three-point function for part 2, source = %d at sink-source = %d copied to HDF5 write buffers.\n",isource,info.tsinkSource[its]);
 	}

@@ -2037,23 +2037,6 @@ void QKXTM_Contraction_Kepler<Float>::seqSourceFixSinkPart2(QKXTM_Vector_Kepler<
 //---------------------------------------------------------------------------------------------------
 //---------------------------------------------------------------------------------------------------
 
-
-//-C.K. - Get the HDF5 dataset chunk into writeBuf
-template<typename Float>
-void QKXTM_Contraction_Kepler<Float>::getThrpWriteBuf(void *writeBuf, void *thrpBuf, int its, int Nsink, int part, int imom, int thrp_sign, THRP_TYPE type){
-
-  int Mel;
-  if(type==THRP_LOCAL || type==THRP_ONED) Mel = 16;
-  else if(type==THRP_NOETHER) Mel = 4;
-
-  for(int lt=0;lt<GK_localL[3];lt++){
-    for(int im=0;im<Mel;im++){
-      ((Float*)writeBuf)[0+2*im+2*Mel*lt] = thrp_sign*((Float*)thrpBuf)[0 + 2*im + 2*Mel*imom + 2*Mel*GK_Nmoms*part + 2*Mel*GK_Nmoms*2*its + 2*Mel*GK_Nmoms*2*Nsink*lt];
-      ((Float*)writeBuf)[1+2*im+2*Mel*lt] = thrp_sign*((Float*)thrpBuf)[1 + 2*im + 2*Mel*imom + 2*Mel*GK_Nmoms*part + 2*Mel*GK_Nmoms*2*its + 2*Mel*GK_Nmoms*2*Nsink*lt];
-    }
-  }
-}
-
 //-C.K. - New function to write the three-point function in HDF5 format
 template<typename Float>
 void QKXTM_Contraction_Kepler<Float>::writeThrp_HDF5(void *Thrp_local_HDF5, void *Thrp_noether_HDF5, void **Thrp_oneD_HDF5, char *filename, qudaQKXTMinfo_Kepler info, int isource){
@@ -2070,8 +2053,7 @@ void QKXTM_Contraction_Kepler<Float>::writeThrp_HDF5(void *Thrp_local_HDF5, void
       printfQuda("**** writeThrp_HDF5: typeid is double ****\n");
     }
 
-    void *thrpBuf;
-    Float *bufH5,*writeBuf = NULL;
+    Float *writeThrpBuf;
 
     int t_src = GK_sourcePosition[isource][3];
     int Lt = GK_localL[3];
@@ -2105,41 +2087,37 @@ void QKXTM_Contraction_Kepler<Float>::writeThrp_HDF5(void *Thrp_local_HDF5, void
 
     for(int its=0;its<info.Ntsink;its++){
       int tsink = info.tsinkSource[its];
-
-      if( tsink >= (T - t_src%Lt) ){
-	warningQuda("*** writeThrp_HDF5: No support for HDF5 when tsink >= (T - t_src%%Lt). Skipping writing tsink = %d ***\n",tsink);
-	continue;
-      }
-
-      int sink_rank = ((t_src+tsink)%T)/Lt;
-
-      int thrp_sign = (tsink+t_src) >= GK_totalL[3] ? -1 : +1;
-
-      int l = ((t_src+tsink)%T)%Lt + 1; //-Significant only for sink_rank
-
-      //-Determine which processes will print for this tsink
-      bool print_rank = false;
-      for(int i=0;i<GK_nProc[3];i++){
-	if( GK_timeRank == ((src_rank+i)%GK_nProc[3]) ) print_rank = true;
-	if( ((src_rank+i)%GK_nProc[3]) == sink_rank ) break;
-      }
-
       char *group3_tag;
       asprintf(&group3_tag,"tsink_%02d",tsink);
       group3_id = H5Gcreate(group2_id, group3_tag, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+
+      bool all_print = false;
+      if( tsink >= (T - t_src%Lt) ) all_print = true;
+
+      int sink_rank = ((t_src+tsink)%T)/Lt;
+      int l = ((t_src+tsink)%T)%Lt + 1; //-Significant only for sink_rank
+
+      //-Determine which processes will print for this tsink
+      bool print_rank;
+      if(all_print) print_rank = true;
+      else{
+	print_rank = false;
+	for(int i=0;i<GK_nProc[3];i++){
+	  if( GK_timeRank == ((src_rank+i)%GK_nProc[3]) ) print_rank = true;
+	  if( ((src_rank+i)%GK_nProc[3]) == sink_rank ) break;
+	}
+      }
       
       //-Determine the start position for each rank
       if(print_rank){
 	if(GK_timeRank==src_rank) start[0] = 0; // if src_rank = sink_rank then this is the same
 	else{
-	  if( src_rank != sink_rank ){ // if src_rank = sink_rank, we don't want start[0] to change
-	    int offs;
-	    for(offs=0;offs<GK_nProc[3];offs++){
-	      if( GK_timeRank == ((src_rank+offs)%GK_nProc[3]) ) break;
-	    }
-	    offs--;
-	    start[0] = h + offs*Lt;
+	  int offs;
+	  for(offs=0;offs<GK_nProc[3];offs++){
+	    if( GK_timeRank == ((src_rank+offs)%GK_nProc[3]) ) break;
 	  }
+	  offs--;
+	  start[0] = h + offs*Lt;
 	}
       }
       else start[0] = 0; // Need to set this to zero when a given rank does not print. Otherwise the dimensions will not fit   
@@ -2162,28 +2140,32 @@ void QKXTM_Contraction_Kepler<Float>::writeThrp_HDF5(void *Thrp_local_HDF5, void
 	  if(type==THRP_LOCAL || type==THRP_ONED) Mel = 16;
 	  else if (type==THRP_NOETHER) Mel = 4;
 	  else errorQuda("writeThrp_HDF5: Undefined three-point function type.\n");
-
 	  dims[0] = tsink+1;
 	  dims[1] = Mel;
 	  dims[2] = 2;
 
-	  writeBuf = (Float*) malloc(Lt*Mel*2*sizeof(Float));
-	  if (writeBuf == NULL) errorQuda("writeThrp_HDF5: Cannot allocate writeBuf.\n");
-	  memset(writeBuf,0,Lt*Mel*2*sizeof(Float));
-
 	  //-Determine ldims for print ranks
-	  if(print_rank){
+	  if(all_print){
 	    ldims[1] = dims[1];
 	    ldims[2] = dims[2];
-	    if(src_rank != sink_rank){
-	      if(GK_timeRank==src_rank) ldims[0] = h;
-	      else if(GK_timeRank==sink_rank) ldims[0] = l;
-	      else ldims[0] = Lt;
-	    }
-	    else ldims[0] = dims[0];
+	    if(GK_timeRank==src_rank) ldims[0] = h;
+	    else ldims[0] = Lt;
 	  }
-	  else for(int i=0;i<3;i++) ldims[i] = 0; //- Non-print ranks get zero space
-	  
+	  else{
+	    if(print_rank){
+	      ldims[1] = dims[1];
+	      ldims[2] = dims[2];
+	      if(src_rank != sink_rank){
+		if(GK_timeRank==src_rank) ldims[0] = h;
+		else if(GK_timeRank==sink_rank) ldims[0] = l;
+		else ldims[0] = Lt;
+	      }
+	      else ldims[0] = dims[0];
+	    }
+	    else for(int i=0;i<3;i++) ldims[i] = 0; //- Non-print ranks get zero space
+	  }
+
+
 	  for(int imom=0;imom<GK_Nmoms;imom++){
 	    char *group6_tag;
 	    asprintf(&group6_tag,"mom_xyz_%+d_%+d_%+d",GK_moms[imom][0],GK_moms[imom][1],GK_moms[imom][2]);
@@ -2191,8 +2173,6 @@ void QKXTM_Contraction_Kepler<Float>::writeThrp_HDF5(void *Thrp_local_HDF5, void
 	    
 	    if(type==THRP_ONED){
 	      for(int mu=0;mu<4;mu++){
-		thrpBuf = Thrp_oneD_HDF5[mu];
-		
 		char *group7_tag;
 		asprintf(&group7_tag,"dir_%02d",mu);
 		group7_id = H5Gcreate(group6_id, group7_tag, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
@@ -2205,12 +2185,10 @@ void QKXTM_Contraction_Kepler<Float>::writeThrp_HDF5(void *Thrp_local_HDF5, void
 		hid_t plist_id = H5Pcreate(H5P_DATASET_XFER);
 		H5Pset_dxpl_mpio(plist_id, H5FD_MPIO_COLLECTIVE);
 
-		getThrpWriteBuf((void*)writeBuf, thrpBuf, its, info.Ntsink, part, imom, thrp_sign, type);
+		if(GK_timeRank==src_rank) writeThrpBuf = &(((Float*)Thrp_oneD_HDF5[mu])[2*Mel*w + 2*Mel*Lt*imom + 2*Mel*Lt*GK_Nmoms*part + 2*Mel*Lt*GK_Nmoms*2*its]);
+		else writeThrpBuf = &(((Float*)Thrp_oneD_HDF5[mu])[2*Mel*Lt*imom + 2*Mel*Lt*GK_Nmoms*part + 2*Mel*Lt*GK_Nmoms*2*its]);
 
-		if(GK_timeRank==src_rank) bufH5 = (Float*) (&(writeBuf[2*Mel*w]));
-		else bufH5 = (Float*) (&(writeBuf[0]));
-
-		herr_t status = H5Dwrite(dataset_id, DATATYPE_H5, subspace, filespace, plist_id, bufH5);
+		herr_t status = H5Dwrite(dataset_id, DATATYPE_H5, subspace, filespace, plist_id, writeThrpBuf);
 
 		H5Sclose(subspace);
 		H5Dclose(dataset_id);
@@ -2221,8 +2199,9 @@ void QKXTM_Contraction_Kepler<Float>::writeThrp_HDF5(void *Thrp_local_HDF5, void
 	      }//-mu	      
 	    }//-if
 	    else{
-	      if(type==THRP_LOCAL) thrpBuf = Thrp_local_HDF5;
-	      else if(type==THRP_NOETHER) thrpBuf = Thrp_noether_HDF5;
+	      Float *thrpBuf;
+	      if(type==THRP_LOCAL) thrpBuf = (Float*)Thrp_local_HDF5;
+	      else if(type==THRP_NOETHER) thrpBuf = (Float*)Thrp_noether_HDF5;
 
 	      hid_t filespace  = H5Screate_simple(3, dims, NULL);
 	      hid_t dataset_id = H5Dcreate(group6_id, "threep", DATATYPE_H5, filespace, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
@@ -2231,26 +2210,20 @@ void QKXTM_Contraction_Kepler<Float>::writeThrp_HDF5(void *Thrp_local_HDF5, void
 	      H5Sselect_hyperslab(filespace, H5S_SELECT_SET, start, NULL, ldims, NULL);
 	      hid_t plist_id = H5Pcreate(H5P_DATASET_XFER);
 	      H5Pset_dxpl_mpio(plist_id, H5FD_MPIO_COLLECTIVE);
-	      
-	      getThrpWriteBuf((void*)writeBuf, thrpBuf, its, info.Ntsink, part, imom, thrp_sign, type);
 
-	      if(GK_timeRank==src_rank)	bufH5 = (Float*) (&(writeBuf[2*Mel*w]));
-	      else bufH5 = (Float*) (&(writeBuf[0]));
+	      if(GK_timeRank==src_rank) writeThrpBuf = &(thrpBuf[2*Mel*w + 2*Mel*Lt*imom + 2*Mel*Lt*GK_Nmoms*part + 2*Mel*Lt*GK_Nmoms*2*its]);
+	      else writeThrpBuf = &(thrpBuf[2*Mel*Lt*imom + 2*Mel*Lt*GK_Nmoms*part + 2*Mel*Lt*GK_Nmoms*2*its]);
 
-	      herr_t status = H5Dwrite(dataset_id, DATATYPE_H5, subspace, filespace, plist_id, bufH5);
+	      herr_t status = H5Dwrite(dataset_id, DATATYPE_H5, subspace, filespace, plist_id, writeThrpBuf);
 	      
 	      H5Sclose(subspace);
 	      H5Dclose(dataset_id);
 	      H5Sclose(filespace);
 	      H5Pclose(plist_id);
 	    }//-else	  
-
 	    H5Gclose(group6_id);
 	  }//-imom	 
- 
 	  H5Gclose(group5_id);
-	  free(writeBuf);
-	  writeBuf = NULL;
 	}//-thrp_int
 	H5Gclose(group4_id);
       }//-part
@@ -2266,20 +2239,22 @@ void QKXTM_Contraction_Kepler<Float>::writeThrp_HDF5(void *Thrp_local_HDF5, void
 
 //-C.K. - New function to copy the three-point data into write Buffers for writing in HDF5 format
 template<typename Float>
-void QKXTM_Contraction_Kepler<Float>::copyThrpToHDF5_Buf(void *Thrp_HDF5, void *corrThp,  int mu, int uORd, int its, int Nsink, THRP_TYPE type){
+void QKXTM_Contraction_Kepler<Float>::copyThrpToHDF5_Buf(void *Thrp_HDF5, void *corrThp,  int mu, int uORd, int its, int Nsink, int sign, THRP_TYPE type){
 
   int Mel;
   if(type==THRP_LOCAL || type==THRP_ONED) Mel = 16;
   else if(type==THRP_NOETHER) Mel = 4;
   else errorQuda("Undefined THRP_TYPE passed to copyThrpToHDF5_Buf.\n");
 
+  int Lt = GK_localL[3];
+
   if(GK_timeRank >= 0 && GK_timeRank < GK_nProc[3] ){
     if(type==THRP_LOCAL || type==THRP_NOETHER){
       for(int it = 0; it<GK_localL[3]; it++){
 	for(int imom = 0; imom<GK_Nmoms; imom++){
 	  for(int im = 0; im<Mel; im++){
-	    ((Float*)Thrp_HDF5)[0 + 2*im + 2*Mel*imom + 2*Mel*GK_Nmoms*uORd + 2*Mel*GK_Nmoms*2*its + 2*Mel*GK_Nmoms*2*Nsink*it] = ((Float*)corrThp)[0 + 2*im + 2*Mel*imom + 2*Mel*GK_Nmoms*it];
-	    ((Float*)Thrp_HDF5)[1 + 2*im + 2*Mel*imom + 2*Mel*GK_Nmoms*uORd + 2*Mel*GK_Nmoms*2*its + 2*Mel*GK_Nmoms*2*Nsink*it] = ((Float*)corrThp)[1 + 2*im + 2*Mel*imom + 2*Mel*GK_Nmoms*it];
+	    ((Float*)Thrp_HDF5)[0 + 2*im + 2*Mel*it + 2*Mel*Lt*imom + 2*Mel*Lt*GK_Nmoms*uORd + 2*Mel*Lt*GK_Nmoms*2*its] = sign*((Float*)corrThp)[0 + 2*im + 2*Mel*imom + 2*Mel*GK_Nmoms*it];
+	    ((Float*)Thrp_HDF5)[1 + 2*im + 2*Mel*it + 2*Mel*Lt*imom + 2*Mel*Lt*GK_Nmoms*uORd + 2*Mel*Lt*GK_Nmoms*2*its] = sign*((Float*)corrThp)[1 + 2*im + 2*Mel*imom + 2*Mel*GK_Nmoms*it];
 	  }
 	}
       }
@@ -2288,8 +2263,8 @@ void QKXTM_Contraction_Kepler<Float>::copyThrpToHDF5_Buf(void *Thrp_HDF5, void *
       for(int it = 0; it<GK_localL[3]; it++){
 	for(int imom = 0; imom<GK_Nmoms; imom++){
 	  for(int im = 0; im<Mel; im++){
-	    ((Float*)Thrp_HDF5)[0 + 2*im + 2*Mel*imom + 2*Mel*GK_Nmoms*uORd + 2*Mel*GK_Nmoms*2*its + 2*Mel*GK_Nmoms*2*Nsink*it] = ((Float*)corrThp)[0 + 2*im + 2*Mel*mu + 2*Mel*4*imom + 2*Mel*4*GK_Nmoms*it];
-	    ((Float*)Thrp_HDF5)[1 + 2*im + 2*Mel*imom + 2*Mel*GK_Nmoms*uORd + 2*Mel*GK_Nmoms*2*its + 2*Mel*GK_Nmoms*2*Nsink*it] = ((Float*)corrThp)[1 + 2*im + 2*Mel*mu + 2*Mel*4*imom + 2*Mel*4*GK_Nmoms*it];
+	    ((Float*)Thrp_HDF5)[0 + 2*im + 2*Mel*it + 2*Mel*Lt*imom + 2*Mel*Lt*GK_Nmoms*uORd + 2*Mel*Lt*GK_Nmoms*2*its] = sign*((Float*)corrThp)[0 + 2*im + 2*Mel*mu + 2*Mel*4*imom + 2*Mel*4*GK_Nmoms*it];
+	    ((Float*)Thrp_HDF5)[1 + 2*im + 2*Mel*it + 2*Mel*Lt*imom + 2*Mel*Lt*GK_Nmoms*uORd + 2*Mel*Lt*GK_Nmoms*2*its] = sign*((Float*)corrThp)[1 + 2*im + 2*Mel*mu + 2*Mel*4*imom + 2*Mel*4*GK_Nmoms*it];
 	  }
 	}
       }      

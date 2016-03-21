@@ -316,8 +316,6 @@ template<typename Float>
    void writeTwopBaryons_ASCII(void *corrBaryons, char *filename_out, int isource);
    void copyTwopBaryonsToHDF5_Buf(void *Twop_baryons_HDF5, void *corrBaryons, int isource);
    void copyTwopMesonsToHDF5_Buf(void *Twop_mesons_HDF5, void *corrMesons);
-   //   void getTwopBaryonTailBuf(void *tailBuf, void *twopBaryons, int t_src, int tail, int bar, int imom, int ip);
-   //   void getTwopBaryonWriteBuf(void *writeBuf, void *twopBaryons, int src_rank, int t_src, int tail, int bar, int imom, int ip);
    void writeTwopBaryons_HDF5(void *twopBaryons, char *filename, qudaQKXTMinfo_Kepler info, int isource);
    void writeTwopMesons_HDF5(void *twopMesons, char *filename, qudaQKXTMinfo_Kepler info, int isource);
 
@@ -330,8 +328,7 @@ template<typename Float>
 			void *corrThp_local_reduced, void *corrThp_noether_reduced, void *corrThp_oneD_reduced, WHICHPROJECTOR typeProj , WHICHPARTICLE testParticle, int partFlag, int isource);
 
    void writeThrp_ASCII(void *corrThp_local, void *corrThp_noether, void *corrThp_oneD, WHICHPARTICLE testParticle, int partflag , char *filename_out, int isource, int tsinkMtsource);
-   void copyThrpToHDF5_Buf(void *Thrp_HDF5, void *corrThp,  int mu, int uORd, int its, int Nsink, THRP_TYPE type);
-   void getThrpWriteBuf(void *writeBuf, void *thrpBuf, int its, int Nsink, int part, int imom, int thrp_sign, THRP_TYPE type);
+   void copyThrpToHDF5_Buf(void *Thrp_HDF5, void *corrThp,  int mu, int uORd, int its, int Nsink, int thrp_sign, THRP_TYPE type);
    void writeThrp_HDF5(void *Thrp_local_HDF5, void *Thrp_noether_HDF5, void **Thrp_oneD_HDF5, char *filename, qudaQKXTMinfo_Kepler info, int isource);
  };
 }
