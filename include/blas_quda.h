@@ -11,6 +11,10 @@ namespace quda {
   void initBlas(); 
   void endBlas(void);
 
+  void* getDeviceReduceBuffer();
+  void* getMappedHostReduceBuffer();
+  void* getHostReduceBuffer();
+
   void setBlasParam(int kernel, int prec, int threads, int blocks);
 
   extern unsigned long long blas_flops;
@@ -28,6 +32,7 @@ namespace quda {
   void copyCuda(cudaColorSpinorField &dst, const cudaColorSpinorField &src);
 
   double axpyNormCuda(const double &a, cudaColorSpinorField &x, cudaColorSpinorField &y);
+  double norm1Cuda(const cudaColorSpinorField &b);
   double normCuda(const cudaColorSpinorField &b);
   double reDotProductCuda(cudaColorSpinorField &a, cudaColorSpinorField &b);
   void reDotProductCuda(double* result, std::vector<cudaColorSpinorField*>& a, std::vector<cudaColorSpinorField*>& b);
