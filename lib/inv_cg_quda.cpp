@@ -28,12 +28,12 @@ namespace quda {
 
   void CG::operator()(cudaColorSpinorField &x, cudaColorSpinorField &b) 
   {
-    profile.Start(QUDA_PROFILE_INIT);
+    profile.TPSTART(QUDA_PROFILE_INIT);
 
     // Check to see that we're not trying to invert on a zero-field source    
     const double b2 = norm2(b);
     if(b2 == 0){
-      profile.Stop(QUDA_PROFILE_INIT);
+      profile.TPSTOP(QUDA_PROFILE_INIT);
       printfQuda("Warning: inverting on zero-field source\n");
       x=b;
       param.true_res = 0.0;
@@ -100,8 +100,8 @@ namespace quda {
       (param.residual_type & QUDA_HEAVY_QUARK_RESIDUAL) ? true : false;
     bool heavy_quark_restart = false;
     
-    profile.Stop(QUDA_PROFILE_INIT);
-    profile.Start(QUDA_PROFILE_PREAMBLE);
+    profile.TPSTOP(QUDA_PROFILE_INIT);
+    profile.TPSTART(QUDA_PROFILE_PREAMBLE);
 
     double r2_old;
 
@@ -114,7 +114,7 @@ namespace quda {
       heavy_quark_res = sqrt(HeavyQuarkResidualNormCuda(x, r).z);
       heavy_quark_res_old = heavy_quark_res; // heavy quark residual
     }
-    const int heavy_quark_check = 1; // how often to check the heavy quark residual
+    const int heavy_quark_check = param.heavy_quark_check; // how often to check the heavy quark residual
 
     double alpha=0.0, beta=0.0;
     double pAp;
@@ -143,8 +143,8 @@ namespace quda {
     // only used if we use the heavy_quark_res
     bool L2breakdown =false;
 
-    profile.Stop(QUDA_PROFILE_PREAMBLE);
-    profile.Start(QUDA_PROFILE_COMPUTE);
+    profile.TPSTOP(QUDA_PROFILE_PREAMBLE);
+    profile.TPSTART(QUDA_PROFILE_COMPUTE);
     blas_flops = 0;
 
     int k=0;
@@ -242,8 +242,12 @@ namespace quda {
 	  warningQuda("CG: new reliable residual norm %e is greater than previous reliable residual norm %e (total #inc %i)",
 		      sqrt(r2), r0Norm, resIncreaseTotal);
 	  if ( resIncrease > maxResIncrease or resIncreaseTotal > maxResIncreaseTotal) {
-            if (use_heavy_quark_res) L2breakdown = true;
-            else break;
+            if (use_heavy_quark_res) {
+	      L2breakdown = true;
+            } else {
+	      warningQuda("CG: solver exiting due to too many true residual norm increases");
+	      break;
+	    }
 	  }
 	} else {
 	  resIncrease = 0;
@@ -257,7 +261,10 @@ namespace quda {
 	    hqresIncrease++;
 	    warningQuda("CG: new reliable HQ residual norm %e is greater than previous reliable residual norm %e", heavy_quark_res, heavy_quark_res_old);
 	    // break out if we do not improve here anymore
-	    if (hqresIncrease > hqmaxresIncrease) break;
+	    if (hqresIncrease > hqmaxresIncrease) {
+	      warningQuda("CG: solver exiting due to too many heavy quark residual norm increases");
+	      break;
+	    }
 	  }
 	}
 
@@ -271,8 +278,7 @@ namespace quda {
 	  // perform a restart
 	  copyCuda(p, rSloppy);
 	  heavy_quark_restart = false;
-	}
-	else {
+	} else {
 	  // explicitly restore the orthogonality of the gradient vector
 	  double rp = reDotProductCuda(rSloppy, p) / (r2);
 	  axpyCuda(-rp, rSloppy, p);
@@ -293,11 +299,11 @@ namespace quda {
       // check convergence, if convergence is satisfied we only need to check that we had a reliable update for the heavy quarks recently
       converged = convergence(r2, heavy_quark_res, stop, param.tol_hq);
       
-      // check for recent enough relibale updates of the HQ residual if we use it
+      // check for recent enough reliable updates of the HQ residual if we use it
       if (use_heavy_quark_res) {
         // L2 is concverged or precision maxed out for L2
         bool L2done = L2breakdown or convergenceL2(r2, heavy_quark_res, stop, param.tol_hq);
-        // HQ is converged and if we do reliable update the HQ residual has been caclculated using a reliable update
+        // HQ is converged and if we do reliable update the HQ residual has been calculated using a reliable update
         bool HQdone = (steps_since_reliable == 0 and param.delta > 0) and convergenceHQ(r2, heavy_quark_res, stop, param.tol_hq);
         converged = L2done and HQdone;
       }
@@ -307,8 +313,8 @@ namespace quda {
     copyCuda(x, xSloppy); // nop when these pointers alias
     xpyCuda(y, x);
 
-    profile.Stop(QUDA_PROFILE_COMPUTE);
-    profile.Start(QUDA_PROFILE_EPILOGUE);
+    profile.TPSTOP(QUDA_PROFILE_COMPUTE);
+    profile.TPSTART(QUDA_PROFILE_EPILOGUE);
 
     param.secs = profile.Last(QUDA_PROFILE_COMPUTE);
     double gflops = (quda::blas_flops + mat.flops() + matSloppy.flops())*1e-9;
@@ -323,13 +329,9 @@ namespace quda {
       printfQuda("CG: Reliable updates = %d\n", rUpdate);
 
     // compute the true residuals
-    mat(r, x, y);
+    mat(r, x, y, tmp3);
     param.true_res = sqrt(xmyNormCuda(b, r) / b2);
-#if (__COMPUTE_CAPABILITY__ >= 200)
     param.true_res_hq = sqrt(HeavyQuarkResidualNormCuda(x,r).z);
-#else
-    param.true_res_hq = 0.0;
-#endif      
 
     PrintSummary("CG", k, r2, b2);
 
@@ -338,8 +340,8 @@ namespace quda {
     mat.flops();
     matSloppy.flops();
 
-    profile.Stop(QUDA_PROFILE_EPILOGUE);
-    profile.Start(QUDA_PROFILE_FREE);
+    profile.TPSTOP(QUDA_PROFILE_EPILOGUE);
+    profile.TPSTART(QUDA_PROFILE_FREE);
 
     if (&tmp3 != &tmp) delete tmp3_p;
     if (&tmp2 != &tmp) delete tmp2_p;
@@ -347,7 +349,7 @@ namespace quda {
     if (rSloppy.Precision() != r.Precision()) delete r_sloppy;
     if (xSloppy.Precision() != x.Precision()) delete x_sloppy;
 
-    profile.Stop(QUDA_PROFILE_FREE);
+    profile.TPSTOP(QUDA_PROFILE_FREE);
 
     return;
   }

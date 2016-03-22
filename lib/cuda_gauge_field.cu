@@ -488,12 +488,14 @@ namespace quda {
     backed_up = false;
   }
 
+  void cudaGaugeField::zero() {
+    cudaMemset(gauge, 0, bytes);
+  }
+
   void setGhostSpinor(bool value);
 
-  // Return the L2 norm squared of the gauge field
-  double norm2(const cudaGaugeField &a) {
-
-    if (a.FieldOrder() == QUDA_QDP_GAUGE_ORDER || 
+  ColorSpinorParam colorSpinorParam(const cudaGaugeField &a) {
+   if (a.FieldOrder() == QUDA_QDP_GAUGE_ORDER || 
         a.FieldOrder() == QUDA_QDPJIT_GAUGE_ORDER)
       errorQuda("Not implemented");
 
@@ -504,9 +506,6 @@ namespace quda {
         break;
       case QUDA_VECTOR_GEOMETRY:
         spin = a.Ndim();
-        break;
-      case QUDA_TENSOR_GEOMETRY:
-        spin = a.Ndim() * (a.Ndim()-1) / 2;
         break;
       default:
         errorQuda("Unsupported field geometry %d", a.Geometry());
@@ -520,8 +519,8 @@ namespace quda {
 
     ColorSpinorParam spinor_param;
     spinor_param.nColor = a.Reconstruct()/2;
-    spinor_param.nSpin = a.Ndim();
-    spinor_param.nDim = spin;
+    spinor_param.nSpin = spin;
+    spinor_param.nDim = a.Ndim();
     for (int d=0; d<a.Ndim(); d++) spinor_param.x[d] = a.X()[d];
     spinor_param.precision = a.Precision();
     spinor_param.pad = a.Pad();
@@ -532,13 +531,27 @@ namespace quda {
     spinor_param.gammaBasis = QUDA_UKQCD_GAMMA_BASIS;
     spinor_param.create = QUDA_REFERENCE_FIELD_CREATE;
     spinor_param.v = (void*)a.Gauge_p();
+    return spinor_param;
+  }
 
+  // Return the L2 norm squared of the gauge field
+  double norm2(const cudaGaugeField &a) {
     // quick hack to disable ghost zone creation which otherwise breaks this mapping on multi-gpu
     setGhostSpinor(false);
-    cudaColorSpinorField b(spinor_param);
+    cudaColorSpinorField b(colorSpinorParam(a));
     setGhostSpinor(true);
 
     return norm2(b);
+  }
+
+  // Return the L1 norm of the gauge field
+  double norm1(const cudaGaugeField &a) {
+    // quick hack to disable ghost zone creation which otherwise breaks this mapping on multi-gpu
+    setGhostSpinor(false);
+    cudaColorSpinorField b(colorSpinorParam(a));
+    setGhostSpinor(true);
+
+    return norm1Cuda(b);
   }
 
 } // namespace quda

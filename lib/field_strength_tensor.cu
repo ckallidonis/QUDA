@@ -273,14 +273,10 @@ namespace quda {
       virtual ~FmunuCompute() {}
 
       void apply(const cudaStream_t &stream){
-        if(location == QUDA_CUDA_FIELD_LOCATION){
-#if (__COMPUTE_CAPABILITY__ >= 200)
+        if (location == QUDA_CUDA_FIELD_LOCATION) {
           TuneParam tp = tuneLaunch(*this, getTuning(), getVerbosity());
           computeFmunuKernel<<<tp.grid,tp.block,tp.shared_bytes>>>(arg);  
-#else
-	  errorQuda("computeFmunuKernel not supported on pre-Fermi architecture");
-#endif
-        }else{
+        } else {
           computeFmunuCPU(arg);
         }
       }
@@ -334,10 +330,10 @@ namespace quda {
 	  errorQuda("Reconstruction type %d not supported", gauge.Reconstruct());
 	}
       } else {
-	errorQuda("Gauge field order %d not supported", gauge.Precision());
+	errorQuda("Gauge field order %d not supported", gauge.Order());
       }
     } else {
-      errorQuda("Fmunu field order %d not supported", Fmunu.Precision());
+      errorQuda("Fmunu field order %d not supported", Fmunu.Order());
     }
     
   }

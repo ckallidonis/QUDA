@@ -674,6 +674,20 @@ namespace quda{
     }
 
 
+  template<typename Complex,int N>
+    __device__ __host__ inline void makeAntiHerm(Matrix<Complex,N> &m) {
+    typedef typename RealTypeId<Complex>::Type real;
+    // first make the matrix anti-hermitian
+    Matrix<Complex,N> am = m - conj(m);
+
+    // second make it traceless
+    real imag_trace = 0.0;
+    for (int i=0; i<N; i++) imag_trace += am(i,i).y;
+    for (int i=0; i<N; i++) {
+      am(i,i).y -= imag_trace/N;
+    }
+    m = 0.5*am;
+  }
 
 
 
@@ -1004,13 +1018,42 @@ namespace quda{
       return;
     }
 
+  template<class T>
+  __device__ __host__ inline Matrix<T,3> getSubTraceUnit(const Matrix<T,3>& a){
+    T tr = (a(0,0) + a(1,1) + a(2,2)) / 3.0;
+    Matrix<T,3> res;
+    res(0,0) = a(0,0) - tr; res(0,1) = a(0,1); res(0,2) = a(0,2);
+    res(1,0) = a(1,0); res(1,1) = a(1,1) - tr; res(1,2) = a(1,2);
+    res(2,0) = a(2,0); res(2,1) = a(2,1); res(2,2) = a(2,2) - tr;
+    return res;
+  }
+
+  template<class T>
+  __device__ __host__ inline void SubTraceUnit(Matrix<T,3>& a){
+    T tr = (a(0,0) + a(1,1) + a(2,2)) / 3.0;
+    a(0,0) -= tr; a(1,1) -= tr; a(2,2) -= tr;
+  }
+
+  template<class T>
+  __device__ __host__ inline double getRealTraceUVdagger(const Matrix<T,3>& a, const Matrix<T,3>& b){
+    double sum = (double)(a(0,0).x * b(0,0).x  + a(0,0).y * b(0,0).y);
+    sum += (double)(a(0,1).x * b(0,1).x  + a(0,1).y * b(0,1).y);
+    sum += (double)(a(0,2).x * b(0,2).x  + a(0,2).y * b(0,2).y);
+    sum += (double)(a(1,0).x * b(1,0).x  + a(1,0).y * b(1,0).y);
+    sum += (double)(a(1,1).x * b(1,1).x  + a(1,1).y * b(1,1).y);
+    sum += (double)(a(1,2).x * b(1,2).x  + a(1,2).y * b(1,2).y);
+    sum += (double)(a(2,0).x * b(2,0).x  + a(2,0).y * b(2,0).y);
+    sum += (double)(a(2,1).x * b(2,1).x  + a(2,1).y * b(2,1).y);
+    sum += (double)(a(2,2).x * b(2,2).x  + a(2,2).y * b(2,2).y);
+    return sum;
+  }
+
 
 
   // and this!
   template<class Cmplx>
     __host__ __device__ inline
     void printLink(const Matrix<Cmplx,3>& link){
-#if (!defined(__CUDA_ARCH__) || (__COMPUTE_CAPABILITY__>=200))
       printf("(%lf, %lf)\t", link(0,0).x, link(0,0).y);
       printf("(%lf, %lf)\t", link(0,1).x, link(0,1).y);
       printf("(%lf, %lf)\n", link(0,2).x, link(0,2).y);
@@ -1021,8 +1064,32 @@ namespace quda{
       printf("(%lf, %lf)\t", link(2,1).x, link(2,1).y);
       printf("(%lf, %lf)\n", link(2,2).x, link(2,2).y);
       printf("\n");
-#endif
     }
+
+  template<class Cmplx>
+  __device__ __host__
+  bool isUnitary(const Matrix<Cmplx,3>& matrix, double max_error)
+  {
+    const Matrix<Cmplx,3> identity = conj(matrix)*matrix;
+
+    for(int i=0; i<3; ++i){
+      if( fabs(identity(i,i).x - 1.0) > max_error || fabs(identity(i,i).y) > max_error) return false;
+      for(int j=i+1; j<3; ++j){
+	if( fabs(identity(i,j).x) > max_error || fabs(identity(i,j).y) > max_error
+	    ||  fabs(identity(j,i).x) > max_error || fabs(identity(j,i).y) > max_error ){
+	  return false;
+	}
+      }
+    }
+
+    for (int i=0; i<3; i++) {
+      for (int j=0; j<3; j++) {
+	if (isnan(matrix(i,j).x) || isnan(matrix(i,j).y)) return false;
+      }
+    }
+
+    return true;
+  }
 
 } // end namespace quda
 #endif // _QUDA_MATRIX_H_
