@@ -296,6 +296,11 @@ namespace quda {
 
       friend std::ostream& operator<<(std::ostream &out, const ColorSpinorField &);
       friend class ColorSpinorParam;
+
+      //-C.K. This function sets the twisted mass sign of a spinor field
+      void changeTwist(QudaTwistFlavorType twist){
+        twistFlavor = twist;
+      }
   };
 
   // CUDA implementation

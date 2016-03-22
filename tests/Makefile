@@ -4,7 +4,7 @@ QUDA = ../lib/libquda.a
 
 INC += -I../include -I. -I/users/kallidoc/install/include
 
-HDRS = blas_reference.h wilson_dslash_reference.h staggered_dslash_reference.h    \
+HDRS = blas_reference.h wilson_dslash_reference.h staggered_dslash_reference.h \
 	domain_wall_dslash_reference.h test_util.h dslash_util.h read_conf.h
 
 LDFLAGS += -L/users/kallidoc/install/lib -larpack -lparpack
@@ -74,39 +74,38 @@ all: $(TESTS)
 
 #-----------------------------------------------
 CalcEigenVecs_Loops_w_oneD: CalcEigenVecs_Loops_w_oneD.o test_util.o wilson_dslash_reference.o domain_wall_dslash_reference.o misc.o blas_reference.o $(QIO_UTIL) $(QUDA)
-      $(CXX) $(LDFLAGS) $^ -o $@ $(LDFLAGS)
+	$(CXX) $(LDFLAGS) $^ -o $@ $(LDFLAGS)
 
 CalcEigenVecs_Loops_w_oneD_2pt3pt: CalcEigenVecs_Loops_w_oneD_2pt3pt.o test_util.o wilson_dslash_reference.o domain_wall_dslash_reference.o misc.o blas_reference.o $(QIO_UTIL) $(QUDA)
-      $(CXX) $(LDFLAGS) $^ -o $@ $(LDFLAGS)
+	$(CXX) $(LDFLAGS) $^ -o $@ $(LDFLAGS)
 
 CalcEigenVecs: CalcEigenVecs.o test_util.o wilson_dslash_reference.o domain_wall_dslash_reference.o misc.o blas_reference.o $(QIO_UTIL) $(QUDA)
-      $(CXX) $(LDFLAGS) $^ -o $@ $(LDFLAGS)
+	$(CXX) $(LDFLAGS) $^ -o $@ $(LDFLAGS)
 
 CalcEigenVecs_2pt3pt: CalcEigenVecs_2pt3pt.o test_util.o wilson_dslash_reference.o domain_wall_dslash_reference.o misc.o blas_reference.o $(QIO_UTIL) $(QUDA)
-      $(CXX) $(LDFLAGS) $^ -o $@ $(LDFLAGS)
+	$(CXX) $(LDFLAGS) $^ -o $@ $(LDFLAGS)
 
 deflationTwopThreep: deflationTwopThreep.o test_util.o wilson_dslash_reference.o domain_wall_dslash_reference.o misc.o blas_reference.o $(QIO_UTIL) $(QUDA)
-      $(CXX) $(LDFLAGS) $^ -o $@ $(LDFLAGS)
+	$(CXX) $(LDFLAGS) $^ -o $@ $(LDFLAGS)
 
 deflationInverter: deflationInverter.o test_util.o wilson_dslash_reference.o domain_wall_dslash_reference.o misc.o blas_reference.o $(QIO_UTIL) $(QUDA)
-      $(CXX) $(LDFLAGS) $^ -o $@ $(LDFLAGS)
+	$(CXX) $(LDFLAGS) $^ -o $@ $(LDFLAGS)
 
 deflationLoops: deflationLoops.o test_util.o wilson_dslash_reference.o domain_wall_dslash_reference.o misc.o blas_reference.o $(QIO_UTIL) $(QUDA)
-      $(CXX) $(LDFLAGS) $^ -o $@ $(LDFLAGS)
+	$(CXX) $(LDFLAGS) $^ -o $@ $(LDFLAGS)
 
 deflationLoops_w_oneD: deflationLoops_w_oneD.o test_util.o wilson_dslash_reference.o domain_wall_dslash_reference.o misc.o blas_reference.o $(QIO_UTIL) $(QUDA)
-      $(CXX) $(LDFLAGS) $^ -o $@ $(LDFLAGS)
+	$(CXX) $(LDFLAGS) $^ -o $@ $(LDFLAGS)
 
 deflationLoops_w_oneD_volumeSource: deflationLoops_w_oneD_volumeSource.o test_util.o wilson_dslash_reference.o domain_wall_dslash_reference.o misc.o blas_reference.o $(QIO_UTIL) $(QUDA)
-      $(CXX) $(LDFLAGS) $^ -o $@ $(LDFLAGS)
+	$(CXX) $(LDFLAGS) $^ -o $@ $(LDFLAGS)
 
 createWritePropsSLReadApeGauge: createWritePropsSLReadApeGauge.o test_util.o wilson_dslash_reference.o domain_wall_dslash_reference.o misc.o blas_reference.o $(QIO_UTIL) $(QUDA)
-      $(CXX) $(LDFLAGS) $^ -o $@ $(LDFLAGS)
+	$(CXX) $(LDFLAGS) $^ -o $@ $(LDFLAGS)
 
 test_plaquette: test_plaquette.o test_util.o wilson_dslash_reference.o domain_wall_dslash_reference.o misc.o blas_reference.o $(QIO_UTIL) $(QUDA)
-      $(CXX) $(LDFLAGS) $^ -o $@ $(LDFLAGS)
+	$(CXX) $(LDFLAGS) $^ -o $@ $(LDFLAGS)
 #-----------------------------------------------
-
 
 dslash_test: dslash_test.o test_util.o gtest-all.o wilson_dslash_reference.o domain_wall_dslash_reference.o misc.o $(QIO_UTIL) $(QUDA)
 	$(CXX) $(LDFLAGS) $^ -o $@ $(LDFLAGS)

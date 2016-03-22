@@ -62,7 +62,7 @@ void testGaussSmearing(void **gauge){
 }
 
 void invertWritePropsNoApe_SL_v2_Kepler(void **gauge, void **gaugeAPE ,QudaInvertParam *param ,QudaGaugeParam *gauge_param,quda::qudaQKXTMinfo_Kepler info, char *prop_path){
-  profileInvert.Start(QUDA_PROFILE_TOTAL);
+  profileInvert.TPSTART(QUDA_PROFILE_TOTAL);
   if (!initialized) errorQuda("QUDA not initialized");
   pushVerbosity(param->verbosity);
   if (getVerbosity() >= QUDA_DEBUG_VERBOSE) printQudaInvertParam(param);
@@ -104,7 +104,7 @@ void invertWritePropsNoApe_SL_v2_Kepler(void **gauge, void **gaugeAPE ,QudaInver
   Dirac &dirac = *d;
   Dirac &diracSloppy = *dSloppy;
   Dirac &diracPre = *dPre;
-  profileInvert.Start(QUDA_PROFILE_H2D);
+  profileInvert.TPSTART(QUDA_PROFILE_H2D);
 
   cudaColorSpinorField *b = NULL;
   cudaColorSpinorField *x = NULL;
@@ -132,7 +132,7 @@ void invertWritePropsNoApe_SL_v2_Kepler(void **gauge, void **gaugeAPE ,QudaInver
   x = new cudaColorSpinorField(cudaParam);
 
 
-  profileInvert.Stop(QUDA_PROFILE_H2D);
+  profileInvert.TPSTOP(QUDA_PROFILE_H2D);
   setTuning(param->tune);
 
   if (pc_solution && !pc_solve) {
@@ -271,14 +271,14 @@ void invertWritePropsNoApe_SL_v2_Kepler(void **gauge, void **gaugeAPE ,QudaInver
 
  popVerbosity();
  saveTuneCache(getVerbosity());
- profileInvert.Stop(QUDA_PROFILE_TOTAL);
+ profileInvert.TPSTOP(QUDA_PROFILE_TOTAL);
 
 
 }
 
 
 void invertWritePropsNoApe_SL_v2_Kepler_single(void **gauge, void **gaugeAPE ,QudaInvertParam *param ,QudaGaugeParam *gauge_param,quda::qudaQKXTMinfo_Kepler info, char *prop_path){
-  profileInvert.Start(QUDA_PROFILE_TOTAL);
+  profileInvert.TPSTART(QUDA_PROFILE_TOTAL);
   if (!initialized) errorQuda("QUDA not initialized");
   pushVerbosity(param->verbosity);
   if (getVerbosity() >= QUDA_DEBUG_VERBOSE) printQudaInvertParam(param);
@@ -320,7 +320,7 @@ void invertWritePropsNoApe_SL_v2_Kepler_single(void **gauge, void **gaugeAPE ,Qu
   Dirac &dirac = *d;
   Dirac &diracSloppy = *dSloppy;
   Dirac &diracPre = *dPre;
-  profileInvert.Start(QUDA_PROFILE_H2D);
+  profileInvert.TPSTART(QUDA_PROFILE_H2D);
 
   cudaColorSpinorField *b = NULL;
   cudaColorSpinorField *x = NULL;
@@ -348,7 +348,7 @@ void invertWritePropsNoApe_SL_v2_Kepler_single(void **gauge, void **gaugeAPE ,Qu
   x = new cudaColorSpinorField(cudaParam);
 
 
-  profileInvert.Stop(QUDA_PROFILE_H2D);
+  profileInvert.TPSTOP(QUDA_PROFILE_H2D);
   setTuning(param->tune);
 
   if (pc_solution && !pc_solve) {
@@ -487,7 +487,7 @@ void invertWritePropsNoApe_SL_v2_Kepler_single(void **gauge, void **gaugeAPE ,Qu
 
  popVerbosity();
  saveTuneCache(getVerbosity());
- profileInvert.Stop(QUDA_PROFILE_TOTAL);
+ profileInvert.TPSTOP(QUDA_PROFILE_TOTAL);
 
 
 }
@@ -682,7 +682,7 @@ void checkDeflateAndInvert(void **gaugeToPlaquette, QudaInvertParam *param ,Quda
   double t1,t2;
 
 
-  profileInvert.Start(QUDA_PROFILE_TOTAL);
+  profileInvert.TPSTART(QUDA_PROFILE_TOTAL);
   if(param->solve_type != QUDA_NORMOP_PC_SOLVE) errorQuda("This function works only with even odd preconditioning");
   if(param->inv_type != QUDA_CG_INVERTER) errorQuda("This function works only with CG method");
   if( (param->matpc_type != QUDA_MATPC_EVEN_EVEN_ASYMMETRIC) && (param->matpc_type != QUDA_MATPC_ODD_ODD_ASYMMETRIC) ) errorQuda("Only asymmetric operators are supported in deflation\n");
@@ -744,7 +744,7 @@ void checkDeflateAndInvert(void **gaugeToPlaquette, QudaInvertParam *param ,Quda
   Dirac &dirac = *d;
   Dirac &diracSloppy = *dSloppy;
   Dirac &diracPre = *dPre;
-  profileInvert.Start(QUDA_PROFILE_H2D);
+  profileInvert.TPSTART(QUDA_PROFILE_H2D);
 
 
   cudaColorSpinorField *b = NULL;
@@ -777,7 +777,7 @@ void checkDeflateAndInvert(void **gaugeToPlaquette, QudaInvertParam *param ,Quda
   cudaParam.create = QUDA_ZERO_FIELD_CREATE;
   x = new cudaColorSpinorField(cudaParam);
 
-  profileInvert.Stop(QUDA_PROFILE_H2D);
+  profileInvert.TPSTOP(QUDA_PROFILE_H2D);
   setTuning(param->tune);
 
 
@@ -874,7 +874,7 @@ void checkDeflateAndInvert(void **gaugeToPlaquette, QudaInvertParam *param ,Quda
 
   popVerbosity();
   saveTuneCache(getVerbosity());
-  profileInvert.Stop(QUDA_PROFILE_TOTAL);
+  profileInvert.TPSTOP(QUDA_PROFILE_TOTAL);
 
 }
 
@@ -883,7 +883,7 @@ void DeflateAndInvert_twop(void **gaugeSmeared, QudaInvertParam *param ,QudaGaug
   bool flag_eo;
   double t1,t2;
 
-  profileInvert.Start(QUDA_PROFILE_TOTAL);
+  profileInvert.TPSTART(QUDA_PROFILE_TOTAL);
   if(param->solve_type != QUDA_NORMOP_PC_SOLVE) errorQuda("This function works only with even odd preconditioning");
   if(param->inv_type != QUDA_CG_INVERTER) errorQuda("This function works only with CG method");
   if( (param->matpc_type != QUDA_MATPC_EVEN_EVEN_ASYMMETRIC) && (param->matpc_type != QUDA_MATPC_ODD_ODD_ASYMMETRIC) ) errorQuda("Only asymmetric operators are supported in deflation\n");
@@ -963,7 +963,7 @@ void DeflateAndInvert_twop(void **gaugeSmeared, QudaInvertParam *param ,QudaGaug
   Dirac &dirac = *d;
   Dirac &diracSloppy = *dSloppy;
   Dirac &diracPre = *dPre;
-  profileInvert.Start(QUDA_PROFILE_H2D);
+  profileInvert.TPSTART(QUDA_PROFILE_H2D);
 
 
   cudaColorSpinorField *b = NULL;
@@ -994,7 +994,7 @@ void DeflateAndInvert_twop(void **gaugeSmeared, QudaInvertParam *param ,QudaGaug
   cudaParam.create = QUDA_ZERO_FIELD_CREATE;
   x = new cudaColorSpinorField(cudaParam);
 
-  profileInvert.Stop(QUDA_PROFILE_H2D);
+  profileInvert.TPSTOP(QUDA_PROFILE_H2D);
   setTuning(param->tune);
   
   zeroCuda(*x);
@@ -1134,7 +1134,7 @@ void DeflateAndInvert_twop(void **gaugeSmeared, QudaInvertParam *param ,QudaGaug
 
   popVerbosity();
   saveTuneCache(getVerbosity());
-  profileInvert.Stop(QUDA_PROFILE_TOTAL);
+  profileInvert.TPSTOP(QUDA_PROFILE_TOTAL);
 
 }
 
@@ -1208,7 +1208,7 @@ void DeflateAndInvert_loop(void **gaugeToPlaquette, QudaInvertParam *param ,Quda
   bool flag_eo;
   double t1,t2;
 
-  profileInvert.Start(QUDA_PROFILE_TOTAL);
+  profileInvert.TPSTART(QUDA_PROFILE_TOTAL);
   if(param->solve_type != QUDA_NORMOP_PC_SOLVE) errorQuda("This function works only with even odd preconditioning");
   if(param->inv_type != QUDA_CG_INVERTER) errorQuda("This function works only with CG method");
   if( (param->matpc_type != QUDA_MATPC_EVEN_EVEN_ASYMMETRIC) && (param->matpc_type != QUDA_MATPC_ODD_ODD_ASYMMETRIC) ) errorQuda("Only asymmetric operators are supported in deflation\n");
@@ -1272,7 +1272,7 @@ void DeflateAndInvert_loop(void **gaugeToPlaquette, QudaInvertParam *param ,Quda
   Dirac &dirac = *d;
   Dirac &diracSloppy = *dSloppy;
   Dirac &diracPre = *dPre;
-  profileInvert.Start(QUDA_PROFILE_H2D);
+  profileInvert.TPSTART(QUDA_PROFILE_H2D);
 
 
   cudaColorSpinorField *b = NULL;
@@ -1311,7 +1311,7 @@ void DeflateAndInvert_loop(void **gaugeToPlaquette, QudaInvertParam *param ,Quda
   tmp3 = new cudaColorSpinorField(cudaParam);
   tmp4 = new cudaColorSpinorField(cudaParam);
 
-  profileInvert.Stop(QUDA_PROFILE_H2D);
+  profileInvert.TPSTOP(QUDA_PROFILE_H2D);
   setTuning(param->tune);
   
   zeroCuda(*x);
@@ -1405,7 +1405,7 @@ void DeflateAndInvert_loop(void **gaugeToPlaquette, QudaInvertParam *param ,Quda
   delete tmp4;
   popVerbosity();
   saveTuneCache(getVerbosity());
-  profileInvert.Stop(QUDA_PROFILE_TOTAL);
+  profileInvert.TPSTOP(QUDA_PROFILE_TOTAL);
 
 }
 
@@ -1413,7 +1413,7 @@ void DeflateAndInvert_loop_w_One_Der(void **gaugeToPlaquette, QudaInvertParam *p
   bool flag_eo;
   double t1,t2;
 
-  profileInvert.Start(QUDA_PROFILE_TOTAL);
+  profileInvert.TPSTART(QUDA_PROFILE_TOTAL);
   if(param->solve_type != QUDA_NORMOP_PC_SOLVE) errorQuda("This function works only with even odd preconditioning");
   if(param->inv_type != QUDA_CG_INVERTER) errorQuda("This function works only with CG method");
   if( (param->matpc_type != QUDA_MATPC_EVEN_EVEN_ASYMMETRIC) && (param->matpc_type != QUDA_MATPC_ODD_ODD_ASYMMETRIC) ) errorQuda("Only asymmetric operators are supported in deflation\n");
@@ -1477,7 +1477,7 @@ void DeflateAndInvert_loop_w_One_Der(void **gaugeToPlaquette, QudaInvertParam *p
   Dirac &dirac = *d;
   Dirac &diracSloppy = *dSloppy;
   Dirac &diracPre = *dPre;
-  profileInvert.Start(QUDA_PROFILE_H2D);
+  profileInvert.TPSTART(QUDA_PROFILE_H2D);
 
 
   cudaColorSpinorField *b = NULL;
@@ -1516,7 +1516,7 @@ void DeflateAndInvert_loop_w_One_Der(void **gaugeToPlaquette, QudaInvertParam *p
   tmp3 = new cudaColorSpinorField(cudaParam);
   tmp4 = new cudaColorSpinorField(cudaParam);
 
-  profileInvert.Stop(QUDA_PROFILE_H2D);
+  profileInvert.TPSTOP(QUDA_PROFILE_H2D);
   setTuning(param->tune);
   
   zeroCuda(*x);
@@ -1666,14 +1666,14 @@ void DeflateAndInvert_loop_w_One_Der(void **gaugeToPlaquette, QudaInvertParam *p
   delete tmp4;
   popVerbosity();
   saveTuneCache(getVerbosity());
-  profileInvert.Stop(QUDA_PROFILE_TOTAL);
+  profileInvert.TPSTOP(QUDA_PROFILE_TOTAL);
 }
 
 void DeflateAndInvert_loop_w_One_Der_volumeSource(void **gaugeToPlaquette, QudaInvertParam *param ,QudaGaugeParam *gauge_param, char *filename_eigenValues_up, char *filename_eigenVectors_up, char *filename_eigenValues_down, char *filename_eigenVectors_down,char *filename_out , int NeV , int Nstoch, int seed ,int NdumpStep, qudaQKXTMinfo_Kepler info){
   bool flag_eo;
   double t1,t2;
 
-  profileInvert.Start(QUDA_PROFILE_TOTAL);
+  profileInvert.TPSTART(QUDA_PROFILE_TOTAL);
   if(param->solve_type != QUDA_NORMOP_PC_SOLVE) errorQuda("This function works only with even odd preconditioning");
   if(param->inv_type != QUDA_CG_INVERTER) errorQuda("This function works only with CG method");
   if( (param->matpc_type != QUDA_MATPC_EVEN_EVEN_ASYMMETRIC) && (param->matpc_type != QUDA_MATPC_ODD_ODD_ASYMMETRIC) ) errorQuda("Only asymmetric operators are supported in deflation\n");
@@ -1742,7 +1742,7 @@ void DeflateAndInvert_loop_w_One_Der_volumeSource(void **gaugeToPlaquette, QudaI
   Dirac &dirac = *d;
   Dirac &diracSloppy = *dSloppy;
   Dirac &diracPre = *dPre;
-  profileInvert.Start(QUDA_PROFILE_H2D);
+  profileInvert.TPSTART(QUDA_PROFILE_H2D);
 
 
   cudaColorSpinorField *b = NULL;
@@ -1779,7 +1779,7 @@ void DeflateAndInvert_loop_w_One_Der_volumeSource(void **gaugeToPlaquette, QudaI
 
   tmp = new cudaColorSpinorField(cudaParam);
 
-  profileInvert.Stop(QUDA_PROFILE_H2D);
+  profileInvert.TPSTOP(QUDA_PROFILE_H2D);
   setTuning(param->tune);
   
   zeroCuda(*x);
@@ -2008,7 +2008,7 @@ void DeflateAndInvert_loop_w_One_Der_volumeSource(void **gaugeToPlaquette, QudaI
   delete tmp;
   popVerbosity();
   saveTuneCache(getVerbosity());
-  profileInvert.Stop(QUDA_PROFILE_TOTAL);
+  profileInvert.TPSTOP(QUDA_PROFILE_TOTAL);
 }
 
 /*
@@ -2029,7 +2029,7 @@ void DeflateAndInvert_threepTwop(void **gaugeSmeared, void **gauge, QudaInvertPa
   bool flag_eo;
   double t1,t2;
 
-  profileInvert.Start(QUDA_PROFILE_TOTAL);
+  profileInvert.TPSTART(QUDA_PROFILE_TOTAL);
   if(param->solve_type != QUDA_NORMOP_PC_SOLVE) errorQuda("This function works only with even odd preconditioning");
   if(param->inv_type != QUDA_CG_INVERTER) errorQuda("This function works only with CG method");
   if( (param->matpc_type != QUDA_MATPC_EVEN_EVEN_ASYMMETRIC) && (param->matpc_type != QUDA_MATPC_ODD_ODD_ASYMMETRIC) ) errorQuda("Only asymmetric operators are supported in deflation\n");
@@ -2122,7 +2122,7 @@ void DeflateAndInvert_threepTwop(void **gaugeSmeared, void **gauge, QudaInvertPa
   Dirac &dirac = *d;
   Dirac &diracSloppy = *dSloppy;
   Dirac &diracPre = *dPre;
-  profileInvert.Start(QUDA_PROFILE_H2D);
+  profileInvert.TPSTART(QUDA_PROFILE_H2D);
 
 
   cudaColorSpinorField *b = NULL;
@@ -2153,7 +2153,7 @@ void DeflateAndInvert_threepTwop(void **gaugeSmeared, void **gauge, QudaInvertPa
   cudaParam.create = QUDA_ZERO_FIELD_CREATE;
   x = new cudaColorSpinorField(cudaParam);
 
-  profileInvert.Stop(QUDA_PROFILE_H2D);
+  profileInvert.TPSTOP(QUDA_PROFILE_H2D);
   setTuning(param->tune);
   
   zeroCuda(*x);
@@ -2498,7 +2498,7 @@ void DeflateAndInvert_threepTwop(void **gaugeSmeared, void **gauge, QudaInvertPa
 
   popVerbosity();
   saveTuneCache(getVerbosity());
-  profileInvert.Stop(QUDA_PROFILE_TOTAL);
+  profileInvert.TPSTOP(QUDA_PROFILE_TOTAL);
 
 }
 
@@ -2589,7 +2589,7 @@ void calcEigenVectors_loop_wOneD_EvenOdd(void **gaugeToPlaquette, QudaInvertPara
   bool flag_eo;
   double t1,t2;
 
-  profileInvert.Start(QUDA_PROFILE_TOTAL);
+  profileInvert.TPSTART(QUDA_PROFILE_TOTAL);
   if( (arpackInfo.isFullOp) || (param->solve_type != QUDA_NORMOP_PC_SOLVE) ) errorQuda("calcEigenVectors_loop_wOneD: This function works only with even-odd preconditioning\n");
   
   if(param->inv_type != QUDA_CG_INVERTER) errorQuda("calcEigenVectors_loop_wOneD_EvenOdd: This function works only with CG method");
@@ -2693,7 +2693,7 @@ void calcEigenVectors_loop_wOneD_EvenOdd(void **gaugeToPlaquette, QudaInvertPara
   Dirac &dirac = *d;
   Dirac &diracSloppy = *dSloppy;
   Dirac &diracPre = *dPre;
-  profileInvert.Start(QUDA_PROFILE_H2D);
+  profileInvert.TPSTART(QUDA_PROFILE_H2D);
 
 
   cudaColorSpinorField *b = NULL;
@@ -2732,7 +2732,7 @@ void calcEigenVectors_loop_wOneD_EvenOdd(void **gaugeToPlaquette, QudaInvertPara
   tmp3 = new cudaColorSpinorField(cudaParam);
   tmp4 = new cudaColorSpinorField(cudaParam);
 
-  profileInvert.Stop(QUDA_PROFILE_H2D);
+  profileInvert.TPSTOP(QUDA_PROFILE_H2D);
   setTuning(param->tune);
   
   zeroCuda(*x);
@@ -2968,7 +2968,7 @@ void calcEigenVectors_loop_wOneD_EvenOdd(void **gaugeToPlaquette, QudaInvertPara
   delete tmp4;
   popVerbosity();
   saveTuneCache(getVerbosity());
-  profileInvert.Stop(QUDA_PROFILE_TOTAL);
+  profileInvert.TPSTOP(QUDA_PROFILE_TOTAL);
 }
 
 
@@ -2976,7 +2976,7 @@ void calcEigenVectors_loop_wOneD_FullOp(void **gaugeToPlaquette, QudaInvertParam
 
   double t1,t2,t3,t4;
   
-  profileInvert.Start(QUDA_PROFILE_TOTAL);
+  profileInvert.TPSTART(QUDA_PROFILE_TOTAL);
   if( (!arpackInfo.isFullOp) || (param->solve_type != QUDA_NORMOP_SOLVE) || (param->solution_type != QUDA_MAT_SOLUTION) ) errorQuda("calcEigenVectors_loop_wOneD_FullOp: This function works only with the Full Operator\n");
   printfQuda("calcEigenVectors_loop_wOneD_FullOp: Solving for the FULL operator\n");
   
@@ -3220,7 +3220,7 @@ void calcEigenVectors_loop_wOneD_FullOp(void **gaugeToPlaquette, QudaInvertParam
   Dirac &dirac = *d;
   Dirac &diracSloppy = *dSloppy;
   Dirac &diracPre = *dPre;
-  profileInvert.Start(QUDA_PROFILE_H2D);
+  profileInvert.TPSTART(QUDA_PROFILE_H2D);
 
 
   cudaColorSpinorField *b     = NULL;
@@ -3256,7 +3256,7 @@ void calcEigenVectors_loop_wOneD_FullOp(void **gaugeToPlaquette, QudaInvertParam
   tmp3 = new cudaColorSpinorField(cudaParam);
   tmp4 = new cudaColorSpinorField(cudaParam);
 
-  profileInvert.Stop(QUDA_PROFILE_H2D);
+  profileInvert.TPSTOP(QUDA_PROFILE_H2D);
   setTuning(param->tune);
   
   zeroCuda(*x);
@@ -3456,7 +3456,7 @@ void calcEigenVectors_loop_wOneD_FullOp(void **gaugeToPlaquette, QudaInvertParam
 
   popVerbosity();
   saveTuneCache(getVerbosity());
-  profileInvert.Stop(QUDA_PROFILE_TOTAL);
+  profileInvert.TPSTOP(QUDA_PROFILE_TOTAL);
 }
 
 //template<typename Float>
@@ -3466,7 +3466,7 @@ void calcEigenVectors_threepTwop_EvenOdd(void **gaugeSmeared, void **gauge, Quda
   bool flag_eo;
   double t1,t2;
 
-  profileInvert.Start(QUDA_PROFILE_TOTAL);
+  profileInvert.TPSTART(QUDA_PROFILE_TOTAL);
   if(param->solve_type != QUDA_NORMOP_PC_SOLVE) errorQuda("This function works only with even odd preconditioning");
   if(param->inv_type != QUDA_CG_INVERTER) errorQuda("This function works only with CG method");
   if( (param->matpc_type != QUDA_MATPC_EVEN_EVEN_ASYMMETRIC) && (param->matpc_type != QUDA_MATPC_ODD_ODD_ASYMMETRIC) ) errorQuda("Only asymmetric operators are supported in deflation\n");
@@ -3562,7 +3562,7 @@ void calcEigenVectors_threepTwop_EvenOdd(void **gaugeSmeared, void **gauge, Quda
   Dirac &dirac = *d;
   Dirac &diracSloppy = *dSloppy;
   Dirac &diracPre = *dPre;
-  profileInvert.Start(QUDA_PROFILE_H2D);
+  profileInvert.TPSTART(QUDA_PROFILE_H2D);
 
 
   cudaColorSpinorField *b = NULL;
@@ -3593,7 +3593,7 @@ void calcEigenVectors_threepTwop_EvenOdd(void **gaugeSmeared, void **gauge, Quda
   cudaParam.create = QUDA_ZERO_FIELD_CREATE;
   x = new cudaColorSpinorField(cudaParam);
 
-  profileInvert.Stop(QUDA_PROFILE_H2D);
+  profileInvert.TPSTOP(QUDA_PROFILE_H2D);
   setTuning(param->tune);
   
   zeroCuda(*x);
@@ -4100,7 +4100,7 @@ void calcEigenVectors_threepTwop_EvenOdd(void **gaugeSmeared, void **gauge, Quda
 
   popVerbosity();
   saveTuneCache(getVerbosity());
-  profileInvert.Stop(QUDA_PROFILE_TOTAL);
+  profileInvert.TPSTOP(QUDA_PROFILE_TOTAL);
 
 }
 
@@ -4110,7 +4110,7 @@ void calcEigenVectors_loop_wOneD_2pt3pt_EvenOdd(void **gaugeSmeared, void **gaug
   bool flag_eo;
   double t1,t2;
 
-  profileInvert.Start(QUDA_PROFILE_TOTAL);
+  profileInvert.TPSTART(QUDA_PROFILE_TOTAL);
   if( (arpackInfo.isFullOp) || (param->solve_type != QUDA_NORMOP_PC_SOLVE) ) errorQuda("This function works only with even-odd preconditioning\n");
   if(param->inv_type != QUDA_CG_INVERTER) errorQuda("This function works only with CG method");
   if( (param->matpc_type != QUDA_MATPC_EVEN_EVEN_ASYMMETRIC) && (param->matpc_type != QUDA_MATPC_ODD_ODD_ASYMMETRIC) ) errorQuda("Only asymmetric operators are supported in deflation\n");
@@ -4214,7 +4214,7 @@ void calcEigenVectors_loop_wOneD_2pt3pt_EvenOdd(void **gaugeSmeared, void **gaug
   Dirac &dirac = *d;
   Dirac &diracSloppy = *dSloppy;
   Dirac &diracPre = *dPre;
-  profileInvert.Start(QUDA_PROFILE_H2D);
+  profileInvert.TPSTART(QUDA_PROFILE_H2D);
 
 
   cudaColorSpinorField *b = NULL;
@@ -4245,7 +4245,7 @@ void calcEigenVectors_loop_wOneD_2pt3pt_EvenOdd(void **gaugeSmeared, void **gaug
   cudaParam.create = QUDA_ZERO_FIELD_CREATE;
   x = new cudaColorSpinorField(cudaParam);
 
-  profileInvert.Stop(QUDA_PROFILE_H2D);
+  profileInvert.TPSTOP(QUDA_PROFILE_H2D);
   setTuning(param->tune);
   
   zeroCuda(*x);
@@ -4606,7 +4606,7 @@ void calcEigenVectors_loop_wOneD_2pt3pt_EvenOdd(void **gaugeSmeared, void **gaug
 
   popVerbosity();
   saveTuneCache(getVerbosity());
-  profileInvert.Stop(QUDA_PROFILE_TOTAL);
+  profileInvert.TPSTOP(QUDA_PROFILE_TOTAL);
 
 }
 
@@ -4713,7 +4713,7 @@ void calcEigenVectors_loop_wOneD_EvenOdd_noDefl(double *eigVecs_d, double *eigVa
   Dirac &dirac = *d;
   Dirac &diracSloppy = *dSloppy;
   Dirac &diracPre = *dPre;
-  profileInvert.Start(QUDA_PROFILE_H2D);
+  profileInvert.TPSTART(QUDA_PROFILE_H2D);
 
 
   cudaColorSpinorField *b = NULL;
@@ -4752,7 +4752,7 @@ void calcEigenVectors_loop_wOneD_EvenOdd_noDefl(double *eigVecs_d, double *eigVa
   tmp3 = new cudaColorSpinorField(cudaParam);
   tmp4 = new cudaColorSpinorField(cudaParam);
 
-  profileInvert.Stop(QUDA_PROFILE_H2D);
+  profileInvert.TPSTOP(QUDA_PROFILE_H2D);
   setTuning(param->tune);
   
   zeroCuda(*x);
@@ -4908,7 +4908,7 @@ void calcEigenVectors_threepTwop_FullOp(void **gaugeSmeared, void **gauge, QudaG
 
   double t1,t2;
 
-  profileInvert.Start(QUDA_PROFILE_TOTAL);
+  profileInvert.TPSTART(QUDA_PROFILE_TOTAL);
   //if(param->solve_type != QUDA_NORMOP_PC_SOLVE) errorQuda("This function works only with even odd preconditioning");
   if(param->inv_type != QUDA_CG_INVERTER) errorQuda("This function works only with CG method");
   if( !arpackInfo.isFullOp ) errorQuda("This function works only with the Full Operator\n");
@@ -4999,7 +4999,7 @@ void calcEigenVectors_threepTwop_FullOp(void **gaugeSmeared, void **gauge, QudaG
   Dirac &diracSloppy = *dSloppy;
   Dirac &diracPre = *dPre;
 
-  profileInvert.Start(QUDA_PROFILE_H2D);
+  profileInvert.TPSTART(QUDA_PROFILE_H2D);
 
   cudaColorSpinorField *b = NULL;
   cudaColorSpinorField *x = NULL;
@@ -5029,7 +5029,7 @@ void calcEigenVectors_threepTwop_FullOp(void **gaugeSmeared, void **gauge, QudaG
   cudaParam.create = QUDA_ZERO_FIELD_CREATE;
   x = new cudaColorSpinorField(cudaParam);
 
-  profileInvert.Stop(QUDA_PROFILE_H2D);
+  profileInvert.TPSTOP(QUDA_PROFILE_H2D);
   setTuning(param->tune);
   
   zeroCuda(*x);
@@ -5342,7 +5342,7 @@ void calcEigenVectors_threepTwop_FullOp(void **gaugeSmeared, void **gauge, QudaG
 
   popVerbosity();
   saveTuneCache(getVerbosity());
-  profileInvert.Stop(QUDA_PROFILE_TOTAL);
+  profileInvert.TPSTOP(QUDA_PROFILE_TOTAL);
 
 }
 

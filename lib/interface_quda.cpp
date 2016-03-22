@@ -5724,7 +5724,7 @@ void quda::invertWritePropsNoApe_SL_v2(void **gauge, void **gaugeAPE ,QudaInvert
   Dirac &dirac = *d;
   Dirac &diracSloppy = *dSloppy;
   Dirac &diracPre = *dPre;
-  profileInvert.Start(QUDA_PROFILE_H2D);
+  profileInvert.TPSTART(QUDA_PROFILE_H2D);
 
   cudaColorSpinorField *b = NULL;
   cudaColorSpinorField *x = NULL;
@@ -5755,7 +5755,7 @@ void quda::invertWritePropsNoApe_SL_v2(void **gauge, void **gaugeAPE ,QudaInvert
   printfQuda("Memory status after allocate memory for inversion input output spinors (Free = %f Mb),(Percentage = %f %%)\n",freeMem/(1024.*1024.),100*(freeMem/(double)totalMem));
 
 
-  profileInvert.Stop(QUDA_PROFILE_H2D);
+  profileInvert.TPSTOP(QUDA_PROFILE_H2D);
   setTuning(param->tune);
 
   if (pc_solution && !pc_solve) {
