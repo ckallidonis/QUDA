@@ -49,12 +49,17 @@ extern QudaInverterType  inv_type;
 extern QudaInverterType  precon_type;
 extern int multishift; // whether to test multi-shift or standard solver
 extern double mass; // mass of Dirac operator
+extern double tol; // tolerance for inverter
+extern double tol_hq; // heavy-quark tolerance for inverter
 extern QudaMassNormalization normalization; // mass normalization of Dirac operators
 extern QudaMatPCType matpc_type; // preconditioning type
 
+extern int niter; // max solver iterations
 extern char latfile[];
 
 extern void usage(char** );
+
+
 
 void
 display_test_info()
@@ -176,8 +181,8 @@ int main(int argc, char **argv)
   }
 
   // offsets used only by multi-shift solver
-  inv_param.num_offset = 4;
-  double offset[4] = {0.01, 0.02, 0.03, 0.04};
+  inv_param.num_offset = 12;
+  double offset[12] = {0.01, 0.02, 0.03, 0.04, 0.05, 0.06, 0.07, 0.08, 0.09, 0.1, 0.11, 0.12};
   for (int i=0; i<inv_param.num_offset; i++) inv_param.offset[i] = offset[i];
 
   inv_param.inv_type = inv_type;
@@ -207,22 +212,25 @@ int main(int argc, char **argv)
 
   inv_param.Nsteps = 2;
   inv_param.gcrNkrylov = 10;
-  inv_param.tol = 1e-7;
+  inv_param.tol = tol;
   inv_param.tol_restart = 1e-3; //now theoretical background for this parameter... 
-#if __COMPUTE_CAPABILITY__ >= 200
+  if(tol_hq == 0 && tol == 0){
+    errorQuda("qudaInvert: requesting zero residual\n");
+    exit(1);
+  }
   // require both L2 relative and heavy quark residual to determine convergence
-  inv_param.residual_type = static_cast<QudaResidualType>(QUDA_L2_RELATIVE_RESIDUAL | QUDA_HEAVY_QUARK_RESIDUAL);
-  inv_param.tol_hq = 1e-3; // specify a tolerance for the residual for heavy quark residual
-#else
-  // Pre Fermi architecture only supports L2 relative residual norm
-  inv_param.residual_type = QUDA_L2_RELATIVE_RESIDUAL;
-#endif
+  inv_param.residual_type = static_cast<QudaResidualType_s>(0);
+  inv_param.residual_type = (tol != 0) ? static_cast<QudaResidualType_s> ( inv_param.residual_type | QUDA_L2_RELATIVE_RESIDUAL) : inv_param.residual_type;
+  inv_param.residual_type = (tol_hq != 0) ? static_cast<QudaResidualType_s> (inv_param.residual_type | QUDA_HEAVY_QUARK_RESIDUAL) : inv_param.residual_type;
+
+  inv_param.tol_hq = tol_hq; // specify a tolerance for the residual for heavy quark residual
+
   // these can be set individually
   for (int i=0; i<inv_param.num_offset; i++) {
     inv_param.tol_offset[i] = inv_param.tol;
     inv_param.tol_hq_offset[i] = inv_param.tol_hq;
   }
-  inv_param.maxiter = 10000;
+  inv_param.maxiter = niter;
   inv_param.reliable_delta = 1e-1;
   inv_param.use_sloppy_partial_accumulator = 0;
   inv_param.max_res_increase = 1;
@@ -241,7 +249,7 @@ int main(int argc, char **argv)
   inv_param.cpu_prec = cpu_prec;
   inv_param.cuda_prec = cuda_prec;
   inv_param.cuda_prec_sloppy = cuda_prec_sloppy;
-  inv_param.preserve_source = QUDA_PRESERVE_SOURCE_NO;
+  inv_param.preserve_source = QUDA_PRESERVE_SOURCE_YES;
   inv_param.gamma_basis = QUDA_DEGRAND_ROSSI_GAMMA_BASIS;
   inv_param.dirac_order = QUDA_DIRAC_ORDER;
 
