@@ -2233,6 +2233,100 @@ void QKXTM_Contraction_Kepler<Float>::writeThrp_HDF5(void *Thrp_local_HDF5, void
     H5Gclose(group2_id);
     H5Gclose(group1_id);
     H5Fclose(file_id);
+
+
+    for(int its=0;its<info.Ntsink;its++){
+      int tsink = info.tsinkSource[its];
+      int l = ((t_src+tsink)%T)%Lt + 1;
+      
+      int sink_rank = ((t_src+tsink)%T)/Lt;
+      
+      if( tsink < (T - t_src%Lt) ) continue; // No need to write something else
+
+      if(GK_timeRank==sink_rank){
+	Float *tailBuf;
+    
+	hid_t file_idt = H5Fopen(filename, H5F_ACC_RDWR, H5P_DEFAULT);
+
+	start[0] = tsink + 1 - l;
+	start[1] = 0;
+	start[2] = 0;
+
+	for(int part=0;part<2;part++){
+	  for(int thrp_int=0;thrp_int<3;thrp_int++){
+	    THRP_TYPE type = (THRP_TYPE) thrp_int;
+	    
+	    //-Determine the global dimensions
+	    if(type==THRP_LOCAL || type==THRP_ONED) Mel = 16;
+	    else if (type==THRP_NOETHER) Mel = 4;
+	    else errorQuda("writeThrp_HDF5: Undefined three-point function type.\n");
+	    dims[0] = tsink+1;
+	    dims[1] = Mel;
+	    dims[2] = 2;
+
+	    ldims[0] = l;
+	    ldims[1] = Mel;
+	    ldims[2] = 2;
+
+	    for(int imom=0;imom<GK_Nmoms;imom++){
+	      if(type==THRP_ONED){
+		for(int mu=0;mu<4;mu++){
+		  char *group_tag;
+		  asprintf(&group_tag,"conf_%04d/sx%02dsy%02dsz%02dst%02d/tsink_%02d/%s/%s/mom_xyz_%+d_%+d_%+d/dir_%02d",info.traj,
+			   GK_sourcePosition[isource][0],GK_sourcePosition[isource][1],GK_sourcePosition[isource][2],GK_sourcePosition[isource][3],
+			   tsink, (part==0) ? "up" : "down", info.thrp_type[thrp_int], GK_moms[imom][0], GK_moms[imom][1], GK_moms[imom][2], mu);
+		  hid_t group_id = H5Gopen(file_idt, group_tag, H5P_DEFAULT);
+
+		  hid_t dset_id  = H5Dopen(group_id, "threep", H5P_DEFAULT);
+		  hid_t mspace_id  = H5Screate_simple(3, ldims, NULL);
+		  hid_t dspace_id = H5Dget_space(dset_id);
+
+		  H5Sselect_hyperslab(dspace_id, H5S_SELECT_SET, start, NULL, ldims, NULL);
+
+		  tailBuf = &(((Float*)Thrp_oneD_HDF5[mu])[2*Mel*Lt*imom + 2*Mel*Lt*GK_Nmoms*part + 2*Mel*Lt*GK_Nmoms*2*its]);
+
+		  herr_t status = H5Dwrite(dset_id, DATATYPE_H5, mspace_id, dspace_id, H5P_DEFAULT, tailBuf);
+
+		  H5Dclose(dset_id);
+		  H5Sclose(mspace_id);
+		  H5Sclose(dspace_id);
+		  H5Gclose(group_id);
+		}//-mu
+	      }
+	      else{
+		Float *thrpBuf;
+		if(type==THRP_LOCAL) thrpBuf = (Float*)Thrp_local_HDF5;
+		else if(type==THRP_NOETHER) thrpBuf = (Float*)Thrp_noether_HDF5;
+
+		char *group_tag;
+		asprintf(&group_tag,"conf_%04d/sx%02dsy%02dsz%02dst%02d/tsink_%02d/%s/%s/mom_xyz_%+d_%+d_%+d",info.traj,
+			 GK_sourcePosition[isource][0],GK_sourcePosition[isource][1],GK_sourcePosition[isource][2],GK_sourcePosition[isource][3],
+			 tsink, (part==0) ? "up" : "down", info.thrp_type[thrp_int], GK_moms[imom][0], GK_moms[imom][1], GK_moms[imom][2]);
+		hid_t group_id = H5Gopen(file_idt, group_tag, H5P_DEFAULT);
+
+		hid_t dset_id  = H5Dopen(group_id, "threep", H5P_DEFAULT);
+		hid_t mspace_id  = H5Screate_simple(3, ldims, NULL);
+		hid_t dspace_id = H5Dget_space(dset_id);
+
+		H5Sselect_hyperslab(dspace_id, H5S_SELECT_SET, start, NULL, ldims, NULL);
+		
+		tailBuf = &(thrpBuf[2*Mel*Lt*imom + 2*Mel*Lt*GK_Nmoms*part + 2*Mel*Lt*GK_Nmoms*2*its]);
+
+		herr_t status = H5Dwrite(dset_id, DATATYPE_H5, mspace_id, dspace_id, H5P_DEFAULT, tailBuf);
+		
+		H5Dclose(dset_id);
+		H5Sclose(mspace_id);
+		H5Sclose(dspace_id);
+		H5Gclose(group_id);
+	      }
+	    }//-imom
+	  }//-thrp_int
+	}//-part
+
+	H5Fclose(file_idt);
+      }//-if GK_timeRank==sink_rank
+    }//-its
+
   }//-if
 }
 
