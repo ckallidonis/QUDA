@@ -4747,108 +4747,174 @@ static int** allocateMomMatrix(int Q_sq){
 }
 
 //-C.K. Added this function for convenience, when writing the loops in the new ASCII format of tin HDF5 format
-void createMomenta(int **mom, int **momQsq, int Q_sq, int Nmoms){
+void createLoopMomenta(int **mom, int **momQsq, int Q_sq, int Nmoms){
 
   int momIdx = 0;
   int totMom = 0;
 
-  for(int pz = 0; pz < GK_localL[2]; pz++)
-    for(int py = 0; py < GK_localL[1]; py++)
-      for(int px = 0; px < GK_localL[0]; px++){
-	if(px < GK_localL[0]/2)
+  for(int pz = 0; pz < GK_totalL[2]; pz++)
+    for(int py = 0; py < GK_totalL[1]; py++)
+      for(int px = 0; px < GK_totalL[0]; px++){
+	if(px < GK_totalL[0]/2)
 	  mom[momIdx][0]   = px;
 	else
-	  mom[momIdx][0]   = px - GK_localL[0];
+	  mom[momIdx][0]   = px - GK_totalL[0];
 
-	if(py < GK_localL[1]/2)
+	if(py < GK_totalL[1]/2)
 	  mom[momIdx][1]   = py;
 	else
-	  mom[momIdx][1]   = py - GK_localL[1];
+	  mom[momIdx][1]   = py - GK_totalL[1];
 
-	if(pz < GK_localL[2]/2)
+	if(pz < GK_totalL[2]/2)
 	  mom[momIdx][2]   = pz;
 	else
-	  mom[momIdx][2]   = pz - GK_localL[2];
+	  mom[momIdx][2]   = pz - GK_totalL[2];
 
 	if((mom[momIdx][0]*mom[momIdx][0]+mom[momIdx][1]*mom[momIdx][1]+mom[momIdx][2]*mom[momIdx][2])<=Q_sq){
 	  if(totMom>=Nmoms) errorQuda("Inconsistency in Number of Momenta Requested\n");
 	  for(int i=0;i<3;i++) momQsq[totMom][i] = mom[momIdx][i];
+	  printfQuda("Mom %d: %+d %+d %+d\n",totMom,momQsq[totMom][0],momQsq[totMom][1],momQsq[totMom][2]);
 	  totMom++;
 	}
 
 	momIdx++;
       }
+
+  if(totMom<=Nmoms-1) warningQuda("Created momenta (%d) less than Requested (%d)!!\n",totMom,Nmoms);
+
+}
+
+//-C.K. Function which performs the Fourier Transform
+template<typename Float>
+void performManFFT(Float *outBuf, void *inBuf, int iPrint, int Nmoms, int **momQsq){
+
+  int lx=GK_localL[0];
+  int ly=GK_localL[1];
+  int lz=GK_localL[2];
+  int lt=GK_localL[3];
+  int LX=GK_totalL[0];
+  int LY=GK_totalL[1];
+  int LZ=GK_totalL[2];
+  long int SplV = lx*ly*lz;
+
+  double pi = 2.0*asin(1.0);
+  Float sum[2];
+
+  int z_coord = comm_coord(2);
+
+  for(int t=0;t<lt;t++){
+    for(int gm=0;gm<16;gm++){
+      for(int ip=0;ip<Nmoms;ip++){
+	int px = momQsq[ip][0];
+	int py = momQsq[ip][1];
+	int pz = momQsq[ip][2];
+
+	sum[0] = 0.0;
+	sum[1] = 0.0;
+	int v = 0;
+	for(int z=0;z<lz;z++){     //-For z-direction we must have lz
+	  for(int y=0;y<ly;y++){   //-Here either ly or LY is the same because we don't split in y (for now)
+	    for(int x=0;x<lx;x++){ //-The same here
+	      Float expn = 2.0*pi*(px*x/(Float)LX + py*y/(Float)LY + pz*(z+z_coord*lz)/(Float)LZ);
+	      Float phase[2];
+	      phase[0] =  cos(expn);
+	      phase[1] = -sin(expn);
+
+	      sum[0] += ((Float*)inBuf)[0+2*v+2*SplV*t+2*SplV*lt*gm]*phase[0] - ((Float*)inBuf)[1+2*v+2*SplV*t+2*SplV*lt*gm]*phase[1];
+	      sum[1] += ((Float*)inBuf)[0+2*v+2*SplV*t+2*SplV*lt*gm]*phase[1] + ((Float*)inBuf)[1+2*v+2*SplV*t+2*SplV*lt*gm]*phase[0];
+	      v++;
+	    }//-x
+	  }//-y
+	}//-z
+	
+	if(typeid(Float)==typeid(float))  MPI_Reduce(sum, &(outBuf[2*ip+2*Nmoms*t+2*Nmoms*lt*gm+2*Nmoms*lt*16*iPrint]), 2, MPI_FLOAT , MPI_SUM, 0, GK_spaceComm);
+	if(typeid(Float)==typeid(double)) MPI_Reduce(sum, &(outBuf[2*ip+2*Nmoms*t+2*Nmoms*lt*gm+2*Nmoms*lt*16*iPrint]), 2, MPI_DOUBLE, MPI_SUM, 0, GK_spaceComm);
+      }//-ip
+    }//-m
+  }//-t
+
 }
 
 template<typename Float>
 void copyLoopToWriteBuf(Float *writeBuf, void *tmpBuf, int iPrint, int Q_sq, int Nmoms, int **mom){
 
-  long int SplV = GK_localL[0]*GK_localL[1]*GK_localL[2];
-  int imom = 0;
+  if(GK_nProc[2]==1){
+    long int SplV = GK_localL[0]*GK_localL[1]*GK_localL[2];
+    int imom = 0;
+    
+    for(int ip=0; ip < SplV; ip++){
+      if ((mom[ip][0]*mom[ip][0] + mom[ip][1]*mom[ip][1] + mom[ip][2]*mom[ip][2]) <= Q_sq){
+	for(int lt=0; lt < GK_localL[3]; lt++){
+	  for(int gm=0; gm<16; gm++){
+	    writeBuf[0+2*imom+2*Nmoms*lt+2*Nmoms*GK_localL[3]*gm+2*Nmoms*GK_localL[3]*16*iPrint] = ((Float*)tmpBuf)[0+2*ip+2*SplV*lt+2*SplV*GK_localL[3]*gm];
+	    writeBuf[1+2*imom+2*Nmoms*lt+2*Nmoms*GK_localL[3]*gm+2*Nmoms*GK_localL[3]*16*iPrint] = ((Float*)tmpBuf)[1+2*ip+2*SplV*lt+2*SplV*GK_localL[3]*gm];
+	  }//-gm
+	}//-lt
+	imom++;
+      }//-if
+    }//-ip
+  }
+  else if(GK_nProc[2]>1){
 
-  for(int ip=0; ip < SplV; ip++){
-    if ((mom[ip][0]*mom[ip][0] + mom[ip][1]*mom[ip][1] + mom[ip][2]*mom[ip][2]) <= Q_sq){
-      for(int lt=0; lt < GK_localL[3]; lt++){
-        for(int gm=0; gm<16; gm++){
-          writeBuf[0+2*imom+2*Nmoms*lt+2*Nmoms*GK_localL[3]*gm+2*Nmoms*GK_localL[3]*16*iPrint] = ((Float*)tmpBuf)[0+2*ip+2*SplV*lt+2*SplV*GK_localL[3]*gm];
-          writeBuf[1+2*imom+2*Nmoms*lt+2*Nmoms*GK_localL[3]*gm+2*Nmoms*GK_localL[3]*16*iPrint] = ((Float*)tmpBuf)[1+2*ip+2*SplV*lt+2*SplV*GK_localL[3]*gm];
-        }//-gm
-      }//-lt
-      imom++;
-    }//-if
-  }//-ip
+
+  }
+
+
 }
 
 //-C.K. This is a new function to print all the loops in ASCII format
 template<typename Float>
 void writeLoops_ASCII(Float *writeBuf, const char *Pref, qudaQKXTM_loopInfo loopInfo, int **momQsq, int type, int mu, bool exact_loop){
   
-  FILE *ptr;
-  char file_name[512];
-  char *lpart,*ptrVal;
-  int Nprint;
-  int Nmoms = loopInfo.Nmoms;
+  if(GK_timeRank >= 0 && GK_timeRank < GK_nProc[3] ){
+    FILE *ptr;
+    char file_name[512];
+    char *lpart,*ptrVal;
+    int Nprint;
+    int Nmoms = loopInfo.Nmoms;
 
-  if(exact_loop) Nprint = 1;
-  else Nprint = loopInfo.Nprint;
+    if(exact_loop) Nprint = 1;
+    else Nprint = loopInfo.Nprint;
 
-  for(int iPrint=0;iPrint<Nprint;iPrint++){
-    if(exact_loop) asprintf(&ptrVal,"%d_%d",comm_size(), comm_rank());
-    else asprintf(&ptrVal,"%04d.%d_%d",(iPrint+1)*loopInfo.Ndump,comm_size(), comm_rank());
+    for(int iPrint=0;iPrint<Nprint;iPrint++){
+      if(exact_loop) asprintf(&ptrVal,"%d_%d", GK_nProc[3], GK_timeRank);
+      else asprintf(&ptrVal,"%04d.%d_%d",(iPrint+1)*loopInfo.Ndump, GK_nProc[3], GK_timeRank);
 
-    sprintf(file_name, "%s_%s.loop.%s",Pref,loopInfo.loop_type[type],ptrVal);
+      sprintf(file_name, "%s_%s.loop.%s",Pref,loopInfo.loop_type[type],ptrVal);
 
-    if(loopInfo.loop_oneD[type] && mu!=0) ptr = fopen(file_name,"a");
-    else ptr = fopen(file_name,"w");
-    if(ptr == NULL) errorQuda("Cannot open %s to write the loop\n",file_name);
+      if(loopInfo.loop_oneD[type] && mu!=0) ptr = fopen(file_name,"a");
+      else ptr = fopen(file_name,"w");
+      if(ptr == NULL) errorQuda("Cannot open %s to write the loop\n",file_name);
 
-    if(loopInfo.loop_oneD[type]){
-      for(int ip=0; ip < Nmoms; ip++){
-        for(int lt=0; lt < GK_localL[3]; lt++){
-          int t  = lt+comm_coords(default_topo)[3]*GK_localL[3];
-          for(int gm=0; gm<16; gm++){
-            fprintf(ptr, "%02d %02d %02d %+d %+d %+d %+16.15e %+16.15e\n",t, gm, mu, momQsq[ip][0], momQsq[ip][1], momQsq[ip][2],
-                    0.25*writeBuf[0+2*ip+2*Nmoms*lt+2*Nmoms*GK_localL[3]*gm+2*Nmoms*GK_localL[3]*16*iPrint],
-                    0.25*writeBuf[1+2*ip+2*Nmoms*lt+2*Nmoms*GK_localL[3]*gm+2*Nmoms*GK_localL[3]*16*iPrint]);
-          }
-        }//-lt
-      }//-ip
-    }
-    else{
-      for(int ip=0; ip < Nmoms; ip++){
-        for(int lt=0; lt < GK_localL[3]; lt++){
-          int t  = lt+comm_coords(default_topo)[3]*GK_localL[3];
-          for(int gm=0; gm<16; gm++){
-            fprintf(ptr, "%02d %02d %+d %+d %+d %+16.15e %+16.15e\n",t, gm, momQsq[ip][0], momQsq[ip][1], momQsq[ip][2],
-                    writeBuf[0+2*ip+2*Nmoms*lt+2*Nmoms*GK_localL[3]*gm+2*Nmoms*GK_localL[3]*16*iPrint],
-                    writeBuf[1+2*ip+2*Nmoms*lt+2*Nmoms*GK_localL[3]*gm+2*Nmoms*GK_localL[3]*16*iPrint]);
-          }
-        }//-lt
-      }//-ip
-    }
+      if(loopInfo.loop_oneD[type]){
+	for(int ip=0; ip < Nmoms; ip++){
+	  for(int lt=0; lt < GK_localL[3]; lt++){
+	    int t  = lt+comm_coords(default_topo)[3]*GK_localL[3];
+	    for(int gm=0; gm<16; gm++){
+	      fprintf(ptr, "%02d %02d %02d %+d %+d %+d %+16.15e %+16.15e\n",t, gm, mu, momQsq[ip][0], momQsq[ip][1], momQsq[ip][2],
+		      0.25*writeBuf[0+2*ip+2*Nmoms*lt+2*Nmoms*GK_localL[3]*gm+2*Nmoms*GK_localL[3]*16*iPrint],
+		      0.25*writeBuf[1+2*ip+2*Nmoms*lt+2*Nmoms*GK_localL[3]*gm+2*Nmoms*GK_localL[3]*16*iPrint]);
+	    }
+	  }//-lt
+	}//-ip
+      }
+      else{
+	for(int ip=0; ip < Nmoms; ip++){
+	  for(int lt=0; lt < GK_localL[3]; lt++){
+	    int t  = lt+comm_coords(default_topo)[3]*GK_localL[3];
+	    for(int gm=0; gm<16; gm++){
+	      fprintf(ptr, "%02d %02d %+d %+d %+d %+16.15e %+16.15e\n",t, gm, momQsq[ip][0], momQsq[ip][1], momQsq[ip][2],
+		      writeBuf[0+2*ip+2*Nmoms*lt+2*Nmoms*GK_localL[3]*gm+2*Nmoms*GK_localL[3]*16*iPrint],
+		      writeBuf[1+2*ip+2*Nmoms*lt+2*Nmoms*GK_localL[3]*gm+2*Nmoms*GK_localL[3]*16*iPrint]);
+	    }
+	  }//-lt
+	}//-ip
+      }
     
-    fclose(ptr);
-  }
+      fclose(ptr);
+    }//-iPrint
+  }//-if GK_timeRank
+
 }
 
 
@@ -4856,22 +4922,25 @@ void writeLoops_ASCII(Float *writeBuf, const char *Pref, qudaQKXTM_loopInfo loop
 template<typename Float>
 void getLoopWriteBuf(Float *writeBuf, Float *loopBuf, int iPrint, int Nmoms, int imom, bool oneD){
 
-  if(oneD){
-    for(int lt=0;lt<GK_localL[3];lt++){
-      for(int gm=0;gm<16;gm++){
-        writeBuf[0+2*gm+2*16*lt] = 0.25*loopBuf[0+2*imom+2*Nmoms*lt+2*Nmoms*GK_localL[3]*gm+2*Nmoms*GK_localL[3]*16*iPrint];
-        writeBuf[1+2*gm+2*16*lt] = 0.25*loopBuf[1+2*imom+2*Nmoms*lt+2*Nmoms*GK_localL[3]*gm+2*Nmoms*GK_localL[3]*16*iPrint];
+  if(GK_timeRank >= 0 && GK_timeRank < GK_nProc[3] ){
+    if(oneD){
+      for(int lt=0;lt<GK_localL[3];lt++){
+	for(int gm=0;gm<16;gm++){
+	  writeBuf[0+2*gm+2*16*lt] = 0.25*loopBuf[0+2*imom+2*Nmoms*lt+2*Nmoms*GK_localL[3]*gm+2*Nmoms*GK_localL[3]*16*iPrint];
+	  writeBuf[1+2*gm+2*16*lt] = 0.25*loopBuf[1+2*imom+2*Nmoms*lt+2*Nmoms*GK_localL[3]*gm+2*Nmoms*GK_localL[3]*16*iPrint];
+	}
       }
     }
-  }
-  else{
-    for(int lt=0;lt<GK_localL[3];lt++){
-      for(int gm=0;gm<16;gm++){
-        writeBuf[0+2*gm+2*16*lt] = loopBuf[0+2*imom+2*Nmoms*lt+2*Nmoms*GK_localL[3]*gm+2*Nmoms*GK_localL[3]*16*iPrint];
-        writeBuf[1+2*gm+2*16*lt] = loopBuf[1+2*imom+2*Nmoms*lt+2*Nmoms*GK_localL[3]*gm+2*Nmoms*GK_localL[3]*16*iPrint];
+    else{
+      for(int lt=0;lt<GK_localL[3];lt++){
+	for(int gm=0;gm<16;gm++){
+	  writeBuf[0+2*gm+2*16*lt] = loopBuf[0+2*imom+2*Nmoms*lt+2*Nmoms*GK_localL[3]*gm+2*Nmoms*GK_localL[3]*16*iPrint];
+	  writeBuf[1+2*gm+2*16*lt] = loopBuf[1+2*imom+2*Nmoms*lt+2*Nmoms*GK_localL[3]*gm+2*Nmoms*GK_localL[3]*16*iPrint];
+	}
       }
     }
-  }
+  }//-if GK_timeRank
+
 }
 
 
@@ -4879,128 +4948,128 @@ void getLoopWriteBuf(Float *writeBuf, Float *loopBuf, int iPrint, int Nmoms, int
 template<typename Float>
 void writeLoops_HDF5(Float *buf_std_uloc, Float *buf_gen_uloc, Float **buf_std_oneD, Float **buf_std_csvC, Float **buf_gen_oneD, Float **buf_gen_csvC, char *file_pref, qudaQKXTM_loopInfo loopInfo, int **momQsq, bool exact_loop){
 
-  char fname[512];
-  int Nprint;
+  if(GK_timeRank >= 0 && GK_timeRank < GK_nProc[3] ){
+    char fname[512];
+    int Nprint;
 
-  if(exact_loop){
-    Nprint = 1;
-    sprintf(fname,"%s_Qsq%d.h5",file_pref,loopInfo.Qsq);
-  }
-  else{
-    Nprint = loopInfo.Nprint;
-    sprintf(fname,"%s_Ns%04d_step%04d_Qsq%d.h5",file_pref,loopInfo.Nstoch,loopInfo.Ndump,loopInfo.Qsq);
-  }
-
-  double *loopBuf = NULL;
-  double *writeBuf = (double*) malloc(GK_localL[3]*16*2*sizeof(double));
-
-  // These are defined, having in mind that we only parallelize in t-direction!
-  hsize_t start[3]  = {comm_rank()*GK_localL[3], 0, 0};
-  hsize_t stride[3] = {1,1,1};
-  hsize_t count[3]  = {GK_nProc[3], 1, 1};
-  hsize_t block[3]  = {GK_localL[3], 16, 2};
-
-  // Dimensions of the dataspace
-  hsize_t dims[3]  = {GK_totalL[3], 16, 2}; // Global
-  hsize_t ldims[3] = {GK_localL[3], 16, 2}; // Local
-
-  hid_t fapl_id = H5Pcreate(H5P_FILE_ACCESS);
-  H5Pset_fapl_mpio(fapl_id, MPI_COMM_WORLD, MPI_INFO_NULL);
-  hid_t file_id = H5Fcreate(fname, H5F_ACC_TRUNC, H5P_DEFAULT, fapl_id);
-  H5Pclose(fapl_id);
-
-  char *group1_tag;
-  asprintf(&group1_tag,"conf_%04d",loopInfo.traj);
-  hid_t group1_id = H5Gcreate(file_id, group1_tag, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
-
-  hid_t group2_id;
-  hid_t group3_id;
-  hid_t group4_id;
-  hid_t group5_id;
-
-  for(int iPrint=0;iPrint<Nprint;iPrint++){
-
-    if(!exact_loop){
-      char *group2_tag;
-      asprintf(&group2_tag,"Nstoch_%04d",(iPrint+1)*loopInfo.Ndump);
-      group2_id = H5Gcreate(group1_id, group2_tag, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+    if(exact_loop){
+      Nprint = 1;
+      sprintf(fname,"%s_Qsq%d.h5",file_pref,loopInfo.Qsq);
+    }
+    else{
+      Nprint = loopInfo.Nprint;
+      sprintf(fname,"%s_Ns%04d_step%04d_Qsq%d.h5",file_pref,loopInfo.Nstoch,loopInfo.Ndump,loopInfo.Qsq);
     }
 
-    for(int it=0;it<6;it++){
-      char *group3_tag;
-      asprintf(&group3_tag,"%s",loopInfo.loop_type[it]);
+    double *loopBuf = NULL;
+    double *writeBuf = (double*) malloc(GK_localL[3]*16*2*sizeof(double));
 
-      if(exact_loop) group3_id = H5Gcreate(group1_id, group3_tag, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
-      else group3_id = H5Gcreate(group2_id, group3_tag, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+    hsize_t start[3]  = {GK_timeRank*GK_localL[3], 0, 0};
 
-      for(int imom=0;imom<loopInfo.Nmoms;imom++){
-        char *group4_tag;
-        asprintf(&group4_tag,"mom_xyz_%+d_%+d_%+d",momQsq[imom][0],momQsq[imom][1],momQsq[imom][2]);
-        group4_id = H5Gcreate(group3_id, group4_tag, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+    // Dimensions of the dataspace
+    hsize_t dims[3]  = {GK_totalL[3], 16, 2}; // Global
+    hsize_t ldims[3] = {GK_localL[3], 16, 2}; // Local
 
-        if(loopInfo.loop_oneD[it]){
-          for(int mu=0;mu<4;mu++){
-            if(strcmp(loopInfo.loop_type[it],"Loops")==0)   loopBuf = buf_std_oneD[mu];
-            if(strcmp(loopInfo.loop_type[it],"LoopsCv")==0) loopBuf = buf_std_csvC[mu];
-            if(strcmp(loopInfo.loop_type[it],"LpsDw")==0)   loopBuf = buf_gen_oneD[mu];
-            if(strcmp(loopInfo.loop_type[it],"LpsDwCv")==0) loopBuf = buf_gen_csvC[mu];
+    hid_t fapl_id = H5Pcreate(H5P_FILE_ACCESS);
+    H5Pset_fapl_mpio(fapl_id, GK_timeComm, MPI_INFO_NULL);
+    hid_t file_id = H5Fcreate(fname, H5F_ACC_TRUNC, H5P_DEFAULT, fapl_id);
+    if(file_id<0) errorQuda("Cannot open %s. Check that directory exists!\n",fname);
 
-            char *group5_tag;
-            asprintf(&group5_tag,"dir_%02d",mu);
-            group5_id = H5Gcreate(group4_id, group5_tag, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+    H5Pclose(fapl_id);
 
-            hid_t filespace  = H5Screate_simple(3, dims, NULL);
-            hid_t dataset_id = H5Dcreate(group5_id, "loop", H5T_NATIVE_DOUBLE, filespace, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
-            hid_t subspace   = H5Screate_simple(3, ldims, NULL);
-            filespace = H5Dget_space(dataset_id);
-            H5Sselect_hyperslab(filespace, H5S_SELECT_SET, start, NULL, ldims, NULL);
-            hid_t plist_id = H5Pcreate(H5P_DATASET_XFER);
-            H5Pset_dxpl_mpio(plist_id, H5FD_MPIO_COLLECTIVE);
+    char *group1_tag;
+    asprintf(&group1_tag,"conf_%04d",loopInfo.traj);
+    hid_t group1_id = H5Gcreate(file_id, group1_tag, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
 
-            getLoopWriteBuf(writeBuf,loopBuf,iPrint,loopInfo.Nmoms,imom, loopInfo.loop_oneD[it]);
+    hid_t group2_id;
+    hid_t group3_id;
+    hid_t group4_id;
+    hid_t group5_id;
 
-            herr_t status = H5Dwrite(dataset_id, H5T_NATIVE_DOUBLE, subspace, filespace, plist_id, writeBuf);
+    for(int iPrint=0;iPrint<Nprint;iPrint++){
 
-            H5Sclose(subspace);
-            H5Dclose(dataset_id);
-            H5Sclose(filespace);
-            H5Pclose(plist_id);
+      if(!exact_loop){
+	char *group2_tag;
+	asprintf(&group2_tag,"Nstoch_%04d",(iPrint+1)*loopInfo.Ndump);
+	group2_id = H5Gcreate(group1_id, group2_tag, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+      }
 
-            H5Gclose(group5_id);
-          }//-mu
-	}//-if
-	else{
-          if(strcmp(loopInfo.loop_type[it],"Scalar")==0) loopBuf = buf_std_uloc;
-          if(strcmp(loopInfo.loop_type[it],"dOp")==0)    loopBuf = buf_gen_uloc;
+      for(int it=0;it<6;it++){
+	char *group3_tag;
+	asprintf(&group3_tag,"%s",loopInfo.loop_type[it]);
 
-          hid_t filespace  = H5Screate_simple(3, dims, NULL);
-          hid_t dataset_id = H5Dcreate(group4_id, "loop", H5T_NATIVE_DOUBLE, filespace, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
-          hid_t subspace   = H5Screate_simple(3, ldims, NULL);
-          filespace = H5Dget_space(dataset_id);
-          H5Sselect_hyperslab(filespace, H5S_SELECT_SET, start, NULL, ldims, NULL);
-          hid_t plist_id = H5Pcreate(H5P_DATASET_XFER);
-          H5Pset_dxpl_mpio(plist_id, H5FD_MPIO_COLLECTIVE);
+	if(exact_loop) group3_id = H5Gcreate(group1_id, group3_tag, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+	else group3_id = H5Gcreate(group2_id, group3_tag, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
 
-          getLoopWriteBuf(writeBuf,loopBuf,iPrint,loopInfo.Nmoms,imom, loopInfo.loop_oneD[it]);
+	for(int imom=0;imom<loopInfo.Nmoms;imom++){
+	  char *group4_tag;
+	  asprintf(&group4_tag,"mom_xyz_%+d_%+d_%+d",momQsq[imom][0],momQsq[imom][1],momQsq[imom][2]);
+	  group4_id = H5Gcreate(group3_id, group4_tag, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
 
-          herr_t status = H5Dwrite(dataset_id, H5T_NATIVE_DOUBLE, subspace, filespace, plist_id, writeBuf);
+	  if(loopInfo.loop_oneD[it]){
+	    for(int mu=0;mu<4;mu++){
+	      if(strcmp(loopInfo.loop_type[it],"Loops")==0)   loopBuf = buf_std_oneD[mu];
+	      if(strcmp(loopInfo.loop_type[it],"LoopsCv")==0) loopBuf = buf_std_csvC[mu];
+	      if(strcmp(loopInfo.loop_type[it],"LpsDw")==0)   loopBuf = buf_gen_oneD[mu];
+	      if(strcmp(loopInfo.loop_type[it],"LpsDwCv")==0) loopBuf = buf_gen_csvC[mu];
 
-          H5Sclose(subspace);
-          H5Dclose(dataset_id);
-          H5Sclose(filespace);
-          H5Pclose(plist_id);
-        }
-        H5Gclose(group4_id);
-      }//-imom
-      H5Gclose(group3_id);
-    }//-it
+	      char *group5_tag;
+	      asprintf(&group5_tag,"dir_%02d",mu);
+	      group5_id = H5Gcreate(group4_id, group5_tag, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
 
-    if(!exact_loop) H5Gclose(group2_id);
-  }//-iPrint
-  H5Gclose(group1_id);
-  H5Fclose(file_id);
+	      hid_t filespace  = H5Screate_simple(3, dims, NULL);
+	      hid_t dataset_id = H5Dcreate(group5_id, "loop", H5T_NATIVE_DOUBLE, filespace, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+	      hid_t subspace   = H5Screate_simple(3, ldims, NULL);
+	      filespace = H5Dget_space(dataset_id);
+	      H5Sselect_hyperslab(filespace, H5S_SELECT_SET, start, NULL, ldims, NULL);
+	      hid_t plist_id = H5Pcreate(H5P_DATASET_XFER);
+	      H5Pset_dxpl_mpio(plist_id, H5FD_MPIO_COLLECTIVE);
+
+	      getLoopWriteBuf(writeBuf,loopBuf,iPrint,loopInfo.Nmoms,imom, loopInfo.loop_oneD[it]);
+
+	      herr_t status = H5Dwrite(dataset_id, H5T_NATIVE_DOUBLE, subspace, filespace, plist_id, writeBuf);
+
+	      H5Sclose(subspace);
+	      H5Dclose(dataset_id);
+	      H5Sclose(filespace);
+	      H5Pclose(plist_id);
+
+	      H5Gclose(group5_id);
+	    }//-mu
+	  }//-if
+	  else{
+	    if(strcmp(loopInfo.loop_type[it],"Scalar")==0) loopBuf = buf_std_uloc;
+	    if(strcmp(loopInfo.loop_type[it],"dOp")==0)    loopBuf = buf_gen_uloc;
+
+	    hid_t filespace  = H5Screate_simple(3, dims, NULL);
+	    hid_t dataset_id = H5Dcreate(group4_id, "loop", H5T_NATIVE_DOUBLE, filespace, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+	    hid_t subspace   = H5Screate_simple(3, ldims, NULL);
+	    filespace = H5Dget_space(dataset_id);
+	    H5Sselect_hyperslab(filespace, H5S_SELECT_SET, start, NULL, ldims, NULL);
+	    hid_t plist_id = H5Pcreate(H5P_DATASET_XFER);
+	    H5Pset_dxpl_mpio(plist_id, H5FD_MPIO_COLLECTIVE);
+
+	    getLoopWriteBuf(writeBuf,loopBuf,iPrint,loopInfo.Nmoms,imom, loopInfo.loop_oneD[it]);
+
+	    herr_t status = H5Dwrite(dataset_id, H5T_NATIVE_DOUBLE, subspace, filespace, plist_id, writeBuf);
+
+	    H5Sclose(subspace);
+	    H5Dclose(dataset_id);
+	    H5Sclose(filespace);
+	    H5Pclose(plist_id);
+	  }
+	  H5Gclose(group4_id);
+	}//-imom
+	H5Gclose(group3_id);
+      }//-it
+
+      if(!exact_loop) H5Gclose(group2_id);
+    }//-iPrint
+    H5Gclose(group1_id);
+    H5Fclose(file_id);
   
-  free(writeBuf);
+    free(writeBuf);
+  }
 }
 
 

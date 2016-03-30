@@ -2646,7 +2646,6 @@ void calcEigenVectors_loop_wOneD_EvenOdd(void **gaugeToPlaquette, QudaInvertPara
   printfQuda("The loop base name is %s\n",filename_out);
   printfQuda("=====================\n");
 
-
   //- Calculate the eigenVectors
   QKXTM_Deflation_Kepler<double> *deflation = new QKXTM_Deflation_Kepler<double>(param,arpackInfo);
   deflation->printInfo();
@@ -2795,6 +2794,38 @@ void calcEigenVectors_loop_wOneD_EvenOdd(void **gaugeToPlaquette, QudaInvertPara
   }
   cudaDeviceSynchronize();
 
+
+  //-C.K. Allocate memory for reduced buffers
+//   void    *std_uloc_rdc;
+//   void    *gen_uloc_rdc;
+//   void    **std_oneD_rdc;
+//   void    **std_csvC_rdc;
+//   void    **gen_oneD_rdc;
+//   void    **gen_csvC_rdc;
+
+//   if((cudaHostAlloc(&std_uloc_rdc, sizeof(double)*2*16*GK_localVolume, cudaHostAllocMapped)) != cudaSuccess) errorQuda("Error allocating memory std_uloc_rdc\n");
+//   if((cudaHostAlloc(&gen_uloc_rdc, sizeof(double)*2*16*GK_localVolume, cudaHostAllocMapped)) != cudaSuccess) errorQuda("Error allocating memory cnRes_gv\n");
+
+//   std_oneD_rdc = (void**) malloc(4*sizeof(double*));
+//   std_csvC_rdc = (void**) malloc(4*sizeof(double*));
+//   gen_oneD_rdc = (void**) malloc(4*sizeof(double*));
+//   gen_csvC_rdc = (void**) malloc(4*sizeof(double*));
+
+//   if(std_oneD_rdc == NULL)errorQuda("Error allocating memory std_oneD_rdc\n");
+//   if(std_csvC_rdc == NULL)errorQuda("Error allocating memory std_csvC_rdc\n");
+//   if(gen_oneD_rdc == NULL)errorQuda("Error allocating memory gen_oneD_rdc\n");
+//   if(gen_csvC_rdc == NULL)errorQuda("Error allocating memory gen_csvC_rdc\n");
+//   cudaDeviceSynchronize();
+
+//   for(int mu = 0; mu < 4 ; mu++){
+//     if((cudaHostAlloc(&(std_oneD_rdc[mu]), sizeof(double)*2*16*GK_localVolume, cudaHostAllocMapped)) != cudaSuccess) errorQuda("Error allocating memory std_oneD_rdc[%d]\n",mu);
+//     if((cudaHostAlloc(&(std_csvC_rdc[mu]), sizeof(double)*2*16*GK_localVolume, cudaHostAllocMapped)) != cudaSuccess) errorQuda("Error allocating memory std_csvC_rdc[%d]\n",mu);
+//     if((cudaHostAlloc(&(gen_oneD_rdc[mu]), sizeof(double)*2*16*GK_localVolume, cudaHostAllocMapped)) != cudaSuccess) errorQuda("Error allocating memory gen_oneD_rdc[%d]\n",mu);
+//     if((cudaHostAlloc(&(gen_csvC_rdc[mu]), sizeof(double)*2*16*GK_localVolume, cudaHostAllocMapped)) != cudaSuccess) errorQuda("Error allocating memory gen_csvC_rdc[%d]\n",mu);
+//   }
+//   cudaDeviceSynchronize();
+  //--------------------------------------------------------------------------------------------
+
   //-Allocate memory for the write buffers
   double *buf_std_uloc,*buf_gen_uloc;
   double **buf_std_oneD;
@@ -2827,7 +2858,7 @@ void calcEigenVectors_loop_wOneD_EvenOdd(void **gaugeToPlaquette, QudaInvertPara
 
   //-Allocate the momenta
   int **mom,**momQsq;
-  long int SplV = GK_localL[0]*GK_localL[1]*GK_localL[2];
+  long int SplV = GK_totalL[0]*GK_totalL[1]*GK_totalL[2];
   if((mom =    (int**) malloc(sizeof(int*)*SplV )) == NULL) errorQuda("Error in allocating mom\n");
   if((momQsq = (int**) malloc(sizeof(int*)*Nmoms)) == NULL) errorQuda("Error in allocating momQsq\n");
   for(int ip=0; ip<SplV; ip++)
@@ -2836,7 +2867,7 @@ void calcEigenVectors_loop_wOneD_EvenOdd(void **gaugeToPlaquette, QudaInvertPara
   for(int ip=0; ip<Nmoms; ip++)
     if((momQsq[ip] = (int *) malloc(sizeof(int)*3)) == NULL) errorQuda("Error in allocating momQsq[%d]\n",ip);
 
-  createMomenta(mom,momQsq,info.Q_sq,Nmoms);
+  createLoopMomenta(mom,momQsq,info.Q_sq,Nmoms);
   printfQuda("Momenta created\n");
   //----------------------------------------------------
 
@@ -2871,26 +2902,42 @@ void calcEigenVectors_loop_wOneD_EvenOdd(void **gaugeToPlaquette, QudaInvertPara
     printfQuda("TIME_REPORT: One-end trick for Stoch %04d is %f sec\n",is+1,t2-t1);
 
     if( (is+1)%NdumpStep == 0){
-      doCudaFFT_v2<double>(cnRes_vv,cnTmp); // Scalar
-      copyLoopToWriteBuf(buf_std_uloc,cnTmp,iPrint,info.Q_sq,Nmoms,mom);
-      doCudaFFT_v2<double>(cnRes_gv,cnTmp); // dOp
-      copyLoopToWriteBuf(buf_gen_uloc,cnTmp,iPrint,info.Q_sq,Nmoms,mom);
-
-      for(int mu = 0 ; mu < 4 ; mu++){
-	doCudaFFT_v2<double>(cnD_vv[mu],cnTmp); // Loops
-	copyLoopToWriteBuf(buf_std_oneD[mu],cnTmp,iPrint,info.Q_sq,Nmoms,mom);
-	doCudaFFT_v2<double>(cnC_vv[mu],cnTmp); // LoopsCv
-	copyLoopToWriteBuf(buf_std_csvC[mu],cnTmp,iPrint,info.Q_sq,Nmoms,mom);
+      if(GK_nProc[2]==1){      
+	doCudaFFT_v2<double>(cnRes_vv,cnTmp); // Scalar
+	copyLoopToWriteBuf(buf_std_uloc,cnTmp,iPrint,info.Q_sq,Nmoms,mom);
+	doCudaFFT_v2<double>(cnRes_gv,cnTmp); // dOp
+	copyLoopToWriteBuf(buf_gen_uloc,cnTmp,iPrint,info.Q_sq,Nmoms,mom);
 	
-	doCudaFFT_v2<double>(cnD_gv[mu],cnTmp); // LpsDw
-	copyLoopToWriteBuf(buf_gen_oneD[mu],cnTmp,iPrint,info.Q_sq,Nmoms,mom);
-	doCudaFFT_v2<double>(cnC_gv[mu],cnTmp); // LpsDwCv
-	copyLoopToWriteBuf(buf_gen_csvC[mu],cnTmp,iPrint,info.Q_sq,Nmoms,mom);
+	for(int mu = 0 ; mu < 4 ; mu++){
+	  doCudaFFT_v2<double>(cnD_vv[mu],cnTmp); // Loops
+	  copyLoopToWriteBuf(buf_std_oneD[mu],cnTmp,iPrint,info.Q_sq,Nmoms,mom);
+	  doCudaFFT_v2<double>(cnC_vv[mu],cnTmp); // LoopsCv
+	  copyLoopToWriteBuf(buf_std_csvC[mu],cnTmp,iPrint,info.Q_sq,Nmoms,mom);
+	  
+	  doCudaFFT_v2<double>(cnD_gv[mu],cnTmp); // LpsDw
+	  copyLoopToWriteBuf(buf_gen_oneD[mu],cnTmp,iPrint,info.Q_sq,Nmoms,mom);
+	  doCudaFFT_v2<double>(cnC_gv[mu],cnTmp); // LpsDwCv
+	  copyLoopToWriteBuf(buf_gen_csvC[mu],cnTmp,iPrint,info.Q_sq,Nmoms,mom);
+	}
       }
-      
+      else if(GK_nProc[2]>1){
+	t1 = MPI_Wtime();
+	performManFFT(buf_std_uloc, cnRes_vv, iPrint, Nmoms, momQsq);
+	performManFFT(buf_gen_uloc, cnRes_gv, iPrint, Nmoms, momQsq);
+
+	for(int mu=0;mu<4;mu++){
+	  performManFFT(buf_std_oneD[mu], cnD_vv[mu], iPrint, Nmoms, momQsq);
+	  performManFFT(buf_std_csvC[mu], cnC_vv[mu], iPrint, Nmoms, momQsq);
+	  performManFFT(buf_gen_oneD[mu], cnD_gv[mu], iPrint, Nmoms, momQsq);
+	  performManFFT(buf_gen_csvC[mu], cnC_gv[mu], iPrint, Nmoms, momQsq);
+	}
+	t2 = MPI_Wtime();
+	printfQuda("TIME_REPORT: FFT and copying to Write Buffers is %f sec\n",t2-t1);
+      }
+
       printfQuda("Loops for Nstoch = %d copied to write buffers\n",is+1);
       iPrint++;
-    }//-if
+    }//-if (is+1)
   }//-loop over stochastic noise vectors
 
   bool stoch_part = false;
@@ -2911,6 +2958,7 @@ void calcEigenVectors_loop_wOneD_EvenOdd(void **gaugeToPlaquette, QudaInvertPara
   }
   printfQuda("Writing the loops completed.\n");
 
+
   //- Free loop cuda buffers
   cudaFreeHost(cnRes_gv);
   cudaFreeHost(cnRes_vv);
@@ -2925,6 +2973,21 @@ void calcEigenVectors_loop_wOneD_EvenOdd(void **gaugeToPlaquette, QudaInvertPara
   free(cnD_gv);
   free(cnC_vv);
   free(cnC_gv);
+  //---------------------------
+
+  //- Free reduced buffers
+//   cudaFreeHost(std_uloc_rdc);
+//   cudaFreeHost(gen_uloc_rdc);
+//   for(int mu = 0 ; mu < 4 ; mu++){
+//     cudaFreeHost(std_oneD_rdc[mu]);
+//     cudaFreeHost(std_csvC_rdc[mu]);
+//     cudaFreeHost(gen_oneD_rdc[mu]);
+//     cudaFreeHost(gen_csvC_rdc[mu]);
+//   }  
+//   free(std_oneD_rdc);
+//   free(std_csvC_rdc);
+//   free(gen_oneD_rdc);
+//   free(gen_csvC_rdc);
   //---------------------------
 
   //-Free loop write buffers
@@ -3119,7 +3182,7 @@ void calcEigenVectors_loop_wOneD_FullOp(void **gaugeToPlaquette, QudaInvertParam
   for(int ip=0; ip<Nmoms; ip++)
     if((momQsq[ip] = (int *) malloc(sizeof(int)*3)) == NULL) errorQuda("Error in allocating momQsq[%d]\n",ip);
 
-  createMomenta(mom,momQsq,info.Q_sq,Nmoms);
+  createLoopMomenta(mom,momQsq,info.Q_sq,Nmoms);
   printfQuda("Momenta created\n");
   //----------------------------------------------------
 
