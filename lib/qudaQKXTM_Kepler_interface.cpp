@@ -2640,7 +2640,7 @@ void calcEigenVectors_loop_wOneD_EvenOdd(void **gaugeToPlaquette, QudaInvertPara
   printfQuda("No. of noise vectors: %d\n",Nstoch);
   printfQuda("The seed is: %ld\n",seed);
   printfQuda("The conf trajectory is: %04d\n",loopInfo.traj);
-  printfQuda("Will produce the loop for %d Momentum Combinations\n",loopInfo.Nmoms);
+  printfQuda("Will produce the loop for %d Momentum Combinations\n",Nmoms);
   printfQuda("Will dump every %d noise vectors, thus %d times\n",NdumpStep,Nprint);
   printfQuda("The loop file format is %s\n",loopInfo.file_format);
   printfQuda("The loop base name is %s\n",filename_out);
@@ -2793,37 +2793,6 @@ void calcEigenVectors_loop_wOneD_EvenOdd(void **gaugeToPlaquette, QudaInvertPara
     cudaMemset(cnC_gv[mu], 0, sizeof(double)*2*16*GK_localVolume);
   }
   cudaDeviceSynchronize();
-
-
-  //-C.K. Allocate memory for reduced buffers
-//   void    *std_uloc_rdc;
-//   void    *gen_uloc_rdc;
-//   void    **std_oneD_rdc;
-//   void    **std_csvC_rdc;
-//   void    **gen_oneD_rdc;
-//   void    **gen_csvC_rdc;
-
-//   if((cudaHostAlloc(&std_uloc_rdc, sizeof(double)*2*16*GK_localVolume, cudaHostAllocMapped)) != cudaSuccess) errorQuda("Error allocating memory std_uloc_rdc\n");
-//   if((cudaHostAlloc(&gen_uloc_rdc, sizeof(double)*2*16*GK_localVolume, cudaHostAllocMapped)) != cudaSuccess) errorQuda("Error allocating memory cnRes_gv\n");
-
-//   std_oneD_rdc = (void**) malloc(4*sizeof(double*));
-//   std_csvC_rdc = (void**) malloc(4*sizeof(double*));
-//   gen_oneD_rdc = (void**) malloc(4*sizeof(double*));
-//   gen_csvC_rdc = (void**) malloc(4*sizeof(double*));
-
-//   if(std_oneD_rdc == NULL)errorQuda("Error allocating memory std_oneD_rdc\n");
-//   if(std_csvC_rdc == NULL)errorQuda("Error allocating memory std_csvC_rdc\n");
-//   if(gen_oneD_rdc == NULL)errorQuda("Error allocating memory gen_oneD_rdc\n");
-//   if(gen_csvC_rdc == NULL)errorQuda("Error allocating memory gen_csvC_rdc\n");
-//   cudaDeviceSynchronize();
-
-//   for(int mu = 0; mu < 4 ; mu++){
-//     if((cudaHostAlloc(&(std_oneD_rdc[mu]), sizeof(double)*2*16*GK_localVolume, cudaHostAllocMapped)) != cudaSuccess) errorQuda("Error allocating memory std_oneD_rdc[%d]\n",mu);
-//     if((cudaHostAlloc(&(std_csvC_rdc[mu]), sizeof(double)*2*16*GK_localVolume, cudaHostAllocMapped)) != cudaSuccess) errorQuda("Error allocating memory std_csvC_rdc[%d]\n",mu);
-//     if((cudaHostAlloc(&(gen_oneD_rdc[mu]), sizeof(double)*2*16*GK_localVolume, cudaHostAllocMapped)) != cudaSuccess) errorQuda("Error allocating memory gen_oneD_rdc[%d]\n",mu);
-//     if((cudaHostAlloc(&(gen_csvC_rdc[mu]), sizeof(double)*2*16*GK_localVolume, cudaHostAllocMapped)) != cudaSuccess) errorQuda("Error allocating memory gen_csvC_rdc[%d]\n",mu);
-//   }
-//   cudaDeviceSynchronize();
   //--------------------------------------------------------------------------------------------
 
   //-Allocate memory for the write buffers
@@ -2922,14 +2891,14 @@ void calcEigenVectors_loop_wOneD_EvenOdd(void **gaugeToPlaquette, QudaInvertPara
       }
       else if(GK_nProc[2]>1){
 	t1 = MPI_Wtime();
-	performManFFT(buf_std_uloc, cnRes_vv, iPrint, Nmoms, momQsq);
-	performManFFT(buf_gen_uloc, cnRes_gv, iPrint, Nmoms, momQsq);
+	performManFFT<double>(buf_std_uloc, cnRes_vv, iPrint, Nmoms, momQsq);
+	performManFFT<double>(buf_gen_uloc, cnRes_gv, iPrint, Nmoms, momQsq);
 
 	for(int mu=0;mu<4;mu++){
-	  performManFFT(buf_std_oneD[mu], cnD_vv[mu], iPrint, Nmoms, momQsq);
-	  performManFFT(buf_std_csvC[mu], cnC_vv[mu], iPrint, Nmoms, momQsq);
-	  performManFFT(buf_gen_oneD[mu], cnD_gv[mu], iPrint, Nmoms, momQsq);
-	  performManFFT(buf_gen_csvC[mu], cnC_gv[mu], iPrint, Nmoms, momQsq);
+	  performManFFT<double>(buf_std_oneD[mu], cnD_vv[mu], iPrint, Nmoms, momQsq);
+	  performManFFT<double>(buf_std_csvC[mu], cnC_vv[mu], iPrint, Nmoms, momQsq);
+	  performManFFT<double>(buf_gen_oneD[mu], cnD_gv[mu], iPrint, Nmoms, momQsq);
+	  performManFFT<double>(buf_gen_csvC[mu], cnC_gv[mu], iPrint, Nmoms, momQsq);
 	}
 	t2 = MPI_Wtime();
 	printfQuda("TIME_REPORT: FFT and copying to Write Buffers is %f sec\n",t2-t1);
@@ -2943,6 +2912,7 @@ void calcEigenVectors_loop_wOneD_EvenOdd(void **gaugeToPlaquette, QudaInvertPara
   bool stoch_part = false;
 
   printfQuda("Will write the loops in %s format\n",loopInfo.file_format);
+  t1 = MPI_Wtime();
   if(strcmp(loopInfo.file_format,"ASCII")==0){ // Write the loops in ASCII format
     writeLoops_ASCII(buf_std_uloc, filename_out, loopInfo, momQsq, 0, 0, stoch_part); // Scalar
     writeLoops_ASCII(buf_gen_uloc, filename_out, loopInfo, momQsq, 1, 0, stoch_part); // dOp
@@ -2956,7 +2926,8 @@ void calcEigenVectors_loop_wOneD_EvenOdd(void **gaugeToPlaquette, QudaInvertPara
   else if(strcmp(loopInfo.file_format,"HDF5")==0){ // Write the loops in HDF5 format
     writeLoops_HDF5(buf_std_uloc, buf_gen_uloc, buf_std_oneD, buf_std_csvC, buf_gen_oneD, buf_gen_csvC, filename_out, loopInfo, momQsq, stoch_part);
   }
-  printfQuda("Writing the loops completed.\n");
+  t2 = MPI_Wtime();
+  printfQuda("Writing the loops completed in %f sec.\n",t2-t1);
 
 
   //- Free loop cuda buffers
@@ -2973,21 +2944,6 @@ void calcEigenVectors_loop_wOneD_EvenOdd(void **gaugeToPlaquette, QudaInvertPara
   free(cnD_gv);
   free(cnC_vv);
   free(cnC_gv);
-  //---------------------------
-
-  //- Free reduced buffers
-//   cudaFreeHost(std_uloc_rdc);
-//   cudaFreeHost(gen_uloc_rdc);
-//   for(int mu = 0 ; mu < 4 ; mu++){
-//     cudaFreeHost(std_oneD_rdc[mu]);
-//     cudaFreeHost(std_csvC_rdc[mu]);
-//     cudaFreeHost(gen_oneD_rdc[mu]);
-//     cudaFreeHost(gen_csvC_rdc[mu]);
-//   }  
-//   free(std_oneD_rdc);
-//   free(std_csvC_rdc);
-//   free(gen_oneD_rdc);
-//   free(gen_csvC_rdc);
   //---------------------------
 
   //-Free loop write buffers

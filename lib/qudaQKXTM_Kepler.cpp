@@ -4797,42 +4797,45 @@ void performManFFT(Float *outBuf, void *inBuf, int iPrint, int Nmoms, int **momQ
   int LZ=GK_totalL[2];
   long int SplV = lx*ly*lz;
 
-  double pi = 2.0*asin(1.0);
-  Float sum[2];
-
+  double two_pi = 4.0*asin(1.0);
   int z_coord = comm_coord(2);
 
-  for(int t=0;t<lt;t++){
-    for(int gm=0;gm<16;gm++){
-      for(int ip=0;ip<Nmoms;ip++){
-	int px = momQsq[ip][0];
-	int py = momQsq[ip][1];
-	int pz = momQsq[ip][2];
+  Float *sum = (Float*) malloc(2*16*Nmoms*lt*sizeof(Float));
+  if(sum == NULL) errorQuda("performManFFT: Allocation of sum buffer failed.\n");
+  memset(sum,0,2*16*Nmoms*lt*sizeof(Float));
 
-	sum[0] = 0.0;
-	sum[1] = 0.0;
-	int v = 0;
-	for(int z=0;z<lz;z++){     //-For z-direction we must have lz
-	  for(int y=0;y<ly;y++){   //-Here either ly or LY is the same because we don't split in y (for now)
-	    for(int x=0;x<lx;x++){ //-The same here
-	      Float expn = 2.0*pi*(px*x/(Float)LX + py*y/(Float)LY + pz*(z+z_coord*lz)/(Float)LZ);
-	      Float phase[2];
-	      phase[0] =  cos(expn);
-	      phase[1] = -sin(expn);
+  for(int ip=0;ip<Nmoms;ip++){
+    int px = momQsq[ip][0];
+    int py = momQsq[ip][1];
+    int pz = momQsq[ip][2];
 
-	      sum[0] += ((Float*)inBuf)[0+2*v+2*SplV*t+2*SplV*lt*gm]*phase[0] - ((Float*)inBuf)[1+2*v+2*SplV*t+2*SplV*lt*gm]*phase[1];
-	      sum[1] += ((Float*)inBuf)[0+2*v+2*SplV*t+2*SplV*lt*gm]*phase[1] + ((Float*)inBuf)[1+2*v+2*SplV*t+2*SplV*lt*gm]*phase[0];
-	      v++;
-	    }//-x
-	  }//-y
-	}//-z
-	
-	if(typeid(Float)==typeid(float))  MPI_Reduce(sum, &(outBuf[2*ip+2*Nmoms*t+2*Nmoms*lt*gm+2*Nmoms*lt*16*iPrint]), 2, MPI_FLOAT , MPI_SUM, 0, GK_spaceComm);
-	if(typeid(Float)==typeid(double)) MPI_Reduce(sum, &(outBuf[2*ip+2*Nmoms*t+2*Nmoms*lt*gm+2*Nmoms*lt*16*iPrint]), 2, MPI_DOUBLE, MPI_SUM, 0, GK_spaceComm);
-      }//-ip
-    }//-m
-  }//-t
+    int v = 0;
+    for(int z=0;z<lz;z++){     //-For z-direction we must have lz
+      int zg = z+z_coord*lz;
+      for(int y=0;y<ly;y++){   //-Here either ly or LY is the same because we don't split in y (for now)
+	for(int x=0;x<lx;x++){ //-The same here
+	  Float expn = two_pi*( px*x/(Float)LX + py*y/(Float)LY + pz*zg/(Float)LZ );
+	  Float phase[2];
+	  phase[0] =  cos(expn);
+	  phase[1] = -sin(expn);
 
+	  for(int t=0;t<lt;t++){
+	    for(int gm=0;gm<16;gm++){
+	      sum[0 + 2*ip + 2*Nmoms*t + 2*Nmoms*lt*gm] += ((Float*)inBuf)[0+2*v+2*SplV*t+2*SplV*lt*gm]*phase[0] - ((Float*)inBuf)[1+2*v+2*SplV*t+2*SplV*lt*gm]*phase[1];
+	      sum[1 + 2*ip + 2*Nmoms*t + 2*Nmoms*lt*gm] += ((Float*)inBuf)[0+2*v+2*SplV*t+2*SplV*lt*gm]*phase[1] + ((Float*)inBuf)[1+2*v+2*SplV*t+2*SplV*lt*gm]*phase[0];
+	    }//-gm
+	  }//-t
+
+	  v++;
+	}//-x
+      }//-y
+    }//-z
+  }//-ip
+
+  if(typeid(Float)==typeid(float))  MPI_Reduce(sum, &(outBuf[2*Nmoms*lt*16*iPrint]), 2*Nmoms*lt*16, MPI_FLOAT , MPI_SUM, 0, GK_spaceComm);
+  if(typeid(Float)==typeid(double)) MPI_Reduce(sum, &(outBuf[2*Nmoms*lt*16*iPrint]), 2*Nmoms*lt*16, MPI_DOUBLE, MPI_SUM, 0, GK_spaceComm);
+
+  free(sum);
 }
 
 template<typename Float>
@@ -4854,11 +4857,6 @@ void copyLoopToWriteBuf(Float *writeBuf, void *tmpBuf, int iPrint, int Q_sq, int
       }//-if
     }//-ip
   }
-  else if(GK_nProc[2]>1){
-
-
-  }
-
 
 }
 
