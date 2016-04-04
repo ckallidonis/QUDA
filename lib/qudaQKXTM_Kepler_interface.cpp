@@ -2891,14 +2891,14 @@ void calcEigenVectors_loop_wOneD_EvenOdd(void **gaugeToPlaquette, QudaInvertPara
       }
       else if(GK_nProc[2]>1){
 	t1 = MPI_Wtime();
-	performManFFT<double>(buf_std_uloc, cnRes_vv, iPrint, Nmoms, momQsq);
-	performManFFT<double>(buf_gen_uloc, cnRes_gv, iPrint, Nmoms, momQsq);
+	performFFT<double>(buf_std_uloc, cnRes_vv, iPrint, Nmoms, momQsq);
+	performFFT<double>(buf_gen_uloc, cnRes_gv, iPrint, Nmoms, momQsq);
 
 	for(int mu=0;mu<4;mu++){
-	  performManFFT<double>(buf_std_oneD[mu], cnD_vv[mu], iPrint, Nmoms, momQsq);
-	  performManFFT<double>(buf_std_csvC[mu], cnC_vv[mu], iPrint, Nmoms, momQsq);
-	  performManFFT<double>(buf_gen_oneD[mu], cnD_gv[mu], iPrint, Nmoms, momQsq);
-	  performManFFT<double>(buf_gen_csvC[mu], cnC_gv[mu], iPrint, Nmoms, momQsq);
+	  performFFT<double>(buf_std_oneD[mu], cnD_vv[mu], iPrint, Nmoms, momQsq);
+	  performFFT<double>(buf_std_csvC[mu], cnC_vv[mu], iPrint, Nmoms, momQsq);
+	  performFFT<double>(buf_gen_oneD[mu], cnD_gv[mu], iPrint, Nmoms, momQsq);
+	  performFFT<double>(buf_gen_csvC[mu], cnC_gv[mu], iPrint, Nmoms, momQsq);
 	}
 	t2 = MPI_Wtime();
 	printfQuda("TIME_REPORT: FFT and copying to Write Buffers is %f sec\n",t2-t1);

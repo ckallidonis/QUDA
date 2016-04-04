@@ -4786,7 +4786,7 @@ void createLoopMomenta(int **mom, int **momQsq, int Q_sq, int Nmoms){
 
 //-C.K. Function which performs the Fourier Transform
 template<typename Float>
-void performManFFT(Float *outBuf, void *inBuf, int iPrint, int Nmoms, int **momQsq){
+void performFFT(Float *outBuf, void *inBuf, int iPrint, int Nmoms, int **momQsq){
 
   int lx=GK_localL[0];
   int ly=GK_localL[1];
@@ -4857,6 +4857,7 @@ void copyLoopToWriteBuf(Float *writeBuf, void *tmpBuf, int iPrint, int Q_sq, int
       }//-if
     }//-ip
   }
+  else errorQuda("copyLoopToWriteBuf: This function does not support more than 1 GPU in the z-direction\n");
 
 }
 
