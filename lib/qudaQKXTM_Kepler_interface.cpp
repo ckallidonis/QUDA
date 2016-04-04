@@ -3129,7 +3129,7 @@ void calcEigenVectors_loop_wOneD_FullOp(void **gaugeToPlaquette, QudaInvertParam
 
   //-Allocate the momenta
   int **mom,**momQsq;
-  long int SplV = GK_localL[0]*GK_localL[1]*GK_localL[2];
+  long int SplV = GK_totalL[0]*GK_totalL[1]*GK_totalL[2];
   if((mom =    (int**) malloc(sizeof(int*)*SplV )) == NULL) errorQuda("Error in allocating mom\n");
   if((momQsq = (int**) malloc(sizeof(int*)*Nmoms)) == NULL) errorQuda("Error in allocating momQsq\n");
   for(int ip=0; ip<SplV; ip++)
@@ -3168,23 +3168,39 @@ void calcEigenVectors_loop_wOneD_FullOp(void **gaugeToPlaquette, QudaInvertParam
     printfQuda("TIME_REPORT: Exact part for eigenvector %d done in: %f sec\n",n+1,t2-t1);
     
     if( (n+1)==loopInfo.deflStep[s] ){     
-      doCudaFFT_v2<double>(std_uloc,tmp_loop); // Scalar
-      copyLoopToWriteBuf(buf_std_uloc,tmp_loop,iPrint,info.Q_sq,Nmoms,mom);
-      doCudaFFT_v2<double>(gen_uloc,tmp_loop); // dOp
-      copyLoopToWriteBuf(buf_gen_uloc,tmp_loop,iPrint,info.Q_sq,Nmoms,mom);
-
-      for(int mu = 0 ; mu < 4 ; mu++){
-        doCudaFFT_v2<double>(std_oneD[mu],tmp_loop); // Loops
-	copyLoopToWriteBuf(buf_std_oneD[mu],tmp_loop,iPrint,info.Q_sq,Nmoms,mom);
-        doCudaFFT_v2<double>(std_csvC[mu],tmp_loop); // LoopsCv
-	copyLoopToWriteBuf(buf_std_csvC[mu],tmp_loop,iPrint,info.Q_sq,Nmoms,mom);
-
-        doCudaFFT_v2<double>(gen_oneD[mu],tmp_loop); // LpsDw
-	copyLoopToWriteBuf(buf_gen_oneD[mu],tmp_loop,iPrint,info.Q_sq,Nmoms,mom);
-        doCudaFFT_v2<double>(gen_csvC[mu],tmp_loop); // LpsDwCv
-	copyLoopToWriteBuf(buf_gen_csvC[mu],tmp_loop,iPrint,info.Q_sq,Nmoms,mom);
+      if(GK_nProc[2]==1){      
+	doCudaFFT_v2<double>(std_uloc,tmp_loop); // Scalar
+	copyLoopToWriteBuf(buf_std_uloc,tmp_loop,iPrint,info.Q_sq,Nmoms,mom);
+	doCudaFFT_v2<double>(gen_uloc,tmp_loop); // dOp
+	copyLoopToWriteBuf(buf_gen_uloc,tmp_loop,iPrint,info.Q_sq,Nmoms,mom);
+	
+	for(int mu = 0 ; mu < 4 ; mu++){
+	  doCudaFFT_v2<double>(std_oneD[mu],tmp_loop); // Loops
+	  copyLoopToWriteBuf(buf_std_oneD[mu],tmp_loop,iPrint,info.Q_sq,Nmoms,mom);
+	  doCudaFFT_v2<double>(std_csvC[mu],tmp_loop); // LoopsCv
+	  copyLoopToWriteBuf(buf_std_csvC[mu],tmp_loop,iPrint,info.Q_sq,Nmoms,mom);
+	  
+	  doCudaFFT_v2<double>(gen_oneD[mu],tmp_loop); // LpsDw
+	  copyLoopToWriteBuf(buf_gen_oneD[mu],tmp_loop,iPrint,info.Q_sq,Nmoms,mom);
+	  doCudaFFT_v2<double>(gen_csvC[mu],tmp_loop); // LpsDwCv
+	  copyLoopToWriteBuf(buf_gen_csvC[mu],tmp_loop,iPrint,info.Q_sq,Nmoms,mom);
+	}
+	printfQuda("Exact part of Loops for NeV = %d copied to write buffers\n",n+1);
       }
-      printfQuda("Exact part of Loops for NeV = %d copied to write buffers\n",n+1);
+      else if(GK_nProc[2]>1){
+	t1 = MPI_Wtime();
+	performFFT<double>(buf_std_uloc, std_uloc, iPrint, Nmoms, momQsq);
+	performFFT<double>(buf_gen_uloc, gen_uloc, iPrint, Nmoms, momQsq);
+	
+	for(int mu=0;mu<4;mu++){
+	  performFFT<double>(buf_std_oneD[mu], std_oneD[mu], iPrint, Nmoms, momQsq);
+	  performFFT<double>(buf_std_csvC[mu], std_csvC[mu], iPrint, Nmoms, momQsq);
+	  performFFT<double>(buf_gen_oneD[mu], gen_oneD[mu], iPrint, Nmoms, momQsq);
+	  performFFT<double>(buf_gen_csvC[mu], gen_csvC[mu], iPrint, Nmoms, momQsq);
+	}
+	t2 = MPI_Wtime();
+	printfQuda("TIME_REPORT: FFT and copying to Write Buffers is %f sec\n",t2-t1);
+      }
 
       //-Write the exact part of the loop
       sprintf(loop_exact_fname,"%s_exact_NeV%d",loopInfo.loop_fname,n+1);
@@ -3201,6 +3217,7 @@ void calcEigenVectors_loop_wOneD_FullOp(void **gaugeToPlaquette, QudaInvertParam
       else if(strcmp(loopInfo.file_format,"HDF5")==0){ // Write the loops in HDF5 format
 	writeLoops_HDF5(buf_std_uloc, buf_gen_uloc, buf_std_oneD, buf_std_csvC, buf_gen_oneD, buf_gen_csvC, loop_exact_fname, loopInfo, momQsq, exact_part);
       }
+
       printfQuda("Writing the Exact part of the loops for NeV = %d completed.\n",n+1);
       s++;
     }//-if
@@ -3374,26 +3391,43 @@ void calcEigenVectors_loop_wOneD_FullOp(void **gaugeToPlaquette, QudaInvertParam
       printfQuda("TIME_REPORT: One-end trick for Stoch. %04d finished in %f sec\n",is+1,t4-t3);
       
       if( (is+1)%Ndump == 0){
-	doCudaFFT_v2<double>(std_uloc,tmp_loop); // Scalar
-	copyLoopToWriteBuf(buf_std_uloc,tmp_loop,iPrint,info.Q_sq,Nmoms,mom);
-	doCudaFFT_v2<double>(gen_uloc,tmp_loop); // dOp
-	copyLoopToWriteBuf(buf_gen_uloc,tmp_loop,iPrint,info.Q_sq,Nmoms,mom);
-	
-	for(int mu = 0 ; mu < 4 ; mu++){
-	  doCudaFFT_v2<double>(std_oneD[mu],tmp_loop); // Loops
-	  copyLoopToWriteBuf(buf_std_oneD[mu],tmp_loop,iPrint,info.Q_sq,Nmoms,mom);
-	  doCudaFFT_v2<double>(std_csvC[mu],tmp_loop); // LoopsCv
-	  copyLoopToWriteBuf(buf_std_csvC[mu],tmp_loop,iPrint,info.Q_sq,Nmoms,mom);
+	if(GK_nProc[2]==1){      
+	  doCudaFFT_v2<double>(std_uloc,tmp_loop); // Scalar
+	  copyLoopToWriteBuf(buf_std_uloc,tmp_loop,iPrint,info.Q_sq,Nmoms,mom);
+	  doCudaFFT_v2<double>(gen_uloc,tmp_loop); // dOp
+	  copyLoopToWriteBuf(buf_gen_uloc,tmp_loop,iPrint,info.Q_sq,Nmoms,mom);
 	  
-	  doCudaFFT_v2<double>(gen_oneD[mu],tmp_loop); // LpsDw
-	  copyLoopToWriteBuf(buf_gen_oneD[mu],tmp_loop,iPrint,info.Q_sq,Nmoms,mom);
-	  doCudaFFT_v2<double>(gen_csvC[mu],tmp_loop); // LpsDwCv
-	  copyLoopToWriteBuf(buf_gen_csvC[mu],tmp_loop,iPrint,info.Q_sq,Nmoms,mom);
+	  for(int mu = 0 ; mu < 4 ; mu++){
+	    doCudaFFT_v2<double>(std_oneD[mu],tmp_loop); // Loops
+	    copyLoopToWriteBuf(buf_std_oneD[mu],tmp_loop,iPrint,info.Q_sq,Nmoms,mom);
+	    doCudaFFT_v2<double>(std_csvC[mu],tmp_loop); // LoopsCv
+	    copyLoopToWriteBuf(buf_std_csvC[mu],tmp_loop,iPrint,info.Q_sq,Nmoms,mom);
+	    
+	    doCudaFFT_v2<double>(gen_oneD[mu],tmp_loop); // LpsDw
+	    copyLoopToWriteBuf(buf_gen_oneD[mu],tmp_loop,iPrint,info.Q_sq,Nmoms,mom);
+	    doCudaFFT_v2<double>(gen_csvC[mu],tmp_loop); // LpsDwCv
+	    copyLoopToWriteBuf(buf_gen_csvC[mu],tmp_loop,iPrint,info.Q_sq,Nmoms,mom);
+	  }
+	}
+	else if(GK_nProc[2]>1){
+	  t1 = MPI_Wtime();
+	  performFFT<double>(buf_std_uloc, std_uloc, iPrint, Nmoms, momQsq);
+	  performFFT<double>(buf_gen_uloc, gen_uloc, iPrint, Nmoms, momQsq);
+
+	  for(int mu=0;mu<4;mu++){
+	    performFFT<double>(buf_std_oneD[mu], std_oneD[mu], iPrint, Nmoms, momQsq);
+	    performFFT<double>(buf_std_csvC[mu], std_csvC[mu], iPrint, Nmoms, momQsq);
+	    performFFT<double>(buf_gen_oneD[mu], gen_oneD[mu], iPrint, Nmoms, momQsq);
+	    performFFT<double>(buf_gen_csvC[mu], gen_csvC[mu], iPrint, Nmoms, momQsq);
+	  }
+	  t2 = MPI_Wtime();
+	  printfQuda("TIME_REPORT: FFT and copying to Write Buffers is %f sec\n",t2-t1);
 	}
 
-	printfQuda("Stoch part of Loops for NeV = %d, Nstoch = %d copied to write buffers\n",NeV_defl,is+1);
+	printfQuda("Loops for Nstoch = %d copied to write buffers\n",is+1);
 	iPrint++;
-      }//-if
+      }//-if (is+1)
+
     } // close loop over noise vectors
  
     //-Write the stochastic part of the loops
