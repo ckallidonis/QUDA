@@ -75,6 +75,10 @@ extern char run3pt[];
 extern char corr_file_format[];
 extern char check_file_exist[];
 
+extern int Nproj;
+extern char proj_list_file[];
+
+
 //-C.K. ARPACK Parameters
 extern int PolyDeg;
 extern int nEv;
@@ -419,10 +423,23 @@ int main(int argc, char **argv)
   else errorQuda("Undefined input for option --check_corr_files");
 
   strcpy(info.corr_file_format,corr_file_format);
-  //  info.tsinkSource=t_sinkSource;
   info.Ntsink = Ntsink;
 
+  //-C.K: Determine for which projectors to run for the 3pt
+  if(strcmp(proj_list_file,"default")==0) info.proj_list[0] = 0; // Do only the G4 projector
+  else{
+    FILE *proj_ptr;
+    if( (proj_ptr = fopen(proj_list_file,"r")) == NULL ){
+      fprintf(stderr,"Cannot open file %s for projectors \n",proj_list_file);
+      exit(-1);
+    }
+    fscanf(proj_ptr,"%d\n",&info.Nproj);
+    for(int p=0;p<info.Nproj;p++) fscanf(proj_ptr,"%d\n",&(info.proj_list[p]));
+    fclose(proj_ptr);
+  }
+  //--------------------------------------------------
 
+  //-C.K: Determine for which source-positions to run for the 3pt
   if(strcmp(run3pt,"all")==0 || strcmp(run3pt,"ALL")==0){
     printfQuda("Will run for all %d source-positions for 2pt- and 3pt- functions\n",numSourcePositions);
     for(int is = 0; is < numSourcePositions; is++){
@@ -451,8 +468,9 @@ int main(int argc, char **argv)
     printfQuda("Option --run3pt only accepts all/ALL and file/FILE parameters, or, if running for all source-positions, just disregard it.\n");
     exit(-1);
   }
+  //--------------------------------------------------
 
-
+  //-C.K: Get the list of source positions
   FILE *ptr_sources;
   ptr_sources = fopen(pathListSourcePositions,"r");
   if(ptr_sources == NULL){
@@ -463,9 +481,10 @@ int main(int argc, char **argv)
     fscanf(ptr_sources,"%d %d %d %d",&(info.sourcePosition[is][0]),&(info.sourcePosition[is][1]), &(info.sourcePosition[is][2]), &(info.sourcePosition[is][3]));
 
   fclose(ptr_sources);
+  //--------------------------------------------------
 
 
-  //-C.Kallidonis: Read in the sink-source separations
+  //-C.K: Read in the sink-source separations
   FILE *ptr_tsink;
   ptr_tsink = fopen(pathList_tsink,"r");
   if(ptr_sources == NULL){
@@ -504,7 +523,7 @@ int main(int argc, char **argv)
   //  DeflateAndInvert_threepTwop(gauge_APE, gaugeContract, &inv_param,&gauge_param,pathEigenValuesUp,pathEigenVectorsUp,pathEigenValuesDown,pathEigenVectorsDown,twop_filename,threep_filename,NeV,info,NEUTRON,G4);
 
   if(isFullOp) calcEigenVectors_threepTwop_FullOp(gauge_APE, gaugeContract, &gauge_param, &inv_param, arpackInfo, info, twop_filename, threep_filename, NEUTRON, G4); 
-  else        calcEigenVectors_threepTwop_EvenOdd(gauge_APE, gaugeContract, &gauge_param, &inv_param, arpackInfo, info, twop_filename, threep_filename, NEUTRON, G4);
+  else        calcEigenVectors_threepTwop_EvenOdd(gauge_APE, gaugeContract, &gauge_param, &inv_param, arpackInfo, info, twop_filename, threep_filename, NEUTRON);
 
 
   freeGaugeQuda();

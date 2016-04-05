@@ -3514,7 +3514,7 @@ void calcEigenVectors_loop_wOneD_FullOp(void **gaugeToPlaquette, QudaInvertParam
 
 //template<typename Float>
 void calcEigenVectors_threepTwop_EvenOdd(void **gaugeSmeared, void **gauge, QudaGaugeParam *gauge_param, QudaInvertParam *param, qudaQKXTM_arpackInfo arpackInfo, qudaQKXTMinfo_Kepler info,
-					 char *filename_twop, char *filename_threep, WHICHPARTICLE NUCLEON, WHICHPROJECTOR PID ){
+					 char *filename_twop, char *filename_threep, WHICHPARTICLE NUCLEON){
 
   bool flag_eo;
   double t1,t2;
@@ -3663,6 +3663,12 @@ void calcEigenVectors_threepTwop_EvenOdd(void **gaugeSmeared, void **gauge, Quda
   info.thrp_type[1] = "noether";
   info.thrp_type[2] = "oneD";
 
+  info.thrp_proj_type[0] = "G4";
+  info.thrp_proj_type[1] = "G5G123";
+  info.thrp_proj_type[2] = "G5G1";
+  info.thrp_proj_type[3] = "G5G2";
+  info.thrp_proj_type[4] = "G5G3";
+
   info.baryon_type[0] = "nucl_nucl";
   info.baryon_type[1] = "nucl_roper";
   info.baryon_type[2] = "roper_nucl";
@@ -3687,6 +3693,11 @@ void calcEigenVectors_threepTwop_EvenOdd(void **gaugeSmeared, void **gauge, Quda
 
   printfQuda("Will write the correlation functions in %s format\n",info.corr_file_format);
 
+  int Nproj = info.Nproj;
+  printfQuda("Will run the three-point function for the following %d projector(s):\n",Nproj);
+  for(int p=0;p<Nproj;p++) printfQuda(" %s\n",info.thrp_proj_type[info.proj_list[p]]);
+
+
   //-Allocate the Three-Point function data Buffers
   double *corrThp_local   = (double*) calloc(GK_localL[3]*GK_Nmoms*16*2,sizeof(double));
   double *corrThp_noether = (double*) calloc(GK_localL[3]*GK_Nmoms*4*2,sizeof(double));
@@ -3708,22 +3719,23 @@ void calcEigenVectors_threepTwop_EvenOdd(void **gaugeSmeared, void **gauge, Quda
   double *Twop_mesons_HDF5 = NULL;
 
   if( strcmp(info.corr_file_format,"HDF5")==0 ){
-    if( (Thrp_local_HDF5   = (double*) malloc(2*16*GK_localL[3]*GK_Nmoms*2*info.Ntsink*sizeof(double)))==NULL ) errorQuda("Cannot allocate memory for Thrp_local_HDF5.\n");
-    if( (Thrp_noether_HDF5 = (double*) malloc(2* 4*GK_localL[3]*GK_Nmoms*2*info.Ntsink*sizeof(double)))==NULL ) errorQuda("Cannot allocate memory for Thrp_noether_HDF5.\n");
+    if( (Thrp_local_HDF5   = (double*) malloc(2*16*GK_localL[3]*GK_Nmoms*2*info.Ntsink*Nproj*sizeof(double)))==NULL ) errorQuda("Cannot allocate memory for Thrp_local_HDF5.\n");
+    if( (Thrp_noether_HDF5 = (double*) malloc(2* 4*GK_localL[3]*GK_Nmoms*2*info.Ntsink*Nproj*sizeof(double)))==NULL ) errorQuda("Cannot allocate memory for Thrp_noether_HDF5.\n");
 
-    memset(Thrp_local_HDF5,0,2*16*GK_localL[3]*GK_Nmoms*2*info.Ntsink*sizeof(double));
-    memset(Thrp_noether_HDF5,0,2* 4*GK_localL[3]*GK_Nmoms*2*info.Ntsink*sizeof(double));
+    memset(Thrp_local_HDF5  , 0, 2*16*GK_localL[3]*GK_Nmoms*2*info.Ntsink*Nproj*sizeof(double));
+    memset(Thrp_noether_HDF5, 0, 2* 4*GK_localL[3]*GK_Nmoms*2*info.Ntsink*Nproj*sizeof(double));
 
     if( (Thrp_oneD_HDF5 = (double**) malloc(4*sizeof(double*))) == NULL ) errorQuda("Cannot allocate memory for Thrp_oneD_HDF5.\n");
     for(int mu=0;mu<4;mu++){
-      if( (Thrp_oneD_HDF5[mu] = (double*) malloc(2*16*GK_localL[3]*GK_Nmoms*2*info.Ntsink*sizeof(double)))==NULL ) errorQuda("Cannot allocate memory for Thrp_oned_HDF5[%d].\n",mu);
+      if( (Thrp_oneD_HDF5[mu] = (double*) malloc(2*16*GK_localL[3]*GK_Nmoms*2*info.Ntsink*Nproj*sizeof(double)))==NULL ) errorQuda("Cannot allocate memory for Thrp_oned_HDF5[%d].\n",mu);
 
-      memset(Thrp_oneD_HDF5[mu],0,2*16*GK_localL[3]*GK_Nmoms*2*info.Ntsink*sizeof(double));
+      memset(Thrp_oneD_HDF5[mu], 0, 2*16*GK_localL[3]*GK_Nmoms*2*info.Ntsink*Nproj*sizeof(double));
     }
 
     if( (Twop_baryons_HDF5 = (double*) malloc(2*16*GK_localL[3]*GK_Nmoms*2*N_BARYONS*sizeof(double)))==NULL ) errorQuda("Cannot allocate memory for Twop_baryons_HDF5.\n");
     if( (Twop_mesons_HDF5 = (double*) malloc(2*GK_localL[3]*GK_Nmoms*2*N_MESONS*sizeof(double)))==NULL ) errorQuda("Cannot allocate memory for Twop_mesons_HDF5.\n");
   }
+
 
   for(int isource = 0 ; isource < info.Nsources ; isource++){
 
@@ -3845,11 +3857,6 @@ void calcEigenVectors_threepTwop_EvenOdd(void **gaugeSmeared, void **gauge, Quda
       for(int its=0;its<info.Ntsink;its++){
 	my_fixSinkTime = (info.tsinkSource[its] + info.sourcePosition[isource][3])%GK_totalL[3] - comm_coords(default_topo)[3] * X[3];
 
-	if( strcmp(info.corr_file_format,"ASCII")==0 ){
-	  asprintf(&filename_threep_base,"%s_tsink%d",filename_threep,info.tsinkSource[its]);
-	  printfQuda("The three-point function ASCII base name is: %s\n",filename_threep_base);
-	}
-
 	t1 = MPI_Wtime();
 	K_temp->zero_device();
 	checkCudaError();
@@ -3885,171 +3892,183 @@ void calcEigenVectors_threepTwop_EvenOdd(void **gaugeSmeared, void **gauge, Quda
 	t2 = MPI_Wtime();
 	printfQuda("Time needed to prepare the 3D props for sink-source[%d]=%d is %f sec\n",its,info.tsinkSource[its],t2-t1);
 
-	/////////////////////////////////////////sequential propagator for the part 1
-	for(int nu = 0 ; nu < 4 ; nu++)
-	  for(int c2 = 0 ; c2 < 3 ; c2++){
-	    t1 = MPI_Wtime();
-	    K_temp->zero_device();
-	    if(NUCLEON == PROTON){
-	      if( (my_fixSinkTime >= 0) && ( my_fixSinkTime < X[3] ) ) K_contract->seqSourceFixSinkPart1(*K_temp,*K_prop3D_up, *K_prop3D_down, my_fixSinkTime, nu, c2, PID, NUCLEON);}
-	    else if(NUCLEON == NEUTRON){
-	      if( (my_fixSinkTime >= 0) && ( my_fixSinkTime < X[3] ) ) K_contract->seqSourceFixSinkPart1(*K_temp,*K_prop3D_down, *K_prop3D_up, my_fixSinkTime, nu, c2, PID, NUCLEON);}
-	    comm_barrier();
-	    K_temp->conjugate();
-	    K_temp->apply_gamma5();
-	    K_vector->castFloatToDouble(*K_temp);
-	    //
-	    K_vector->scaleVector(1e+10);
-	    //
-	    K_guess->gaussianSmearing(*K_vector,*K_gaugeSmeared);
-	    if(NUCLEON == PROTON){
-	      b->changeTwist(QUDA_TWIST_MINUS); x->changeTwist(QUDA_TWIST_MINUS); b->Even().changeTwist(QUDA_TWIST_MINUS);
-	      b->Odd().changeTwist(QUDA_TWIST_MINUS); x->Even().changeTwist(QUDA_TWIST_MINUS); x->Odd().changeTwist(QUDA_TWIST_MINUS);
-	    }
-	    else{
-	      b->changeTwist(QUDA_TWIST_PLUS); x->changeTwist(QUDA_TWIST_PLUS); b->Even().changeTwist(QUDA_TWIST_PLUS);
-	      b->Odd().changeTwist(QUDA_TWIST_PLUS); x->Even().changeTwist(QUDA_TWIST_PLUS); x->Odd().changeTwist(QUDA_TWIST_PLUS);
-	    }
-	    K_guess->uploadToCuda(b,flag_eo);
-	    dirac.prepare(in,out,*x,*b,param->solution_type);
-	  
-	    cudaColorSpinorField *tmp = new cudaColorSpinorField(*in);
-	    dirac.Mdag(*in, *tmp);
-	    delete tmp;
-	    K_vector->downloadFromCuda(in,flag_eo);
-	    K_vector->download();
-	    if(NUCLEON == PROTON)
-	      deflation_down->deflateVector(*K_guess,*K_vector);
-	    else if(NUCLEON == NEUTRON)
-	      deflation_up->deflateVector(*K_guess,*K_vector);
-	    K_guess->uploadToCuda(out,flag_eo); // initial guess is ready
-	    (*solve)(*out,*in);
-	    dirac.reconstruct(*x,*b,param->solution_type);
-	    K_vector->downloadFromCuda(x,flag_eo);
-	    if (param->mass_normalization == QUDA_MASS_NORMALIZATION || param->mass_normalization == QUDA_ASYMMETRIC_MASS_NORMALIZATION) {
-	      K_vector->scaleVector(2*param->kappa);
-	    }
-	    //
-	    K_vector->scaleVector(1e-10);
-	    //
-	    K_temp->castDoubleToFloat(*K_vector);
-	    K_seqProp->absorbVectorToDevice(*K_temp,nu,c2);
-	    t2 = MPI_Wtime();
-	    printfQuda("Inversion for seq prop part 1 = %d,  for source = %d and sink-source = %d finished in time %f sec\n",nu*3+c2,isource,info.tsinkSource[its],t2-t1);
+
+	for(int proj=0;proj<Nproj;proj++){
+	  WHICHPROJECTOR PID = (WHICHPROJECTOR) info.proj_list[proj];
+	  char *proj_str;
+	  asprintf(&proj_str,"%s",info.thrp_proj_type[info.proj_list[proj]]);
+
+	  if( strcmp(info.corr_file_format,"ASCII")==0 ){
+	    asprintf(&filename_threep_base,"%s_tsink%d_proj%s",filename_threep,info.tsinkSource[its],proj_str);
+	    printfQuda("The three-point function ASCII base name is: %s\n",filename_threep_base);
 	  }
 
-	////////////////// Contractions for part 1 ////////////////
-	t1 = MPI_Wtime();
-	if(NUCLEON == PROTON){
-	  K_contract->contractFixSink(*K_seqProp, *K_prop_up  , *K_gaugeContractions, corrThp_local, corrThp_noether, corrThp_oneD, PID, NUCLEON, 1, isource);
-	}
-	if(NUCLEON == NEUTRON){
-	  K_contract->contractFixSink(*K_seqProp, *K_prop_down, *K_gaugeContractions, corrThp_local, corrThp_noether, corrThp_oneD, PID, NUCLEON, 1, isource);
-	}                
-	t2 = MPI_Wtime();
-	printfQuda("Time for fix sink contractions for part 1, source = %d at sink-source = %d is %f sec\n",isource,info.tsinkSource[its],t2-t1);
-
-
-	if( strcmp(info.corr_file_format,"ASCII")==0 ){
-	  K_contract->writeThrp_ASCII(corrThp_local, corrThp_noether, corrThp_oneD, NUCLEON, 1, filename_threep_base, isource, info.tsinkSource[its]);
-	  printfQuda("Three-point function for part 1, source = %d at sink-source = %d written in ASCII format.\n",isource,info.tsinkSource[its]);
-	}
-	else if( strcmp(info.corr_file_format,"HDF5")==0 ){
-	  int uOrd;
-	  if(NUCLEON == PROTON ) uOrd = 0;
-	  if(NUCLEON == NEUTRON) uOrd = 1;
-
-	  int thrp_sign = ( info.tsinkSource[its] + GK_sourcePosition[isource][3] ) >= GK_totalL[3] ? -1 : +1;
-
-  	  K_contract->copyThrpToHDF5_Buf((void*)Thrp_local_HDF5  , (void*)corrThp_local  , 0, uOrd, its, info.Ntsink, thrp_sign, THRP_LOCAL);
- 	  K_contract->copyThrpToHDF5_Buf((void*)Thrp_noether_HDF5, (void*)corrThp_noether, 0, uOrd, its, info.Ntsink, thrp_sign, THRP_NOETHER);
- 	  for(int mu = 0;mu<4;mu++)
- 	    K_contract->copyThrpToHDF5_Buf((void*)Thrp_oneD_HDF5[mu],(void*)corrThp_oneD ,mu, uOrd, its, info.Ntsink, thrp_sign, THRP_ONED);
-
-	  printfQuda("Three-point function for part 1, source = %d at sink-source = %d copied to HDF5 write buffers.\n",isource,info.tsinkSource[its]);
-	}
-
-	/////////////////////////////////////////sequential propagator for the part 2
-	for(int nu = 0 ; nu < 4 ; nu++)
-	  for(int c2 = 0 ; c2 < 3 ; c2++){
-	    t1 = MPI_Wtime();
-	    K_temp->zero_device();
-	    if(NUCLEON == PROTON){
-	      if( (my_fixSinkTime >= 0) && ( my_fixSinkTime < X[3] ) ) K_contract->seqSourceFixSinkPart2(*K_temp,*K_prop3D_up, my_fixSinkTime, nu, c2, PID, NUCLEON);}
-	    else if(NUCLEON == NEUTRON){
-	      if( (my_fixSinkTime >= 0) && ( my_fixSinkTime < X[3] ) ) K_contract->seqSourceFixSinkPart2(*K_temp,*K_prop3D_down, my_fixSinkTime, nu, c2, PID, NUCLEON);}
-	    comm_barrier();
-	    K_temp->conjugate();
-	    K_temp->apply_gamma5();
-	    K_vector->castFloatToDouble(*K_temp);
-	    //
-	    K_vector->scaleVector(1e+10);
-	    //
-	    K_guess->gaussianSmearing(*K_vector,*K_gaugeSmeared);
-	    if(NUCLEON == PROTON){
-	      b->changeTwist(QUDA_TWIST_PLUS); x->changeTwist(QUDA_TWIST_PLUS); b->Even().changeTwist(QUDA_TWIST_PLUS);
-	      b->Odd().changeTwist(QUDA_TWIST_PLUS); x->Even().changeTwist(QUDA_TWIST_PLUS); x->Odd().changeTwist(QUDA_TWIST_PLUS);
-	    }
-	    else{
-	      b->changeTwist(QUDA_TWIST_MINUS); x->changeTwist(QUDA_TWIST_MINUS); b->Even().changeTwist(QUDA_TWIST_MINUS);
-	      b->Odd().changeTwist(QUDA_TWIST_MINUS); x->Even().changeTwist(QUDA_TWIST_MINUS); x->Odd().changeTwist(QUDA_TWIST_MINUS);
-	    }
-	    K_guess->uploadToCuda(b,flag_eo);
-	    dirac.prepare(in,out,*x,*b,param->solution_type);
+	  /////////////////////////////////////////sequential propagator for the part 1
+	  for(int nu = 0 ; nu < 4 ; nu++)
+	    for(int c2 = 0 ; c2 < 3 ; c2++){
+	      t1 = MPI_Wtime();
+	      K_temp->zero_device();
+	      if(NUCLEON == PROTON){
+		if( (my_fixSinkTime >= 0) && ( my_fixSinkTime < X[3] ) ) K_contract->seqSourceFixSinkPart1(*K_temp,*K_prop3D_up, *K_prop3D_down, my_fixSinkTime, nu, c2, PID, NUCLEON);}
+	      else if(NUCLEON == NEUTRON){
+		if( (my_fixSinkTime >= 0) && ( my_fixSinkTime < X[3] ) ) K_contract->seqSourceFixSinkPart1(*K_temp,*K_prop3D_down, *K_prop3D_up, my_fixSinkTime, nu, c2, PID, NUCLEON);}
+	      comm_barrier();
+	      K_temp->conjugate();
+	      K_temp->apply_gamma5();
+	      K_vector->castFloatToDouble(*K_temp);
+	      //
+	      K_vector->scaleVector(1e+10);
+	      //
+	      K_guess->gaussianSmearing(*K_vector,*K_gaugeSmeared);
+	      if(NUCLEON == PROTON){
+		b->changeTwist(QUDA_TWIST_MINUS); x->changeTwist(QUDA_TWIST_MINUS); b->Even().changeTwist(QUDA_TWIST_MINUS);
+		b->Odd().changeTwist(QUDA_TWIST_MINUS); x->Even().changeTwist(QUDA_TWIST_MINUS); x->Odd().changeTwist(QUDA_TWIST_MINUS);
+	      }
+	      else{
+		b->changeTwist(QUDA_TWIST_PLUS); x->changeTwist(QUDA_TWIST_PLUS); b->Even().changeTwist(QUDA_TWIST_PLUS);
+		b->Odd().changeTwist(QUDA_TWIST_PLUS); x->Even().changeTwist(QUDA_TWIST_PLUS); x->Odd().changeTwist(QUDA_TWIST_PLUS);
+	      }
+	      K_guess->uploadToCuda(b,flag_eo);
+	      dirac.prepare(in,out,*x,*b,param->solution_type);
 	  
-	    cudaColorSpinorField *tmp = new cudaColorSpinorField(*in);
-	    dirac.Mdag(*in, *tmp);
-	    delete tmp;
-	    K_vector->downloadFromCuda(in,flag_eo);
-	    K_vector->download();
-	    if(NUCLEON == PROTON)
-	      deflation_up->deflateVector(*K_guess,*K_vector);
-	    else if(NUCLEON == NEUTRON)
-	      deflation_down->deflateVector(*K_guess,*K_vector);
-	    K_guess->uploadToCuda(out,flag_eo); // initial guess is ready
-	    (*solve)(*out,*in);
-	    dirac.reconstruct(*x,*b,param->solution_type);
-	    K_vector->downloadFromCuda(x,flag_eo);
-	    if (param->mass_normalization == QUDA_MASS_NORMALIZATION || param->mass_normalization == QUDA_ASYMMETRIC_MASS_NORMALIZATION) {
-	      K_vector->scaleVector(2*param->kappa);
+	      cudaColorSpinorField *tmp = new cudaColorSpinorField(*in);
+	      dirac.Mdag(*in, *tmp);
+	      delete tmp;
+	      K_vector->downloadFromCuda(in,flag_eo);
+	      K_vector->download();
+	      if(NUCLEON == PROTON)
+		deflation_down->deflateVector(*K_guess,*K_vector);
+	      else if(NUCLEON == NEUTRON)
+		deflation_up->deflateVector(*K_guess,*K_vector);
+	      K_guess->uploadToCuda(out,flag_eo); // initial guess is ready
+	      (*solve)(*out,*in);
+	      dirac.reconstruct(*x,*b,param->solution_type);
+	      K_vector->downloadFromCuda(x,flag_eo);
+	      if (param->mass_normalization == QUDA_MASS_NORMALIZATION || param->mass_normalization == QUDA_ASYMMETRIC_MASS_NORMALIZATION) {
+		K_vector->scaleVector(2*param->kappa);
+	      }
+	      //
+	      K_vector->scaleVector(1e-10);
+	      //
+	      K_temp->castDoubleToFloat(*K_vector);
+	      K_seqProp->absorbVectorToDevice(*K_temp,nu,c2);
+	      t2 = MPI_Wtime();
+	      printfQuda("Inversion time for seq prop part 1 = %d, source = %d at sink-source = %d, projector %s is: %f sec\n",nu*3+c2,isource,info.tsinkSource[its],proj_str,t2-t1);
 	    }
-	    //
-	    K_vector->scaleVector(1e-10);
-	    //
-	    K_temp->castDoubleToFloat(*K_vector);
-	    K_seqProp->absorbVectorToDevice(*K_temp,nu,c2);
-	    t2 = MPI_Wtime();
-	    printfQuda("Inversion for seq prop part 2 = %d,  for source = %d and sink-source = %d finished in time %f sec\n",nu*3+c2,isource,info.tsinkSource[its],t2-t1);
+
+	  ////////////////// Contractions for part 1 ////////////////
+	  t1 = MPI_Wtime();
+	  if(NUCLEON == PROTON){
+	    K_contract->contractFixSink(*K_seqProp, *K_prop_up  , *K_gaugeContractions, corrThp_local, corrThp_noether, corrThp_oneD, PID, NUCLEON, 1, isource);
+	  }
+	  if(NUCLEON == NEUTRON){
+	    K_contract->contractFixSink(*K_seqProp, *K_prop_down, *K_gaugeContractions, corrThp_local, corrThp_noether, corrThp_oneD, PID, NUCLEON, 1, isource);
+	  }                
+	  t2 = MPI_Wtime();
+	  printfQuda("Time for fix sink contractions for part 1, source = %d at sink-source = %d, projector %s: %f sec\n",isource,info.tsinkSource[its],proj_str,t2-t1);
+
+
+	  if( strcmp(info.corr_file_format,"ASCII")==0 ){
+	    K_contract->writeThrp_ASCII(corrThp_local, corrThp_noether, corrThp_oneD, NUCLEON, 1, filename_threep_base, isource, info.tsinkSource[its]);
+	    printfQuda("Three-point function for part 1, source = %d at sink-source = %d, projector %s written in ASCII format.\n",isource,info.tsinkSource[its],proj_str);
+	  }
+	  else if( strcmp(info.corr_file_format,"HDF5")==0 ){
+	    int uOrd;
+	    if(NUCLEON == PROTON ) uOrd = 0;
+	    if(NUCLEON == NEUTRON) uOrd = 1;
+
+	    int thrp_sign = ( info.tsinkSource[its] + GK_sourcePosition[isource][3] ) >= GK_totalL[3] ? -1 : +1;
+
+	    K_contract->copyThrpToHDF5_Buf((void*)Thrp_local_HDF5  , (void*)corrThp_local  , 0, uOrd, its, info.Ntsink, proj, thrp_sign, THRP_LOCAL);
+	    K_contract->copyThrpToHDF5_Buf((void*)Thrp_noether_HDF5, (void*)corrThp_noether, 0, uOrd, its, info.Ntsink, proj, thrp_sign, THRP_NOETHER);
+	    for(int mu = 0;mu<4;mu++)
+	      K_contract->copyThrpToHDF5_Buf((void*)Thrp_oneD_HDF5[mu],(void*)corrThp_oneD ,mu, uOrd, its, info.Ntsink, proj, thrp_sign, THRP_ONED);
+
+	    printfQuda("Three-point function for part 1, source = %d at sink-source = %d copied to HDF5 write buffers.\n",isource,info.tsinkSource[its]);
 	  }
 
-	////////////////// Contractions for part 2 ////////////////
-	t1 = MPI_Wtime();
-	if(NUCLEON == PROTON)
-	  K_contract->contractFixSink(*K_seqProp, *K_prop_down, *K_gaugeContractions, corrThp_local, corrThp_noether, corrThp_oneD, PID, NUCLEON, 2, isource);
-	if(NUCLEON == NEUTRON)
-	  K_contract->contractFixSink(*K_seqProp, *K_prop_up  , *K_gaugeContractions, corrThp_local, corrThp_noether, corrThp_oneD, PID, NUCLEON, 2, isource);
-	t2 = MPI_Wtime();
-	printfQuda("Time for fix sink contractions for part 2, source = %d at sink-source = %d is %f sec\n",isource,info.tsinkSource[its],t2-t1);
-
-	if( strcmp(info.corr_file_format,"ASCII")==0 ){
-	  K_contract->writeThrp_ASCII(corrThp_local, corrThp_noether, corrThp_oneD, NUCLEON, 2, filename_threep_base, isource, info.tsinkSource[its]);
-	  printfQuda("Three-point function for part 2, source = %d at sink-source = %d written in ASCII format.\n",isource,info.tsinkSource[its]);
-	}
-	else if( strcmp(info.corr_file_format,"HDF5")==0 ){
-	  int uOrd;
-	  if(NUCLEON == PROTON ) uOrd = 1;
-	  if(NUCLEON == NEUTRON) uOrd = 0;
-
-	  int thrp_sign = ( info.tsinkSource[its] + GK_sourcePosition[isource][3] ) >= GK_totalL[3] ? -1 : +1;
-
-  	  K_contract->copyThrpToHDF5_Buf((void*)Thrp_local_HDF5  , (void*)corrThp_local  , 0, uOrd, its, info.Ntsink, thrp_sign, THRP_LOCAL);
- 	  K_contract->copyThrpToHDF5_Buf((void*)Thrp_noether_HDF5, (void*)corrThp_noether, 0, uOrd, its, info.Ntsink, thrp_sign, THRP_NOETHER);
- 	  for(int mu = 0;mu<4;mu++)
- 	    K_contract->copyThrpToHDF5_Buf((void*)Thrp_oneD_HDF5[mu],(void*)corrThp_oneD ,mu, uOrd, its, info.Ntsink, thrp_sign, THRP_ONED);
+	  /////////////////////////////////////////sequential propagator for the part 2
+	  for(int nu = 0 ; nu < 4 ; nu++)
+	    for(int c2 = 0 ; c2 < 3 ; c2++){
+	      t1 = MPI_Wtime();
+	      K_temp->zero_device();
+	      if(NUCLEON == PROTON){
+		if( (my_fixSinkTime >= 0) && ( my_fixSinkTime < X[3] ) ) K_contract->seqSourceFixSinkPart2(*K_temp,*K_prop3D_up, my_fixSinkTime, nu, c2, PID, NUCLEON);}
+	      else if(NUCLEON == NEUTRON){
+		if( (my_fixSinkTime >= 0) && ( my_fixSinkTime < X[3] ) ) K_contract->seqSourceFixSinkPart2(*K_temp,*K_prop3D_down, my_fixSinkTime, nu, c2, PID, NUCLEON);}
+	      comm_barrier();
+	      K_temp->conjugate();
+	      K_temp->apply_gamma5();
+	      K_vector->castFloatToDouble(*K_temp);
+	      //
+	      K_vector->scaleVector(1e+10);
+	      //
+	      K_guess->gaussianSmearing(*K_vector,*K_gaugeSmeared);
+	      if(NUCLEON == PROTON){
+		b->changeTwist(QUDA_TWIST_PLUS); x->changeTwist(QUDA_TWIST_PLUS); b->Even().changeTwist(QUDA_TWIST_PLUS);
+		b->Odd().changeTwist(QUDA_TWIST_PLUS); x->Even().changeTwist(QUDA_TWIST_PLUS); x->Odd().changeTwist(QUDA_TWIST_PLUS);
+	      }
+	      else{
+		b->changeTwist(QUDA_TWIST_MINUS); x->changeTwist(QUDA_TWIST_MINUS); b->Even().changeTwist(QUDA_TWIST_MINUS);
+		b->Odd().changeTwist(QUDA_TWIST_MINUS); x->Even().changeTwist(QUDA_TWIST_MINUS); x->Odd().changeTwist(QUDA_TWIST_MINUS);
+	      }
+	      K_guess->uploadToCuda(b,flag_eo);
+	      dirac.prepare(in,out,*x,*b,param->solution_type);
 	  
-	  printfQuda("Three-point function for part 2, source = %d at sink-source = %d copied to HDF5 write buffers.\n",isource,info.tsinkSource[its]);
-	}
+	      cudaColorSpinorField *tmp = new cudaColorSpinorField(*in);
+	      dirac.Mdag(*in, *tmp);
+	      delete tmp;
+	      K_vector->downloadFromCuda(in,flag_eo);
+	      K_vector->download();
+	      if(NUCLEON == PROTON)
+		deflation_up->deflateVector(*K_guess,*K_vector);
+	      else if(NUCLEON == NEUTRON)
+		deflation_down->deflateVector(*K_guess,*K_vector);
+	      K_guess->uploadToCuda(out,flag_eo); // initial guess is ready
+	      (*solve)(*out,*in);
+	      dirac.reconstruct(*x,*b,param->solution_type);
+	      K_vector->downloadFromCuda(x,flag_eo);
+	      if (param->mass_normalization == QUDA_MASS_NORMALIZATION || param->mass_normalization == QUDA_ASYMMETRIC_MASS_NORMALIZATION) {
+		K_vector->scaleVector(2*param->kappa);
+	      }
+	      //
+	      K_vector->scaleVector(1e-10);
+	      //
+	      K_temp->castDoubleToFloat(*K_vector);
+	      K_seqProp->absorbVectorToDevice(*K_temp,nu,c2);
+	      t2 = MPI_Wtime();
+	      printfQuda("Inversion time for seq prop part 2 = %d, source = %d at sink-source = %d, projector %s is: %f sec\n",nu*3+c2,isource,info.tsinkSource[its],proj_str,t2-t1);
+	    }
 
+	  ////////////////// Contractions for part 2 ////////////////
+	  t1 = MPI_Wtime();
+	  if(NUCLEON == PROTON)
+	    K_contract->contractFixSink(*K_seqProp, *K_prop_down, *K_gaugeContractions, corrThp_local, corrThp_noether, corrThp_oneD, PID, NUCLEON, 2, isource);
+	  if(NUCLEON == NEUTRON)
+	    K_contract->contractFixSink(*K_seqProp, *K_prop_up  , *K_gaugeContractions, corrThp_local, corrThp_noether, corrThp_oneD, PID, NUCLEON, 2, isource);
+	  t2 = MPI_Wtime();
+	  printfQuda("Time for fix sink contractions for part 2, source = %d at sink-source = %d, projector %s: %f sec\n",isource,info.tsinkSource[its],proj_str,t2-t1);
+
+	  if( strcmp(info.corr_file_format,"ASCII")==0 ){
+	    K_contract->writeThrp_ASCII(corrThp_local, corrThp_noether, corrThp_oneD, NUCLEON, 2, filename_threep_base, isource, info.tsinkSource[its]);
+	    printfQuda("Three-point function for part 2, source = %d at sink-source = %d, projector %s written in ASCII format.\n",isource,info.tsinkSource[its],proj_str);
+	  }
+	  else if( strcmp(info.corr_file_format,"HDF5")==0 ){
+	    int uOrd;
+	    if(NUCLEON == PROTON ) uOrd = 1;
+	    if(NUCLEON == NEUTRON) uOrd = 0;
+
+	    int thrp_sign = ( info.tsinkSource[its] + GK_sourcePosition[isource][3] ) >= GK_totalL[3] ? -1 : +1;
+
+	    K_contract->copyThrpToHDF5_Buf((void*)Thrp_local_HDF5  , (void*)corrThp_local  , 0, uOrd, its, info.Ntsink, proj, thrp_sign, THRP_LOCAL);
+	    K_contract->copyThrpToHDF5_Buf((void*)Thrp_noether_HDF5, (void*)corrThp_noether, 0, uOrd, its, info.Ntsink, proj, thrp_sign, THRP_NOETHER);
+	    for(int mu = 0;mu<4;mu++)
+	      K_contract->copyThrpToHDF5_Buf((void*)Thrp_oneD_HDF5[mu],(void*)corrThp_oneD ,mu, uOrd, its, info.Ntsink, proj, thrp_sign, THRP_ONED);
+	  
+	    printfQuda("Three-point function for part 2, source = %d at sink-source = %d copied to HDF5 write buffers.\n",isource,info.tsinkSource[its]);
+	  }
+
+	}//-loop over projectors
       }//-loop over sink-source separations      
 
       //-C.K. Write the three-point function in HDF5 format

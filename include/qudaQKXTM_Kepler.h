@@ -17,6 +17,7 @@
 #define MAX_NMOMENTA 1000
 #define MAX_TSINK 10
 #define MAX_DEFLSTEPS 10
+#define MAX_PROJS 5
 
 #define LEXIC(it,iz,iy,ix,L) ( (it)*L[0]*L[1]*L[2] + (iz)*L[0]*L[1] + (iy)*L[0] + (ix) )
 #define LEXIC_TZY(it,iz,iy,L) ( (it)*L[1]*L[2] + (iz)*L[1] + (iy) )
@@ -43,12 +44,15 @@ namespace quda {
     int Q_sq;
     int Q_sq_loop;
     int Ntsink;
+    int Nproj;
     int traj;
     bool check_files;
     char *thrp_type[3];
+    char *thrp_proj_type[5];
     char *baryon_type[10];
     char *meson_type[10];
     int tsinkSource[MAX_TSINK];
+    int proj_list[MAX_PROJS];
     int run3pt_src[MAX_NSOURCES];
     char corr_file_format[257];
     SOURCE_T source_type;
@@ -328,7 +332,7 @@ template<typename Float>
 			void *corrThp_local_reduced, void *corrThp_noether_reduced, void *corrThp_oneD_reduced, WHICHPROJECTOR typeProj , WHICHPARTICLE testParticle, int partFlag, int isource);
 
    void writeThrp_ASCII(void *corrThp_local, void *corrThp_noether, void *corrThp_oneD, WHICHPARTICLE testParticle, int partflag , char *filename_out, int isource, int tsinkMtsource);
-   void copyThrpToHDF5_Buf(void *Thrp_HDF5, void *corrThp,  int mu, int uORd, int its, int Nsink, int thrp_sign, THRP_TYPE type);
+   void copyThrpToHDF5_Buf(void *Thrp_HDF5, void *corrThp,  int mu, int uORd, int its, int Nsink, int pr, int thrp_sign, THRP_TYPE type);
    void writeThrp_HDF5(void *Thrp_local_HDF5, void *Thrp_noether_HDF5, void **Thrp_oneD_HDF5, char *filename, qudaQKXTMinfo_Kepler info, int isource);
  };
 }
@@ -357,7 +361,7 @@ void calcEigenVectors_loop_wOneD_FullOp(void **gaugeToPlaquette, QudaInvertParam
 void calcEigenVectors_loop_wOneD_EvenOdd(void **gaugeToPlaquette, QudaInvertParam *param ,QudaGaugeParam *gauge_param,  quda::qudaQKXTM_arpackInfo arpackInfo, quda::qudaQKXTM_loopInfo loopInfo, quda::qudaQKXTMinfo_Kepler info);
 
 void calcEigenVectors_threepTwop_EvenOdd(void **gaugeSmeared, void **gauge, QudaGaugeParam *gauge_param, QudaInvertParam *param, quda::qudaQKXTM_arpackInfo arpackInfo, quda::qudaQKXTMinfo_Kepler info,
-					char *filename_twop, char *filename_threep, quda::WHICHPARTICLE NUCLEON, quda::WHICHPROJECTOR PID );
+					char *filename_twop, char *filename_threep, quda::WHICHPARTICLE NUCLEON);
 void calcEigenVectors_threepTwop_FullOp(void **gaugeSmeared, void **gauge, QudaGaugeParam *gauge_param, QudaInvertParam *param, quda::qudaQKXTM_arpackInfo arpackInfo, quda::qudaQKXTMinfo_Kepler info,
 					char *filename_twop, char *filename_threep, quda::WHICHPARTICLE NUCLEON, quda::WHICHPROJECTOR PID );
 

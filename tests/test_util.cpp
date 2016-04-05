@@ -1602,6 +1602,9 @@ char pathEigenVectorsDown[257] = "ev_d.0000";
 char pathEigenValuesUp[257] = "evals_u.dat";
 char pathEigenValuesDown[257] = "evals_d.dat";
 
+int Nproj = 1;
+char proj_list_file[257] = "default";
+
 
 //-C.K. ARPACK Parameters
 int PolyDeg = 100;     // degree of the Chebysev polynomial
@@ -1737,6 +1740,7 @@ void usage(char** argv )
   printf("    --pathListSourcePositions                 # Path where the list with the source positions is (default \" listSourcePositions.txt \")\n");
   printf("    --corr_file_format                        # file format for the 2pt-3pt functions, ASCII/HDF5 (default \"ASCII_format\")\n");
   printf("    --check_corr_files                        # check if 2pt-functions exist to avoid reproducing (default \"no\")\n");
+  printf("    --proj_list                               # path to a file-list of projectors for 3pt function (default: only G4)\n");
 
   //-C.K. Loop INPUT
   printf("    --Q_sqMax_loop                            # The maximum Q^2 momentum (loop) (default 0)\n");
@@ -2514,6 +2518,17 @@ int process_command_line_option(int argc, char** argv, int* idx)
     ret = 0;
     goto out;
   }
+
+  if( strcmp(argv[i], "--proj_list") == 0){
+    if (i+1 >= argc){
+      usage(argv);
+    }     
+    strcpy(proj_list_file, argv[i+1]);
+    i++;
+    ret = 0;
+    goto out;
+  }
+
 
   //=============================================================================
 
