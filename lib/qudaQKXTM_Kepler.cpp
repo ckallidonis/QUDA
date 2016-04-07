@@ -3458,6 +3458,11 @@ void QKXTM_Deflation_Kepler<Float>::polynomialOperator(cudaColorSpinorField &out
 template<typename Float>
 void QKXTM_Deflation_Kepler<Float>::eigenSolver(){
 
+  if(NeV==0){
+    printfQuda("eigenSolver: Got NeV=%d. Returning...\n",NeV);
+    return;
+  }
+
   //-print the input:
 
   char *which_evals_req;

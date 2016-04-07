@@ -426,7 +426,10 @@ int main(int argc, char **argv)
   info.Ntsink = Ntsink;
 
   //-C.K: Determine for which projectors to run for the 3pt
-  if(strcmp(proj_list_file,"default")==0) info.proj_list[0] = 0; // Do only the G4 projector
+  if(strcmp(proj_list_file,"default")==0){  // Do only the G4 projector
+    info.proj_list[0] = 0;
+    info.Nproj = Nproj;
+  }
   else{
     FILE *proj_ptr;
     if( (proj_ptr = fopen(proj_list_file,"r")) == NULL ){
