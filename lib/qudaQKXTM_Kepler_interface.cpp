@@ -3693,10 +3693,15 @@ void calcEigenVectors_threepTwop_EvenOdd(void **gaugeSmeared, void **gauge, Quda
 
   printfQuda("Will write the correlation functions in %s format\n",info.corr_file_format);
 
-  int Nproj = info.Nproj;
-  printfQuda("Will run the three-point function for the following %d projector(s):\n",Nproj);
-  for(int p=0;p<Nproj;p++) printfQuda(" %s\n",info.thrp_proj_type[info.proj_list[p]]);
 
+  printfQuda("Will run the three-point function for the following projector(s):\n");
+  int NprojMax = 0;
+  for(int its=0;its<info.Ntsink;its++){
+    if(info.Nproj[its] >= NprojMax) NprojMax = info.Nproj[its];
+
+    printfQuda(" tsink = %d:\n",info.tsinkSource[its]);
+    for(int p=0;p<info.Nproj[its];p++) printfQuda("  %s\n",info.thrp_proj_type[info.proj_list[its][p]]);
+  }
 
   //-Allocate the Three-Point function data Buffers
   double *corrThp_local   = (double*) calloc(GK_localL[3]*GK_Nmoms*16*2,sizeof(double));
@@ -3719,17 +3724,17 @@ void calcEigenVectors_threepTwop_EvenOdd(void **gaugeSmeared, void **gauge, Quda
   double *Twop_mesons_HDF5 = NULL;
 
   if( strcmp(info.corr_file_format,"HDF5")==0 ){
-    if( (Thrp_local_HDF5   = (double*) malloc(2*16*GK_localL[3]*GK_Nmoms*2*info.Ntsink*Nproj*sizeof(double)))==NULL ) errorQuda("Cannot allocate memory for Thrp_local_HDF5.\n");
-    if( (Thrp_noether_HDF5 = (double*) malloc(2* 4*GK_localL[3]*GK_Nmoms*2*info.Ntsink*Nproj*sizeof(double)))==NULL ) errorQuda("Cannot allocate memory for Thrp_noether_HDF5.\n");
+    if( (Thrp_local_HDF5   = (double*) malloc(2*16*GK_localL[3]*GK_Nmoms*2*info.Ntsink*NprojMax*sizeof(double)))==NULL ) errorQuda("Cannot allocate memory for Thrp_local_HDF5.\n");
+    if( (Thrp_noether_HDF5 = (double*) malloc(2* 4*GK_localL[3]*GK_Nmoms*2*info.Ntsink*NprojMax*sizeof(double)))==NULL ) errorQuda("Cannot allocate memory for Thrp_noether_HDF5.\n");
 
-    memset(Thrp_local_HDF5  , 0, 2*16*GK_localL[3]*GK_Nmoms*2*info.Ntsink*Nproj*sizeof(double));
-    memset(Thrp_noether_HDF5, 0, 2* 4*GK_localL[3]*GK_Nmoms*2*info.Ntsink*Nproj*sizeof(double));
+    memset(Thrp_local_HDF5  , 0, 2*16*GK_localL[3]*GK_Nmoms*2*info.Ntsink*NprojMax*sizeof(double));
+    memset(Thrp_noether_HDF5, 0, 2* 4*GK_localL[3]*GK_Nmoms*2*info.Ntsink*NprojMax*sizeof(double));
 
     if( (Thrp_oneD_HDF5 = (double**) malloc(4*sizeof(double*))) == NULL ) errorQuda("Cannot allocate memory for Thrp_oneD_HDF5.\n");
     for(int mu=0;mu<4;mu++){
-      if( (Thrp_oneD_HDF5[mu] = (double*) malloc(2*16*GK_localL[3]*GK_Nmoms*2*info.Ntsink*Nproj*sizeof(double)))==NULL ) errorQuda("Cannot allocate memory for Thrp_oned_HDF5[%d].\n",mu);
+      if( (Thrp_oneD_HDF5[mu] = (double*) malloc(2*16*GK_localL[3]*GK_Nmoms*2*info.Ntsink*NprojMax*sizeof(double)))==NULL ) errorQuda("Cannot allocate memory for Thrp_oned_HDF5[%d].\n",mu);
 
-      memset(Thrp_oneD_HDF5[mu], 0, 2*16*GK_localL[3]*GK_Nmoms*2*info.Ntsink*Nproj*sizeof(double));
+      memset(Thrp_oneD_HDF5[mu], 0, 2*16*GK_localL[3]*GK_Nmoms*2*info.Ntsink*NprojMax*sizeof(double));
     }
 
     if( (Twop_baryons_HDF5 = (double*) malloc(2*16*GK_localL[3]*GK_Nmoms*2*N_BARYONS*sizeof(double)))==NULL ) errorQuda("Cannot allocate memory for Twop_baryons_HDF5.\n");
@@ -3893,10 +3898,10 @@ void calcEigenVectors_threepTwop_EvenOdd(void **gaugeSmeared, void **gauge, Quda
 	printfQuda("Time needed to prepare the 3D props for sink-source[%d]=%d is %f sec\n",its,info.tsinkSource[its],t2-t1);
 
 
-	for(int proj=0;proj<Nproj;proj++){
-	  WHICHPROJECTOR PID = (WHICHPROJECTOR) info.proj_list[proj];
+	for(int proj=0;proj<info.Nproj[its];proj++){
+	  WHICHPROJECTOR PID = (WHICHPROJECTOR) info.proj_list[its][proj];
 	  char *proj_str;
-	  asprintf(&proj_str,"%s",info.thrp_proj_type[info.proj_list[proj]]);
+	  asprintf(&proj_str,"%s",info.thrp_proj_type[info.proj_list[its][proj]]);
 
 	  if( strcmp(info.corr_file_format,"ASCII")==0 ){
 	    asprintf(&filename_threep_base,"%s_tsink%d_proj%s",filename_threep,info.tsinkSource[its],proj_str);

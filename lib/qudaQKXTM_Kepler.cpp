@@ -2126,9 +2126,9 @@ void QKXTM_Contraction_Kepler<Float>::writeThrp_HDF5(void *Thrp_local_HDF5, void
       start[1] = 0; //
       start[2] = 0; //-These are common among all ranks
 
-      for(int ipr=0;ipr<info.Nproj;ipr++){
+      for(int ipr=0;ipr<info.Nproj[its];ipr++){
 	char *group4_tag;
-	asprintf(&group4_tag,"proj_%s",info.thrp_proj_type[info.proj_list[ipr]]);
+	asprintf(&group4_tag,"proj_%s",info.thrp_proj_type[info.proj_list[its][ipr]]);
 	group4_id = H5Gcreate(group3_id, group4_tag, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
       
 	for(int part=0;part<2;part++){
@@ -2260,7 +2260,7 @@ void QKXTM_Contraction_Kepler<Float>::writeThrp_HDF5(void *Thrp_local_HDF5, void
 	start[1] = 0;
 	start[2] = 0;
 
-	for(int ipr=0;ipr<info.Nproj;ipr++){
+	for(int ipr=0;ipr<info.Nproj[its];ipr++){
 	  for(int part=0;part<2;part++){
 	    for(int thrp_int=0;thrp_int<3;thrp_int++){
 	      THRP_TYPE type = (THRP_TYPE) thrp_int;
@@ -2283,7 +2283,7 @@ void QKXTM_Contraction_Kepler<Float>::writeThrp_HDF5(void *Thrp_local_HDF5, void
 		    char *group_tag;
 		    asprintf(&group_tag,"conf_%04d/sx%02dsy%02dsz%02dst%02d/tsink_%02d/proj_%s/%s/%s/mom_xyz_%+d_%+d_%+d/dir_%02d",info.traj,
 			     GK_sourcePosition[isource][0],GK_sourcePosition[isource][1],GK_sourcePosition[isource][2],GK_sourcePosition[isource][3],
-			     tsink, info.thrp_proj_type[info.proj_list[ipr]], (part==0) ? "up" : "down", info.thrp_type[thrp_int], GK_moms[imom][0], GK_moms[imom][1], GK_moms[imom][2], mu);
+			     tsink, info.thrp_proj_type[info.proj_list[its][ipr]], (part==0) ? "up" : "down", info.thrp_type[thrp_int], GK_moms[imom][0], GK_moms[imom][1], GK_moms[imom][2], mu);
 		    hid_t group_id = H5Gopen(file_idt, group_tag, H5P_DEFAULT);
 
 		    hid_t dset_id  = H5Dopen(group_id, "threep", H5P_DEFAULT);
@@ -2308,9 +2308,9 @@ void QKXTM_Contraction_Kepler<Float>::writeThrp_HDF5(void *Thrp_local_HDF5, void
 		  else if(type==THRP_NOETHER) thrpBuf = (Float*)Thrp_noether_HDF5;
 
 		  char *group_tag;
-		  asprintf(&group_tag,"conf_%04d/sx%02dsy%02dsz%02dst%02d/tsink_%02d/%s/%s/mom_xyz_%+d_%+d_%+d",info.traj,
+		  asprintf(&group_tag,"conf_%04d/sx%02dsy%02dsz%02dst%02d/tsink_%02d/proj_%s/%s/%s/mom_xyz_%+d_%+d_%+d",info.traj,
 			   GK_sourcePosition[isource][0],GK_sourcePosition[isource][1],GK_sourcePosition[isource][2],GK_sourcePosition[isource][3],
-			   tsink, (part==0) ? "up" : "down", info.thrp_type[thrp_int], GK_moms[imom][0], GK_moms[imom][1], GK_moms[imom][2]);
+			   tsink, info.thrp_proj_type[info.proj_list[its][ipr]], (part==0) ? "up" : "down", info.thrp_type[thrp_int], GK_moms[imom][0], GK_moms[imom][1], GK_moms[imom][2]);
 		  hid_t group_id = H5Gopen(file_idt, group_tag, H5P_DEFAULT);
 
 		  hid_t dset_id  = H5Dopen(group_id, "threep", H5P_DEFAULT);

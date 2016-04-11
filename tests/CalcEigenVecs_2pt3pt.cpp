@@ -423,24 +423,6 @@ int main(int argc, char **argv)
   else errorQuda("Undefined input for option --check_corr_files");
 
   strcpy(info.corr_file_format,corr_file_format);
-  info.Ntsink = Ntsink;
-
-  //-C.K: Determine for which projectors to run for the 3pt
-  if(strcmp(proj_list_file,"default")==0){  // Do only the G4 projector
-    info.proj_list[0] = 0;
-    info.Nproj = Nproj;
-  }
-  else{
-    FILE *proj_ptr;
-    if( (proj_ptr = fopen(proj_list_file,"r")) == NULL ){
-      fprintf(stderr,"Cannot open file %s for projectors \n",proj_list_file);
-      exit(-1);
-    }
-    fscanf(proj_ptr,"%d\n",&info.Nproj);
-    for(int p=0;p<info.Nproj;p++) fscanf(proj_ptr,"%d\n",&(info.proj_list[p]));
-    fclose(proj_ptr);
-  }
-  //--------------------------------------------------
 
   //-C.K: Determine for which source-positions to run for the 3pt
   if(strcmp(run3pt,"all")==0 || strcmp(run3pt,"ALL")==0){
@@ -486,11 +468,11 @@ int main(int argc, char **argv)
   fclose(ptr_sources);
   //--------------------------------------------------
 
-
   //-C.K: Read in the sink-source separations
+  info.Ntsink = Ntsink;
   FILE *ptr_tsink;
   ptr_tsink = fopen(pathList_tsink,"r");
-  if(ptr_sources == NULL){
+  if(ptr_tsink == NULL){
     fprintf(stderr,"Error opening file for sink-source separations\n");
     exit(-1);
   }
@@ -498,8 +480,35 @@ int main(int argc, char **argv)
     fscanf(ptr_tsink,"%d\n",&(info.tsinkSource[it]));
     printfQuda("Got source sink time separation %d: %d\n",it,info.tsinkSource[it]);
   }
-
   fclose(ptr_tsink);
+  //--------------------------------------------------
+
+  //-C.K: Determine for which projectors to run for the 3pt
+  if(strcmp(proj_list_file,"default")==0){
+    for(int i=0;i<Ntsink;i++){
+      info.proj_list[i][0] = 0;   // Do only the G4 projector for all tsink's
+      info.Nproj[i] = Nproj; // Nproj = 1 by default
+    }
+  }
+  else{
+    FILE *proj_ptr;
+    char *proj_file;
+    for(int it=0;it<Ntsink;it++){
+      asprintf(&proj_file,"%s_tsink%d.txt",proj_list_file,info.tsinkSource[it]);
+      if( (proj_ptr = fopen(proj_file,"r")) == NULL ){
+	fprintf(stderr,"Cannot open projector file %s for reading.\n Hint: Make sure that 1: it ends as _tsink%d.txt and 2: the input passed is truncated up to this string.\n",proj_file,info.tsinkSource[it]);
+	exit(-1);
+      }
+      
+      fscanf(proj_ptr,"%d",&(info.Nproj[it]));
+      for(int p=0;p<info.Nproj[it];p++) fscanf(proj_ptr,"%d\n",&(info.proj_list[it][p]));
+      
+      fclose(proj_ptr);
+    }
+  }
+  //--------------------------------------------------
+
+
 
   initQuda(device);
   init_qudaQKXTM_Kepler(&info);

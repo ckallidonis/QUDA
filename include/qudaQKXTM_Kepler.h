@@ -44,7 +44,7 @@ namespace quda {
     int Q_sq;
     int Q_sq_loop;
     int Ntsink;
-    int Nproj;
+    int Nproj[MAX_TSINK];
     int traj;
     bool check_files;
     char *thrp_type[3];
@@ -52,7 +52,7 @@ namespace quda {
     char *baryon_type[10];
     char *meson_type[10];
     int tsinkSource[MAX_TSINK];
-    int proj_list[MAX_PROJS];
+    int proj_list[MAX_TSINK][MAX_PROJS];
     int run3pt_src[MAX_NSOURCES];
     char corr_file_format[257];
     SOURCE_T source_type;
