@@ -3458,6 +3458,8 @@ void QKXTM_Deflation_Kepler<Float>::polynomialOperator(cudaColorSpinorField &out
 template<typename Float>
 void QKXTM_Deflation_Kepler<Float>::eigenSolver(){
 
+  double t1,t2,t_ini,t_fin;
+
   if(NeV==0){
     printfQuda("eigenSolver: Got NeV=%d. Returning...\n",NeV);
     return;
@@ -3642,6 +3644,8 @@ void QKXTM_Deflation_Kepler<Float>::eigenSolver(){
 
   bool checkIdo = true;
 
+  t_ini = MPI_Wtime();
+
   do{
 
 #ifndef MPI_COMMS 
@@ -3691,7 +3695,11 @@ void QKXTM_Deflation_Kepler<Float>::eigenSolver(){
   }
   else{ 
     nconv = iparam[4];
-    printfQuda("eigenSolver: Number of converged eigenvectors: %d\n", nconv);
+    printfQuda("eigenSolver: Number of converged eigenvalues: %d\n", nconv);
+    t_fin = MPI_Wtime();
+    printfQuda("eigenSolver: TIME_REPORT - Eigenvalue calculation: %f sec\n",t_fin-t_ini);
+    printfQuda("eigenSolver: Computing eigenvectors...\n");
+    t_ini = MPI_Wtime();
 
     //compute eigenvectors 
 #ifndef MPI_COMMS
@@ -3711,6 +3719,8 @@ void QKXTM_Deflation_Kepler<Float>::eigenSolver(){
       printfQuda("eigenSolver: Check the documentation of _neupd. \n");
     }
     else{ //report eiegnvalues and their residuals
+      t_fin = MPI_Wtime();
+      printfQuda("eigenSolver: TIME_REPORT - Eigenvector calculation: %f sec\n",t_fin-t_ini);
       printfQuda("Ritz Values and their errors\n");
       printfQuda("============================\n");
 
@@ -3723,7 +3733,6 @@ void QKXTM_Deflation_Kepler<Float>::eigenSolver(){
       }
 
       // SORT THE EIGENVALUES in ascending order based on their absolute value
-      double t1,t2;
       t1 = MPI_Wtime();
       quicksort(nconv,sorted_evals,sorted_evals_index);
       //sortAbs(sorted_evals,nconv,false,sorted_evals_index);
@@ -3776,6 +3785,7 @@ void QKXTM_Deflation_Kepler<Float>::eigenSolver(){
   //- calculate eigenvalues of the actual operator
   printfQuda("Eigenvalues of the %s Dirac operator:\n",isFullOp ? "Full" : "Even-Odd");
 
+  t1 = MPI_Wtime();
   ColorSpinorParam cpuParam3(helem_cplx,*param,GK_localL,!isFullOp);  // !!!!!!! please check that ipntr[0] does not change 
   cpuColorSpinorField *h_v3 = NULL;
   for(int i =0 ; i < NeV ; i++){
@@ -3789,6 +3799,8 @@ void QKXTM_Deflation_Kepler<Float>::eigenSolver(){
     printfQuda("Eval[%04d] = %+e  %+e    Residual: %+e\n",i,real(evals_cplx[i]),imag(evals_cplx[i]),sqrt(norma));
     delete h_v3;
   }
+  t2 = MPI_Wtime();
+  printfQuda("eigenSolver: TIME_REPORT - Eigenvalues of Dirac operator: %f sec\n",t2-t1);
 
   
 //   FILE *evec_ptr;
