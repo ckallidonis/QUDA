@@ -3734,8 +3734,8 @@ void QKXTM_Deflation_Kepler<Float>::eigenSolver(){
 
       // SORT THE EIGENVALUES in ascending order based on their absolute value
       t1 = MPI_Wtime();
-      quicksort(nconv,sorted_evals,sorted_evals_index);
-      //sortAbs(sorted_evals,nconv,false,sorted_evals_index);
+      //quicksort(nconv,sorted_evals,sorted_evals_index);
+      sortAbs(sorted_evals,nconv,false,sorted_evals_index);
       //Print sorted evals
       t2 = MPI_Wtime();
       printfQuda("Sorting time: %f sec\n",t2-t1);
