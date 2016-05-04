@@ -3084,6 +3084,8 @@ void QKXTM_Deflation_Kepler<Float>::MapEvenOddToFull(){
 
   if(!isFullOp) errorQuda("MapEvenOddToFull: This function only works with the Full Operator\n");
 
+  if(NeV==0) return;
+
   size_t bytes_eo = bytes_total_length_per_NeV/2;
   int size_eo = total_length_per_NeV/2;
 
@@ -3125,6 +3127,8 @@ template<typename Float>
 void QKXTM_Deflation_Kepler<Float>::MapEvenOddToFull(int i){
 
   if(!isFullOp) errorQuda("MapEvenOddToFull: This function only works with the Full Operator\n");
+
+  if(NeV==0) return;
 
   size_t bytes_eo = bytes_total_length_per_NeV/2;
   int size_eo = total_length_per_NeV/2;
@@ -4893,23 +4897,41 @@ void copyLoopToWriteBuf(Float *writeBuf, void *tmpBuf, int iPrint, int Q_sq, int
 
 //-C.K. This is a new function to print all the loops in ASCII format
 template<typename Float>
-void writeLoops_ASCII(Float *writeBuf, const char *Pref, qudaQKXTM_loopInfo loopInfo, int **momQsq, int type, int mu, bool exact_loop){
+void writeLoops_ASCII(Float *writeBuf, const char *Pref, qudaQKXTM_loopInfo loopInfo, int **momQsq, int type, int mu, bool exact_loop, bool useTSM, bool LowPrec){
   
+  if(exact_loop && useTSM) errorQuda("writeLoops_ASCII: Got conflicting options - exact_loop AND useTSM.\n");
+
   if(GK_timeRank >= 0 && GK_timeRank < GK_nProc[3] ){
     FILE *ptr;
     char file_name[512];
     char *lpart,*ptrVal;
-    int Nprint;
+    int Nprint,Ndump;
     int Nmoms = loopInfo.Nmoms;
 
     if(exact_loop) Nprint = 1;
-    else Nprint = loopInfo.Nprint;
+    else{
+      if(useTSM){
+	if(LowPrec){
+	  Nprint = loopInfo.TSM_NprintLP;
+	  Ndump  = loopInfo.TSM_NdumpLP; 
+	}
+	else{
+	  Nprint = loopInfo.TSM_NprintHP;
+	  Ndump  = loopInfo.TSM_NdumpHP; 
+	}
+      }
+      else{
+	Nprint = loopInfo.Nprint;
+	Ndump  = loopInfo.Ndump;
+      }
+    }
 
     for(int iPrint=0;iPrint<Nprint;iPrint++){
-      if(exact_loop) asprintf(&ptrVal,"%d_%d", GK_nProc[3], GK_timeRank);
-      else asprintf(&ptrVal,"%04d.%d_%d",(iPrint+1)*loopInfo.Ndump, GK_nProc[3], GK_timeRank);
+      if(exact_loop || useTSM) asprintf(&ptrVal,"%d_%d", GK_nProc[3], GK_timeRank);
+      else asprintf(&ptrVal,"%04d.%d_%d",(iPrint+1)*Ndump, GK_nProc[3], GK_timeRank);
 
-      sprintf(file_name, "%s_%s.loop.%s",Pref,loopInfo.loop_type[type],ptrVal);
+      if(useTSM) sprintf(file_name, "%s_%s%04d_%s.loop.%s", Pref, LowPrec ? "NLP" : "NHP", (iPrint+1)*Ndump, loopInfo.loop_type[type], ptrVal);
+      else sprintf(file_name, "%s_%s.loop.%s",Pref,loopInfo.loop_type[type],ptrVal);
 
       if(loopInfo.loop_oneD[type] && mu!=0) ptr = fopen(file_name,"a");
       else ptr = fopen(file_name,"w");
@@ -4975,19 +4997,37 @@ void getLoopWriteBuf(Float *writeBuf, Float *loopBuf, int iPrint, int Nmoms, int
 
 //-C.K: Funtion to write the loops in HDF5 format
 template<typename Float>
-void writeLoops_HDF5(Float *buf_std_uloc, Float *buf_gen_uloc, Float **buf_std_oneD, Float **buf_std_csvC, Float **buf_gen_oneD, Float **buf_gen_csvC, char *file_pref, qudaQKXTM_loopInfo loopInfo, int **momQsq, bool exact_loop){
+void writeLoops_HDF5(Float *buf_std_uloc, Float *buf_gen_uloc, Float **buf_std_oneD, Float **buf_std_csvC, Float **buf_gen_oneD, Float **buf_gen_csvC, char *file_pref, qudaQKXTM_loopInfo loopInfo, int **momQsq,
+		     bool exact_loop, bool useTSM, bool LowPrec){
+
+  if(exact_loop && useTSM) errorQuda("writeLoops_HDF5: Got conflicting options - exact_loop AND useTSM.\n");
 
   if(GK_timeRank >= 0 && GK_timeRank < GK_nProc[3] ){
     char fname[512];
-    int Nprint;
+    int Nprint,Ndump;
 
     if(exact_loop){
       Nprint = 1;
       sprintf(fname,"%s_Qsq%d.h5",file_pref,loopInfo.Qsq);
     }
     else{
-      Nprint = loopInfo.Nprint;
-      sprintf(fname,"%s_Ns%04d_step%04d_Qsq%d.h5",file_pref,loopInfo.Nstoch,loopInfo.Ndump,loopInfo.Qsq);
+      if(useTSM){
+	if(LowPrec){
+	  Nprint = loopInfo.TSM_NprintLP;
+	  Ndump  = loopInfo.TSM_NdumpLP;
+	  sprintf(fname,"%s_NLP%04d_step%04d_Qsq%d.h5",file_pref,loopInfo.TSM_NLP,Ndump,loopInfo.Qsq);
+	}
+	else{
+	  Nprint = loopInfo.TSM_NprintHP;
+	  Ndump  = loopInfo.TSM_NdumpHP;
+	  sprintf(fname,"%s_NHP%04d_step%04d_Qsq%d.h5",file_pref,loopInfo.TSM_NHP,Ndump,loopInfo.Qsq);
+	}	
+      }
+      else{
+	Nprint = loopInfo.Nprint;
+	Ndump  = loopInfo.Ndump;
+	sprintf(fname,"%s_Ns%04d_step%04d_Qsq%d.h5",file_pref,loopInfo.Nstoch,Ndump,loopInfo.Qsq);
+      }
     }
 
     double *loopBuf = NULL;
@@ -5019,7 +5059,11 @@ void writeLoops_HDF5(Float *buf_std_uloc, Float *buf_gen_uloc, Float **buf_std_o
 
       if(!exact_loop){
 	char *group2_tag;
-	asprintf(&group2_tag,"Nstoch_%04d",(iPrint+1)*loopInfo.Ndump);
+	if(useTSM){
+	  if(LowPrec) asprintf(&group2_tag,"NLP_%04d",(iPrint+1)*Ndump);
+	  else        asprintf(&group2_tag,"NHP_%04d",(iPrint+1)*Ndump);
+	}
+	else asprintf(&group2_tag,"Nstoch_%04d",(iPrint+1)*Ndump);
 	group2_id = H5Gcreate(group1_id, group2_tag, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
       }
 
@@ -5028,7 +5072,7 @@ void writeLoops_HDF5(Float *buf_std_uloc, Float *buf_gen_uloc, Float **buf_std_o
 	asprintf(&group3_tag,"%s",loopInfo.loop_type[it]);
 
 	if(exact_loop) group3_id = H5Gcreate(group1_id, group3_tag, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
-	else group3_id = H5Gcreate(group2_id, group3_tag, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+	else           group3_id = H5Gcreate(group2_id, group3_tag, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
 
 	for(int imom=0;imom<loopInfo.Nmoms;imom++){
 	  char *group4_tag;
@@ -5287,15 +5331,17 @@ void dumpVector(Float *vec, int is, char file_base[]){
   if(ptr == NULL) errorQuda("Cannot open file %s for deflated source\n",file_name);
 
 
-  for(int t=0;  t<GK_localL[3]; t++)
-    for(int z=0;  z<GK_localL[2]; z++)
-      for(int y=0;  y<GK_localL[1]; y++)
-	for(int x=0;  x<GK_localL[0]; x++)
-	  for(int mu=0; mu<4; mu++)
+  for(int t=0;  t<GK_localL[3]; t++){
+    int gt  = t+comm_coords(default_topo)[3]*GK_localL[3];
+    for(int z=0;  z<GK_localL[2]; z++){
+      for(int y=0;  y<GK_localL[1]; y++){
+	for(int x=0;  x<GK_localL[0]; x++){
+	  for(int mu=0; mu<4; mu++){
 	    for(int c1=0; c1<3; c1++){
 	      int pos = t*GK_localL[2]*GK_localL[1]*GK_localL[0]*4*3*2 + z*GK_localL[1]*GK_localL[0]*4*3*2 + y*GK_localL[0]*4*3*2 + x*4*3*2 + mu*3*2 + c1*2;
-	      fprintf(ptr,"%02d %02d %02d %02d %02d %02d %+16.15e %+16.15e\n",t,z,y,x,mu,c1,vec[pos+0],vec[pos+1]);
-	    }
+	      fprintf(ptr,"%02d %02d %02d %02d %02d %02d %+16.15e %+16.15e\n",gt,z,y,x,mu,c1,vec[pos+0],vec[pos+1]);
+	    }}}}}
+  }
 
   printf("Rank %d: Vector %s dumped\n",comm_rank(),file_name);
   fclose(ptr);

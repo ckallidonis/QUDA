@@ -1630,6 +1630,14 @@ int smethod = 1;
 char filename_dSteps[512]="none";
 char loop_file_format[257] = "ASCII";
 char source_type[257] = "random";
+bool useTSM = false;
+int TSM_NHP = 0;
+int TSM_NLP = 0;
+int TSM_NdumpHP = 0;
+int TSM_NdumpLP = 0;
+long int TSM_maxiter = 0;
+double TSM_tol = 0;
+
 
 //===========================================================================================================
 
@@ -1756,6 +1764,13 @@ void usage(char** argv )
   printf("    --loop_filename                           # File name to save loops (default \"loop\")\n");
   printf("    --loop_file_format                        # file format for the loops, ASCII/HDF5 (default \"ASCII_format\")\n");
   printf("    --source_type                             # Stochastic source type (unity/random) (default random)\n");
+  printf("    --useTSM                                  # Use (or not) the truncated solver method for the Full Operator (yes/no, default: no\n");
+  printf("    --TSM_NHP                                 # Number of High-precision sources for TSM\n");
+  printf("    --TSM_NLP                                 # Number of Low-precision sources for TSM\n");
+  printf("    --TSM_NdumpHP                              # Every how many High-precision sources to print for TSM\n");
+  printf("    --TSM_NdumpLP                              # Every how many Low-precision sources to print for TSM\n");
+  printf("    --TSM_maxiter                             # Set the iteration number as criterion for Low-precision sources for TSM\n");
+  printf("    --TSM_tol                                 # Set the CG tolerance as criterion for Low-precision sources for TSM\n");
 
   //-C.K. ARPACK INPUT
   printf("    --PolyDeg                                   # The degree of the polynomial Acceleration (default 100)\n");
@@ -2622,6 +2637,80 @@ int process_command_line_option(int argc, char** argv, int* idx)
     ret = 0;
     goto out;
   }
+
+  if( strcmp(argv[i], "--useTSM") ==0){
+    if(i+1 >= argc){
+      usage(argv);
+    }
+    if( strcmp(argv[i+1],"yes")==0 || strcmp(argv[i+1],"YES")==0 ) useTSM = true;
+    else if ( strcmp(argv[i+1],"no")==0 || strcmp(argv[i+1],"NO")==0 ) useTSM = false;
+    else usage(argv);
+    i++;
+    ret = 0;
+    goto out;
+  }
+
+  if( strcmp(argv[i], "--TSM_NHP") ==0){
+    if(i+1 >= argc){
+      usage(argv);
+    }
+    TSM_NHP = atoi(argv[i+1]);
+    i++;
+    ret = 0;
+    goto out;
+  }
+ 
+  if( strcmp(argv[i], "--TSM_NLP") ==0){
+    if(i+1 >= argc){
+      usage(argv);
+    }
+    TSM_NLP = atoi(argv[i+1]);
+    i++;
+    ret = 0;
+    goto out;
+  }
+ 
+  if( strcmp(argv[i], "--TSM_NdumpHP") ==0){
+    if(i+1 >= argc){
+      usage(argv);
+    }
+    TSM_NdumpHP = atoi(argv[i+1]);
+    i++;
+    ret = 0;
+    goto out;
+  }
+ 
+  if( strcmp(argv[i], "--TSM_NdumpLP") ==0){
+    if(i+1 >= argc){
+      usage(argv);
+    }
+    TSM_NdumpLP = atoi(argv[i+1]);
+    i++;
+    ret = 0;
+    goto out;
+  }
+ 
+  if( strcmp(argv[i], "--TSM_maxiter") ==0){
+    if(i+1 >= argc){
+      usage(argv);
+    }
+    TSM_maxiter = atoi(argv[i+1]);
+    i++;
+    ret = 0;
+    goto out;
+  }
+ 
+  if( strcmp(argv[i], "--TSM_tol") ==0){
+    if(i+1 >= argc){
+      usage(argv);
+    }
+    TSM_tol = atof(argv[i+1]);
+    i++;
+    ret = 0;
+    goto out;
+  }
+ 
+
 
   //=============================================================================
 

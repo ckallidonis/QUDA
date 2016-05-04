@@ -68,6 +68,13 @@ extern char loop_file_format[];
 extern int Ndump;
 extern int smethod;
 extern char filename_dSteps[];
+extern bool useTSM;
+extern int TSM_NHP;
+extern int TSM_NLP;
+extern int TSM_NdumpHP;
+extern int TSM_NdumpLP;
+extern int TSM_maxiter;
+extern int TSM_tol;
 
 //-C.K. ARPACK Parameters
 extern int PolyDeg;
@@ -474,23 +481,29 @@ int main(int argc, char **argv)
       loopInfo.deflStep[loopInfo.nSteps_defl-1] = nEv;
     }
   }
+
+  //- TSM parameters
+  loopInfo.useTSM = useTSM;
+  if(useTSM){
+    loopInfo.TSM_NHP = TSM_NHP;
+    loopInfo.TSM_NLP = TSM_NLP;
+    loopInfo.TSM_NdumpHP = TSM_NdumpHP;
+    loopInfo.TSM_NdumpLP = TSM_NdumpLP;
+
+    if(loopInfo.TSM_NHP%loopInfo.TSM_NdumpHP==0) loopInfo.TSM_NprintHP = loopInfo.TSM_NHP/loopInfo.TSM_NdumpHP;
+    else errorQuda("TSM_NdumpHP MUST divide TSM_NHP exactly! Exiting.\n");
+    if(loopInfo.TSM_NLP%loopInfo.TSM_NdumpLP==0) loopInfo.TSM_NprintLP = loopInfo.TSM_NLP/loopInfo.TSM_NdumpLP;
+    else errorQuda("TSM_NdumpLP MUST divide TSM_NLP exactly! Exiting.\n");
+
+    loopInfo.TSM_tol = TSM_tol;
+    loopInfo.TSM_maxiter = TSM_maxiter;
+    if( (TSM_maxiter==0) && (TSM_tol==0) ) errorQuda("Criterion for low-precision sources not set!\n");
+  }
   //-----------------------------------------------------------------------------------------
-
-
-
-
-
-
-
-
-
-
 
 
   if(isFullOp) calcEigenVectors_loop_wOneD_FullOp(gauge_Plaq, &inv_param, &gauge_param, arpackInfo, loopInfo, info);
   else         calcEigenVectors_loop_wOneD_EvenOdd(gauge_Plaq, &inv_param, &gauge_param, arpackInfo, loopInfo, info);
-
-  //  DeflateAndInvert_loop_w_One_Der(gauge_Plaq,&inv_param,&gauge_param,pathEigenValuesDown,pathEigenVectorsDown,loop_filename,NeV,Nstoch,seed,NdumpStep,info);
   
   freeGaugeQuda();
   if (dslash_type == QUDA_CLOVER_WILSON_DSLASH || dslash_type == QUDA_TWISTED_CLOVER_DSLASH) freeCloverQuda();

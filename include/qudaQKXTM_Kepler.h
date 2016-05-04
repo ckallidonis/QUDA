@@ -92,6 +92,15 @@ namespace quda {
     char file_format[512];
     char *loop_type[6]; // = {"Scalar", "dOp", "Loops", "LoopsCv", "LpsDw", "LpsDwCv"}
     bool loop_oneD[6];  // = { false  , false,  true   , true    ,  true  ,  true}
+    bool useTSM;
+    int TSM_NHP;
+    int TSM_NLP;
+    int TSM_NdumpHP;
+    int TSM_NdumpLP;
+    int TSM_NprintHP;
+    int TSM_NprintLP;
+    long int TSM_maxiter;
+    double TSM_tol;
   }qudaQKXTM_loopInfo;
 
 
