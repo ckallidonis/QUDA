@@ -74,7 +74,7 @@ extern int TSM_NLP;
 extern int TSM_NdumpHP;
 extern int TSM_NdumpLP;
 extern int TSM_maxiter;
-extern int TSM_tol;
+extern double TSM_tol;
 
 //-C.K. ARPACK Parameters
 extern int PolyDeg;

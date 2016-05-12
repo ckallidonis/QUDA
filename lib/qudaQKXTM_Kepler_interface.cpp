@@ -3429,8 +3429,10 @@ void calcEigenVectors_loop_wOneD_FullOp(void **gaugeToPlaquette, QudaInvertParam
     if(TSM_maxiter==0) param->tol = TSM_tol;            // Set the
     else if(TSM_tol==0) param->maxiter = TSM_maxiter;   // low-precision criterion
 
-    SolverParam solverParam(*param);                                         //
-    solve_LP = Solver::create(solverParam, m, mSloppy, mPre, profileInvert); // Create the low-precision solver
+    printfQuda("###################### param->tol = %e\n",param->tol);
+
+    SolverParam solverParam_LP(*param);                                         //
+    solve_LP = Solver::create(solverParam_LP, m, mSloppy, mPre, profileInvert); // Create the low-precision solver
 
     if(TSM_maxiter==0) param->tol = orig_tol;            // Set the
     else if(TSM_tol==0) param->maxiter = orig_maxiter;   // original, high-precision values
