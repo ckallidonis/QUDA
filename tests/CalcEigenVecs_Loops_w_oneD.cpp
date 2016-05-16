@@ -321,7 +321,7 @@ int main(int argc, char **argv)
     inv_param.clover_coeff = csw*inv_param.kappa;
   }
 
-  inv_param.verbosity = QUDA_SILENT;
+  inv_param.verbosity = QUDA_SUMMARIZE;
 
   // declare the dimensions of the communication grid
   initCommsGridQuda(4, gridsize_from_cmdline, NULL, NULL);

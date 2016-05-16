@@ -3422,6 +3422,7 @@ void calcEigenVectors_loop_wOneD_FullOp(void **gaugeToPlaquette, QudaInvertParam
   QKXTM_Vector_Kepler<double> *K_vector = new QKXTM_Vector_Kepler<double>(BOTH,VECTOR);
   QKXTM_Vector_Kepler<double> *K_srcdef = new QKXTM_Vector_Kepler<double>(BOTH,VECTOR);
 
+  // create the LP solver for TSM                                                                                                                                      
   Solver *solve_LP;
   if(useTSM){
     double orig_tol = param->tol;
@@ -3429,9 +3430,7 @@ void calcEigenVectors_loop_wOneD_FullOp(void **gaugeToPlaquette, QudaInvertParam
     if(TSM_maxiter==0) param->tol = TSM_tol;            // Set the
     else if(TSM_tol==0) param->maxiter = TSM_maxiter;   // low-precision criterion
 
-    printfQuda("###################### param->tol = %e\n",param->tol);
-
-    SolverParam solverParam_LP(*param);                                         //
+    SolverParam solverParam_LP(*param);                                                  //
     solve_LP = Solver::create(solverParam_LP, m, mSloppy, mPre, profileInvert); // Create the low-precision solver
 
     if(TSM_maxiter==0) param->tol = orig_tol;            // Set the
@@ -3869,7 +3868,6 @@ void calcEigenVectors_loop_wOneD_FullOp(void **gaugeToPlaquette, QudaInvertParam
   free(input_vector);
   free(output_vector);
   delete solve;
-  if(useTSM) delete solve_LP;
   delete d;
   delete dSloppy;
   delete dPre;
@@ -3880,10 +3878,14 @@ void calcEigenVectors_loop_wOneD_FullOp(void **gaugeToPlaquette, QudaInvertParam
   delete h_x;
   delete h_b;
   delete x;
-  if(useTSM) delete x_LP;
   delete b;
   delete tmp3;
   delete tmp4;
+
+  if(useTSM){
+    delete solve_LP;
+    delete x_LP;
+  }
 
   popVerbosity();
   saveTuneCache(getVerbosity());
