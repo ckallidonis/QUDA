@@ -498,6 +498,7 @@ int main(int argc, char **argv)
     loopInfo.TSM_tol = TSM_tol;
     loopInfo.TSM_maxiter = TSM_maxiter;
     if( (TSM_maxiter==0) && (TSM_tol==0) ) errorQuda("Criterion for low-precision sources not set!\n");
+    if(TSM_tol!=0) errorQuda("Setting the tolerance as low-precision criterion for Truncated Solver method not supported! Re-run using --TSM_maxiter <iter> as criterion.\n");
   }
   //-----------------------------------------------------------------------------------------
 
