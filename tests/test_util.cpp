@@ -1573,6 +1573,7 @@ double kappa = 0.161231;
 int traj;
 char latfile_smeared[257] = "";
 double csw = 1.57551;
+char verbosity_level[257] = "summarize";
 
 //-C.K. Correlation functions input parameters
 int src[4] = {0,0,0,0};
@@ -1726,6 +1727,7 @@ void usage(char** argv )
   printf("    --kappa                                   # Kappa value for a specific enseble (default 0.161231\n");
   printf("    --csw                                     # Clover csw coefficient (default 1.57551)\n");
   printf("    --load-gauge-smeared                      # Load smeared gauge field \"file\" (in LIME format)\n");
+  printf("    --verbosity-level                         # Verbosity level (verbose/summarize/silent, default: summarize)\n");
 
   //-C.K. Correlation function INPUT
   printf("    --x_source                                # Source position in x direction (default 0)\n");
@@ -2246,6 +2248,16 @@ int process_command_line_option(int argc, char** argv, int* idx)
       usage(argv);
     }     
     strcpy(latfile_smeared, argv[i+1]);
+    i++;
+    ret = 0;
+    goto out;
+  }
+
+  if( strcmp(argv[i], "--verbosity-level") == 0){
+    if (i+1 >= argc){
+      usage(argv);
+    }     
+    strcpy(verbosity_level, argv[i+1]);
     i++;
     ret = 0;
     goto out;

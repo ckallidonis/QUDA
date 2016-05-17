@@ -50,6 +50,7 @@ extern double mass; // mass of Dirac operator
 
 extern char latfile[];
 extern char latfile_smeared[];
+extern char verbosity_level[];
 extern int traj;
 
 extern void usage(char** );
@@ -321,7 +322,13 @@ int main(int argc, char **argv)
     inv_param.clover_coeff = csw*inv_param.kappa;
   }
 
-  inv_param.verbosity = QUDA_SUMMARIZE;
+  if(strcmp(verbosity_level,"verbose")==0)   inv_param.verbosity = QUDA_VERBOSE;
+  else if(strcmp(verbosity_level,"summarize")==0) inv_param.verbosity = QUDA_SUMMARIZE;
+  else if(strcmp(verbosity_level,"silent")==0)    inv_param.verbosity = QUDA_SILENT;
+  else{
+    warningQuda("Unknown verbosity level %s. Proceeding with QUDA_SUMMARIZE verbosity level\n",verbosity_level);
+    inv_param.verbosity = QUDA_SUMMARIZE;
+  }
 
   // declare the dimensions of the communication grid
   initCommsGridQuda(4, gridsize_from_cmdline, NULL, NULL);
