@@ -2934,7 +2934,9 @@ QKXTM_Deflation_Kepler<Float>::QKXTM_Deflation_Kepler(QudaInvertParam *param, qu
   flavor_sign = param->twist_flavor;
 
   if(NeV == 0){
-    warningQuda("Warning you choose zero eigenVectors\n");
+    printfQuda("###############################\n");
+    printfQuda("######### Got NeV = 0 #########\n");
+    printfQuda("###############################\n");
     return;
   }
 
@@ -2955,8 +2957,6 @@ QKXTM_Deflation_Kepler<Float>::QKXTM_Deflation_Kepler(QudaInvertParam *param, qu
 
   eigenValues = (Float*)malloc(2*NkV*sizeof(Float));
   if(eigenValues == NULL)errorQuda("Error: Out of memoery of eigenValues.\n");
-  
-  if(NeV == 0) return;
 
   DiracParam diracParam;
   setDiracParam(diracParam,param,!isFullOp);
@@ -5463,10 +5463,9 @@ void QKXTM_Deflation_Kepler<Float>::deflateSrcVec(QKXTM_Vector_Kepler<Float> &ve
   if(!isFullOp) errorQuda("deflateSrcVec: This function only works with the Full Operator\n");
   
   if(NeV_defl == 0){
-    printfQuda("NeV = %d. Will not deflate source vector!!!\n",NeV_defl);
+    printfQuda("NeV = %d. Will not deflate source vector!\n",NeV_defl);
     vec_defl.packVector((Float*) vec_in.H_elem());
     vec_defl.loadVector();
-
     return;
   }
 

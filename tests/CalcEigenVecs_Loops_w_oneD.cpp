@@ -70,6 +70,7 @@ extern int Ndump;
 extern int smethod;
 extern char filename_dSteps[];
 extern bool useTSM;
+extern bool fullOp_stochEO;
 extern int TSM_NHP;
 extern int TSM_NLP;
 extern int TSM_NdumpHP;
@@ -90,6 +91,20 @@ extern double amin;
 extern double amax;
 extern bool isEven;
 extern bool isFullOp;
+
+//-C.K. ARPACK Parameters if we are using full operator and even-odd preconditioning for the stochastic part
+extern int PolyDeg_EO;
+extern int nEv_EO;
+extern int nKv_EO;
+extern char *spectrumPart_EO;
+extern bool isACC_EO;
+extern double tolArpack_EO;
+extern int maxIterArpack_EO;
+extern char arpack_logfile_EO[];
+extern double amin_EO;
+extern double amax_EO;
+extern bool isEven_EO;
+extern bool isFullOp_EO;
 
 extern char source_type[];
 
@@ -160,7 +175,7 @@ int main(int argc, char **argv)
   QudaPrecision cuda_prec = prec;
   QudaPrecision cuda_prec_sloppy = prec_sloppy;
   QudaPrecision cuda_prec_precondition = QUDA_HALF_PRECISION;
-
+  //-----------------------------------------------------------------------------------------
 
   //-C.K. Pass ARPACK parameters to arpackInfo
   qudaQKXTM_arpackInfo arpackInfo;
@@ -188,6 +203,36 @@ int main(int argc, char **argv)
     exit(-1);
   }
   //-----------------------------------------------------------------------------------------
+
+  //-C.K. Pass ARPACK parameters to arpackInfoEO, if we are using full operator and even-odd preconditioning for the stochastic part
+  qudaQKXTM_arpackInfo arpackInfoEO;
+
+  if(isFullOp && fullOp_stochEO){
+    arpackInfoEO.PolyDeg = PolyDeg_EO;
+    arpackInfoEO.nEv = nEv_EO;
+    arpackInfoEO.nKv = nKv_EO;
+    arpackInfoEO.isACC = isACC_EO;
+    arpackInfoEO.tolArpack = tolArpack_EO;
+    arpackInfoEO.maxIterArpack = maxIterArpack_EO;
+    strcpy(arpackInfoEO.arpack_logfile,arpack_logfile_EO);
+    arpackInfoEO.amin = amin_EO;
+    arpackInfoEO.amax = amax_EO;
+    arpackInfoEO.isEven = isEven_EO;
+    arpackInfoEO.isFullOp = false; // by default
+
+    if(strcmp(spectrumPart_EO,"SR")==0)      arpackInfoEO.spectrumPart = SR;
+    else if(strcmp(spectrumPart_EO,"LR")==0) arpackInfoEO.spectrumPart = LR;
+    else if(strcmp(spectrumPart_EO,"SM")==0) arpackInfoEO.spectrumPart = SM;
+    else if(strcmp(spectrumPart_EO,"LM")==0) arpackInfoEO.spectrumPart = LM;
+    else if(strcmp(spectrumPart_EO,"SI")==0) arpackInfoEO.spectrumPart = SI;
+    else if(strcmp(spectrumPart_EO,"LI")==0) arpackInfoEO.spectrumPart = LI;
+    else{
+      printf("Error: Your spectrumPart option is suspicious\n");
+      exit(-1);
+    }
+  }
+  //-----------------------------------------------------------------------------------------
+
 
   QudaGaugeParam gauge_param = newQudaGaugeParam();
 
@@ -236,12 +281,10 @@ int main(int argc, char **argv)
   else inv_param.matpc_type = QUDA_MATPC_ODD_ODD_ASYMMETRIC;
 
   inv_param.solution_type = QUDA_MAT_SOLUTION;
-  if(isFullOp){
-    inv_param.solve_type = QUDA_NORMOP_SOLVE;
-  }
-  else{
-    inv_param.solve_type = QUDA_NORMOP_PC_SOLVE;
-  }
+
+  if(isFullOp && fullOp_stochEO) inv_param.solve_type = QUDA_NORMOP_PC_SOLVE;     // Use Even-Odd preconditioning for the stochastic part when using Full Operator
+  else if(isFullOp && !fullOp_stochEO) inv_param.solve_type = QUDA_NORMOP_SOLVE;  // Don't use Even-Odd preconditioning for the stochastic part when using Full Operator
+  else if (!isFullOp) inv_param.solve_type = QUDA_NORMOP_PC_SOLVE;                    // Using Even-Odd operator
 
   inv_param.dagger = QUDA_DAG_NO;
   inv_param.mass_normalization = QUDA_MASS_NORMALIZATION;
@@ -337,7 +380,6 @@ int main(int argc, char **argv)
   // *** application-specific.
 
   // set parameters for the reference Dslash, and prepare fields to be loaded
-
   setDims(gauge_param.X);
   setSpinorSiteSize(24);
 
@@ -396,7 +438,7 @@ int main(int argc, char **argv)
       clover = NULL;
     }
   }
-
+  //-----------------------------------------------------------------------------------------
 
   // start the timer
   double time0 = -((double)clock());
@@ -420,7 +462,6 @@ int main(int argc, char **argv)
   initQuda(device);
   init_qudaQKXTM_Kepler(&info);
   printf_qudaQKXTM_Kepler();
-
 
 
   // load the gauge field
@@ -448,6 +489,8 @@ int main(int argc, char **argv)
   loopInfo.smethod = smethod;
   strcpy(loopInfo.file_format,loop_file_format);
   strcpy(loopInfo.loop_fname,loop_fname);
+
+  loopInfo.fullOp_stochEO = fullOp_stochEO;
 
   if(loopInfo.Nstoch%loopInfo.Ndump==0) loopInfo.Nprint = loopInfo.Nstoch/loopInfo.Ndump;
   else errorQuda("NdumpStep MUST divide Nstoch exactly! Exiting.\n");
@@ -510,7 +553,7 @@ int main(int argc, char **argv)
   //-----------------------------------------------------------------------------------------
 
 
-  if(isFullOp) calcEigenVectors_loop_wOneD_FullOp(gauge_Plaq, &inv_param, &gauge_param, arpackInfo, loopInfo, info);
+  if(isFullOp) calcEigenVectors_loop_wOneD_FullOp(gauge_Plaq, &inv_param, &gauge_param, arpackInfo, arpackInfoEO, loopInfo, info);
   else         calcEigenVectors_loop_wOneD_EvenOdd(gauge_Plaq, &inv_param, &gauge_param, arpackInfo, loopInfo, info);
   
   freeGaugeQuda();

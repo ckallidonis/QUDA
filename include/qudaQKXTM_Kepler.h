@@ -93,6 +93,7 @@ namespace quda {
     char *loop_type[6]; // = {"Scalar", "dOp", "Loops", "LoopsCv", "LpsDw", "LpsDwCv"}
     bool loop_oneD[6];  // = { false  , false,  true   , true    ,  true  ,  true}
     bool useTSM;
+    bool fullOp_stochEO;
     int TSM_NHP;
     int TSM_NLP;
     int TSM_NdumpHP;
@@ -366,7 +367,7 @@ void DeflateAndInvert_threepTwop(void **gaugeSmeared, void **gauge, QudaInvertPa
 void calcEigenVectors(QudaInvertParam *param , quda::qudaQKXTM_arpackInfo arpackInfo);
 void calcEigenVectors_Check(QudaInvertParam *param , quda::qudaQKXTM_arpackInfo arpackInfo);
 
-void calcEigenVectors_loop_wOneD_FullOp(void **gaugeToPlaquette, QudaInvertParam *param ,QudaGaugeParam *gauge_param,  quda::qudaQKXTM_arpackInfo arpackInfo, quda::qudaQKXTM_loopInfo loopInfo, quda::qudaQKXTMinfo_Kepler info);
+void calcEigenVectors_loop_wOneD_FullOp(void **gaugeToPlaquette, QudaInvertParam *param ,QudaGaugeParam *gauge_param, quda::qudaQKXTM_arpackInfo arpackInfo, quda::qudaQKXTM_arpackInfo arpackInfoEO, quda::qudaQKXTM_loopInfo loopInfo, quda::qudaQKXTMinfo_Kepler info);
 void calcEigenVectors_loop_wOneD_EvenOdd(void **gaugeToPlaquette, QudaInvertParam *param ,QudaGaugeParam *gauge_param,  quda::qudaQKXTM_arpackInfo arpackInfo, quda::qudaQKXTM_loopInfo loopInfo, quda::qudaQKXTMinfo_Kepler info);
 
 void calcEigenVectors_threepTwop_EvenOdd(void **gaugeSmeared, void **gauge, QudaGaugeParam *gauge_param, QudaInvertParam *param, quda::qudaQKXTM_arpackInfo arpackInfo, quda::qudaQKXTMinfo_Kepler info,

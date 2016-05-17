@@ -2991,29 +2991,50 @@ void calcEigenVectors_loop_wOneD_EvenOdd(void **gaugeToPlaquette, QudaInvertPara
 }
 
 
-void calcEigenVectors_loop_wOneD_FullOp(void **gaugeToPlaquette, QudaInvertParam *param ,QudaGaugeParam *gauge_param,  qudaQKXTM_arpackInfo arpackInfo, qudaQKXTM_loopInfo loopInfo, qudaQKXTMinfo_Kepler info){
+void calcEigenVectors_loop_wOneD_FullOp(void **gaugeToPlaquette, QudaInvertParam *param ,QudaGaugeParam *gauge_param,
+					qudaQKXTM_arpackInfo arpackInfo, qudaQKXTM_arpackInfo arpackInfoEO, qudaQKXTM_loopInfo loopInfo, qudaQKXTMinfo_Kepler info){
 
   double t1,t2,t3,t4;
-  
-  profileInvert.TPSTART(QUDA_PROFILE_TOTAL);
-  if( (!arpackInfo.isFullOp) || (param->solve_type != QUDA_NORMOP_SOLVE) || (param->solution_type != QUDA_MAT_SOLUTION) ) errorQuda("calcEigenVectors_loop_wOneD_FullOp: This function works only with the Full Operator\n");
-  printfQuda("calcEigenVectors_loop_wOneD_FullOp: Solving for the FULL operator\n");
-  
-  if(param->inv_type != QUDA_CG_INVERTER) errorQuda("calcEigenVectors_loop_wOneD_FullOp: This function works only with CG method");
-  
-  if(param->gamma_basis != QUDA_UKQCD_GAMMA_BASIS) errorQuda("calcEigenVectors_loop_wOneD_FullOp: This function works only with ukqcd gamma basis\n");
-  if(param->dirac_order != QUDA_DIRAC_ORDER) errorQuda("calcEigenVectors_loop_wOneD_FullOp: This function works only with color-inside-spin\n");
-  
+
   if (!initialized) errorQuda("calcEigenVectors_loop_wOneD_FullOp: QUDA not initialized");
   pushVerbosity(param->verbosity);
   if (getVerbosity() >= QUDA_DEBUG_VERBOSE) printQudaInvertParam(param);
   
-  bool pc_solve = false;
-  bool mat_solution = (param->solution_type == QUDA_MAT_SOLUTION) || (param->solution_type ==  QUDA_MATPC_SOLUTION);
-  bool direct_solve = false;
-  
+  printfQuda("\n### calcEigenVectors_loop_wOneD_FullOp: Loop calculation begins now\n\n");
 
-  int NeV = arpackInfo.nEv;  
+  profileInvert.TPSTART(QUDA_PROFILE_TOTAL);
+  if( (param->matpc_type != QUDA_MATPC_EVEN_EVEN_ASYMMETRIC) && (param->matpc_type != QUDA_MATPC_ODD_ODD_ASYMMETRIC) ) errorQuda("Only asymmetric operators are supported in deflation\n");
+  if(param->inv_type != QUDA_CG_INVERTER) errorQuda("calcEigenVectors_loop_wOneD_FullOp: This function works only with CG method");  
+  if(param->gamma_basis != QUDA_UKQCD_GAMMA_BASIS) errorQuda("calcEigenVectors_loop_wOneD_FullOp: This function works only with ukqcd gamma basis\n");
+  if(param->dirac_order != QUDA_DIRAC_ORDER) errorQuda("calcEigenVectors_loop_wOneD_FullOp: This function works only with color-inside-spin\n");
+  if( arpackInfo.isEven    && (param->matpc_type != QUDA_MATPC_EVEN_EVEN_ASYMMETRIC) ) errorQuda("calcEigenVectors_loop_wOneD_FullOp: Inconsistency between operator types!");
+  if( (!arpackInfo.isEven) && (param->matpc_type != QUDA_MATPC_ODD_ODD_ASYMMETRIC) )   errorQuda("calcEigenVectors_loop_wOneD_FullOp: Inconsistency between operator types!");
+  
+  bool stochEO = loopInfo.fullOp_stochEO;
+  bool pc_solution = false; // Construct the full solution spinor
+
+  printfQuda("calcEigenVectors_loop_wOneD_FullOp: Solving the stochastic part using the %s operator\n", stochEO ? "Even-Odd" : "Full");
+
+  bool pc_solve;
+  bool flag_eo;
+  if(stochEO){
+    pc_solve = true;
+    if(arpackInfo.isEven){
+      printfQuda("calcEigenVectors_loop_wOneD_FullOp: Using the Even-Even Asymmetric operator\n");
+      flag_eo = true;
+    }
+    else{
+      printfQuda("calcEigenVectors_loop_wOneD_FullOp: Using the Odd-Odd Asymmetric operator\n");
+      flag_eo = false;
+    }
+  }
+  else{
+    flag_eo = false;
+    pc_solve = false;
+  }
+  //------------------------------------------------------------------------------------------------------------------
+
+
   int Nstoch = loopInfo.Nstoch;
   unsigned long int seed = loopInfo.seed;
   int Ndump = loopInfo.Ndump;
@@ -3036,12 +3057,8 @@ void calcEigenVectors_loop_wOneD_FullOp(void **gaugeToPlaquette, QudaInvertParam
   int TSM_NprintLP = loopInfo.TSM_NprintLP;
   long int TSM_maxiter = 0;
   double TSM_tol = 0.0;
-  if( (loopInfo.TSM_tol == 0) && (loopInfo.TSM_maxiter !=0 ) ){
-    TSM_maxiter = loopInfo.TSM_maxiter; // LP criterion fixed by iteration number
-  }
-  else if( (loopInfo.TSM_tol != 0) && (loopInfo.TSM_maxiter == 0) ){
-    TSM_tol = loopInfo.TSM_tol; // Lp criterion fixed by tolerance
-  }
+  if( (loopInfo.TSM_tol == 0) && (loopInfo.TSM_maxiter !=0 ) ) TSM_maxiter = loopInfo.TSM_maxiter; // LP criterion fixed by iteration number
+  else if( (loopInfo.TSM_tol != 0) && (loopInfo.TSM_maxiter == 0) ) TSM_tol = loopInfo.TSM_tol; // LP criterion fixed by tolerance
   else if( (loopInfo.TSM_tol != 0) && (loopInfo.TSM_maxiter != 0) ){
     warningQuda("Both max-iter and tolerance defined as criterions for the TSM. Proceeding with max-iter criterion.\n");
     TSM_maxiter = loopInfo.TSM_maxiter; // LP criterion fixed by iteration number
@@ -3263,6 +3280,8 @@ void calcEigenVectors_loop_wOneD_FullOp(void **gaugeToPlaquette, QudaInvertParam
   //=================================  E X A C T   P A R T  =================================//
   //=========================================================================================//
 
+  int NeV_Full = arpackInfo.nEv;  
+
   QKXTM_Deflation_Kepler<double> *deflation = new QKXTM_Deflation_Kepler<double>(param,arpackInfo);
   deflation->printInfo();
   
@@ -3277,7 +3296,7 @@ void calcEigenVectors_loop_wOneD_FullOp(void **gaugeToPlaquette, QudaInvertParam
   //- Calculate the exact part of the loop
   int iPrint = 0;
   int s = 0;
-  for(int n=0;n<NeV;n++){
+  for(int n=0;n<NeV_Full;n++){
     t1 = MPI_Wtime();
     deflation->Loop_w_One_Der_FullOp_Exact(n, param, gen_uloc, std_uloc, gen_oneD, std_oneD, gen_csvC, std_csvC);
     t2 = MPI_Wtime();
@@ -3337,7 +3356,7 @@ void calcEigenVectors_loop_wOneD_FullOp(void **gaugeToPlaquette, QudaInvertParam
       printfQuda("Writing the Exact part of the loops for NeV = %d completed.\n",n+1);
       s++;
     }//-if
-  }//-for NeV
+  }//-for NeV_Full
 
   //=========================================================================================//
   //============================  S T O C H A S T I C   P A R T  ============================//
@@ -3389,7 +3408,7 @@ void calcEigenVectors_loop_wOneD_FullOp(void **gaugeToPlaquette, QudaInvertParam
   memset(input_vector ,0,GK_localL[0]*GK_localL[1]*GK_localL[2]*GK_localL[3]*spinorSiteSize*sizeof(double));
   memset(output_vector,0,GK_localL[0]*GK_localL[1]*GK_localL[2]*GK_localL[3]*spinorSiteSize*sizeof(double));
 
-  ColorSpinorParam cpuParam(input_vector,*param,GK_localL,pc_solve);
+  ColorSpinorParam cpuParam(input_vector,*param,GK_localL, pc_solution);
   ColorSpinorField *h_b = (param->input_location == QUDA_CPU_FIELD_LOCATION) ?
     static_cast<ColorSpinorField*>(new cpuColorSpinorField(cpuParam)) :
     static_cast<ColorSpinorField*>(new cudaColorSpinorField(cpuParam));
