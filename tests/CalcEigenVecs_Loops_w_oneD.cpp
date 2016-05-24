@@ -218,7 +218,7 @@ int main(int argc, char **argv)
     arpackInfoEO.amin = amin_EO;
     arpackInfoEO.amax = amax_EO;
     arpackInfoEO.isEven = isEven_EO;
-    arpackInfoEO.isFullOp = false; // by default
+    arpackInfoEO.isFullOp = false; // by default we are not using the Full Operator, hard-coded
 
     if(strcmp(spectrumPart_EO,"SR")==0)      arpackInfoEO.spectrumPart = SR;
     else if(strcmp(spectrumPart_EO,"LR")==0) arpackInfoEO.spectrumPart = LR;
@@ -284,7 +284,7 @@ int main(int argc, char **argv)
 
   if(isFullOp && fullOp_stochEO) inv_param.solve_type = QUDA_NORMOP_PC_SOLVE;     // Use Even-Odd preconditioning for the stochastic part when using Full Operator
   else if(isFullOp && !fullOp_stochEO) inv_param.solve_type = QUDA_NORMOP_SOLVE;  // Don't use Even-Odd preconditioning for the stochastic part when using Full Operator
-  else if (!isFullOp) inv_param.solve_type = QUDA_NORMOP_PC_SOLVE;                    // Using Even-Odd operator
+  else if (!isFullOp) inv_param.solve_type = QUDA_NORMOP_PC_SOLVE;                // Using Even-Odd operator
 
   inv_param.dagger = QUDA_DAG_NO;
   inv_param.mass_normalization = QUDA_MASS_NORMALIZATION;

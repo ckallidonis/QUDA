@@ -2879,8 +2879,8 @@ public:
   void polynomialOperator(cudaColorSpinorField &out, const cudaColorSpinorField &in);
   void eigenSolver();
   void Loop_w_One_Der_FullOp_Exact(int n, QudaInvertParam *param, void *gen_uloc,void *std_uloc, void **gen_oneD, void **std_oneD, void **gen_csvC, void **std_csvC);
-  void deflateSrcVec(QKXTM_Vector_Kepler<Float> &vec_defl, QKXTM_Vector_Kepler<Float> &vec_in, int is);
-  void deflateSrcVec(QKXTM_Vector_Kepler<Float> &vec_defl, QKXTM_Vector_Kepler<Float> &vec_in, int is, int NeV_defl);
+  void projectVector(QKXTM_Vector_Kepler<Float> &vec_defl, QKXTM_Vector_Kepler<Float> &vec_in, int is);
+  void projectVector(QKXTM_Vector_Kepler<Float> &vec_defl, QKXTM_Vector_Kepler<Float> &vec_in, int is, int NeV_defl);
   void copyToEigenVector(Float *vec, Float *vals);
 };
 
@@ -2941,6 +2941,8 @@ QKXTM_Deflation_Kepler<Float>::QKXTM_Deflation_Kepler(QudaInvertParam *param, qu
   }
 
   invert_param = param;
+  if(isFullOp) invert_param->solve_type = QUDA_NORMOP_SOLVE;
+  else invert_param->solve_type = QUDA_NORMOP_PC_SOLVE;
 
   field_length = 4*3;
 
@@ -2959,7 +2961,7 @@ QKXTM_Deflation_Kepler<Float>::QKXTM_Deflation_Kepler(QudaInvertParam *param, qu
   if(eigenValues == NULL)errorQuda("Error: Out of memoery of eigenValues.\n");
 
   DiracParam diracParam;
-  setDiracParam(diracParam,param,!isFullOp);
+  setDiracParam(diracParam,invert_param,!isFullOp);
   diracOp = Dirac::create(diracParam);
 }
 
@@ -2976,16 +2978,16 @@ template<typename Float>
 void QKXTM_Deflation_Kepler<Float>::printInfo(){
   printfQuda("\n======= DEFLATION INFO =======\n"); 
   if(isFullOp){
-    printfQuda("  The EigenVectors are for the Full %smu operator\n", (flavor_sign==QUDA_TWIST_PLUS) ? "+" : "-");
+    printfQuda(" The EigenVectors are for the Full %smu operator\n", (flavor_sign==QUDA_TWIST_PLUS) ? "+" : "-");
   }
   else{
-    printfQuda("  Will calculate EigenVectors for the %s %smu operator\n", isEv ? "even-even" : "odd-odd", (flavor_sign==QUDA_TWIST_PLUS) ? "+" : "-" );
+    printfQuda(" Will calculate EigenVectors for the %s %smu operator\n", isEv ? "even-even" : "odd-odd", (flavor_sign==QUDA_TWIST_PLUS) ? "+" : "-" );
   }
 
-  printfQuda("  Number of requested EigenVectors is %d in precision %d\n",NeV,(int) sizeof(Float));
-  printfQuda("  The Size of Krylov space is %d\n",NkV);
+  printfQuda(" Number of requested EigenVectors is %d in precision %d\n",NeV,(int) sizeof(Float));
+  printfQuda(" The Size of Krylov space is %d\n",NkV);
 
-  printfQuda("  Allocated Gb for the eigenVectors space for each node are %lf and the pointer is %p\n",NeV * ( (double)bytes_total_length_per_NeV/((double) 1024.*1024.*1024.) ),h_elem);
+  printfQuda(" Allocated Gb for the eigenVectors space for each node are %lf and the pointer is %p\n",NeV * ( (double)bytes_total_length_per_NeV/((double) 1024.*1024.*1024.) ),h_elem);
   printfQuda("==============================\n");
 }
 //==================================================
@@ -3082,7 +3084,10 @@ void QKXTM_Deflation_Kepler<Float>::ApplyMdagM(Float *vec_out, Float *vec_in, Qu
 template<typename Float>
 void QKXTM_Deflation_Kepler<Float>::MapEvenOddToFull(){
 
-  if(!isFullOp) errorQuda("MapEvenOddToFull: This function only works with the Full Operator\n");
+  if(!isFullOp){
+    warningQuda("MapEvenOddToFull: This function only works with the Full Operator\n");
+    return;
+  }
 
   if(NeV==0) return;
 
@@ -3502,17 +3507,17 @@ void QKXTM_Deflation_Kepler<Float>::eigenSolver(){
     else if (spectrumPart==LI) which_evals = strdup("LI");    
   }
 
-  printfQuda("\neigenSolver: Input to eigenSolver ARPACK\n");
+  printfQuda("\neigenSolver: Input to ARPACK\n");
   printfQuda("========================================\n");
-  printfQuda("Number of Ritz eigenvalues requested: %d\n", NeV);
-  printfQuda("Size of Krylov space is: %d\n", NkV);
-  printfQuda("Part of the spectrum requested: %s\n", which_evals_req);
-  printfQuda("Part of the spectrum passed to ARPACK (may be different due to Poly. Acc.): %s\n", which_evals);
-  printfQuda("Polynomial acceleration: %s\n", isACC ? "yes" : "no");
-  if(isACC) printfQuda("Chebyshev polynomial paramaters: Degree = %d, amin = %+e, amax = %+e\n",PolyDeg,amin,amax); 
-  printfQuda("The convergence criterion is %+e\n", tolArpack);
-  printfQuda("Maximum number of iterations for ARPACK is %d\n",maxIterArpack);
-  printfQuda("========================================\n");
+  printfQuda(" Number of Ritz eigenvalues requested: %d\n", NeV);
+  printfQuda(" Size of Krylov space is: %d\n", NkV);
+  printfQuda(" Part of the spectrum requested: %s\n", which_evals_req);
+  printfQuda(" Part of the spectrum passed to ARPACK (may be different due to Poly. Acc.): %s\n", which_evals);
+  printfQuda(" Polynomial acceleration: %s\n", isACC ? "yes" : "no");
+  if(isACC) printfQuda(" Chebyshev polynomial paramaters: Degree = %d, amin = %+e, amax = %+e\n",PolyDeg,amin,amax); 
+  printfQuda(" The convergence criterion is %+e\n", tolArpack);
+  printfQuda(" Maximum number of iterations for ARPACK is %d\n",maxIterArpack);
+  printfQuda("========================================\n\n");
   //------------------------------------------------------------------------------------------------   
 
   
@@ -3525,14 +3530,10 @@ void QKXTM_Deflation_Kepler<Float>::eigenSolver(){
   char *bmat=strdup("I");  // Specifies that the right hand side matrix should be the identity matrix; this makes the problem a standard eigenvalue problem.
                                
   QudaInvertParam *param = invert_param;
-  //  bool pc_solution = ((param->solution_type == QUDA_MATPC_SOLUTION) ||  (param->solution_type == QUDA_MATPCDAG_MATPC_SOLUTION));
  
   //- matrix dimensions 
-  int LDV;
-  int N;
-  LDV = (GK_localVolume/fullorHalf)*4*3;
-  N   = (GK_localVolume/fullorHalf)*4*3;
-
+  int LDV = (GK_localVolume/fullorHalf)*4*3;
+  int N   = (GK_localVolume/fullorHalf)*4*3;
   printfQuda("eigenSolver: Number of complex elements: %d\n",LDV);
 
   //- Define all the necessary pointers
@@ -3604,9 +3605,8 @@ void QKXTM_Deflation_Kepler<Float>::eigenSolver(){
 		      &msglvl3            /*mceupd*/);
     
     printfQuda("eigenSolver: Log info:\n");
-    printfQuda("  ARPACK verbosity set to mcaup2=3 mcaupd=3 mceupd=3; \n");
-    printfQuda("  output is directed to '%s'\n",arpack_logfile);
-    printfQuda("  * if you don't see output, your memory may be corrupted *\n");
+    printfQuda(" ARPACK verbosity set to mcaup2=3 mcaupd=3 mceupd=3; \n");
+    printfQuda(" output is directed to %s\n",arpack_logfile);
   }
 #else  
   if ( NULL != arpack_logfile && (comm_rank() == 0) ) {
@@ -3628,9 +3628,8 @@ void QKXTM_Deflation_Kepler<Float>::eigenSolver(){
 		       &msglvl3            /*mceupd*/);
     
     printfQuda("eigenSolver: Log info:\n");
-    printfQuda("  ARPACK verbosity set to mcaup2=3 mcaupd=3 mceupd=3; \n");
-    printfQuda("  output is directed to '%s'\n",arpack_logfile);
-    printfQuda("  * if you don't see output, your memory may be corrupted *\n");
+    printfQuda(" ARPACK verbosity set to mcaup2=3 mcaupd=3 mceupd=3; \n");
+    printfQuda(" output is directed to %s\n",arpack_logfile);
   }
 #endif   
 
@@ -3760,20 +3759,8 @@ void QKXTM_Deflation_Kepler<Float>::eigenSolver(){
 	printfQuda("Error: No shifts could be applied during implicit\n");
 	printfQuda("Error: Arnoldi update, try increasing NkV.\n");
       }
-         
-      printfQuda("_NDRV1\n");
-      printfQuda("=======\n");
-      printfQuda("Size of the matrix is %d\n", N);
-      printfQuda("The number of Ritz values requested is %d\n", NeV);
-      printfQuda("The number of Arnoldi vectors generated is %d\n", NkV);
-      printfQuda("What portion of the spectrum requested: %s\n", which_evals_req);
-      printfQuda("The number of converged Ritz values is %d\n", nconv ); 
-      printfQuda("The number of Implicit Arnoldi update iterations taken is %d\n", iparam[2]);
-      printfQuda("The number of OP*x is %d\n", iparam[8]);
-      printfQuda("The convergence criterion is %+e\n", tolArpack);  
     }
   }//- if(info < 0) else part
-
 
 #ifndef MPI_COMMS
   if (NULL != arpack_logfile)
@@ -3788,6 +3775,7 @@ void QKXTM_Deflation_Kepler<Float>::eigenSolver(){
 
   //- calculate eigenvalues of the actual operator
   printfQuda("Eigenvalues of the %s Dirac operator:\n",isFullOp ? "Full" : "Even-Odd");
+  printfQuda("===========\n");
 
   t1 = MPI_Wtime();
   ColorSpinorParam cpuParam3(helem_cplx,*param,GK_localL,!isFullOp);  // !!!!!!! please check that ipntr[0] does not change 
@@ -3804,43 +3792,7 @@ void QKXTM_Deflation_Kepler<Float>::eigenSolver(){
     delete h_v3;
   }
   t2 = MPI_Wtime();
-  printfQuda("eigenSolver: TIME_REPORT - Eigenvalues of Dirac operator: %f sec\n",t2-t1);
-
-  
-//   FILE *evec_ptr;
-//   char evec_fname[257];
-//   for(int i = 0;i<NeV;i++){
-//     sprintf(evec_fname,"evec_EO.%03d.txt",i);
-//     if( (evec_ptr=fopen(evec_fname,"w"))==NULL ) errorQuda("Cannot open evec file %s for writing\n",evec_fname);
-    
-//     for(int t=0;  t<GK_localL[3]; t++)
-//       for(int z=0;  z<GK_localL[2]; z++)
-// 	for(int y=0;  y<GK_localL[1]; y++)
-// 	  for(int x=0;  x<GK_localL[0]; x++)
-// 	    for(int mu=0; mu<4; mu++)
-// 	      for(int c1=0; c1<3; c1++){
-// 		int pos = t*GK_localL[2]*GK_localL[1]*GK_localL[0]*4*3*2 + z*GK_localL[1]*GK_localL[0]*4*3*2 + y*GK_localL[0]*4*3*2 + x*4*3*2 + mu*3*2 + c1*2;
-// 		fprintf(evec_ptr,"%02d %02d %02d %02d %02d %02d %+16.15e %+16.15e\n",t,z,y,x,mu,c1,h_elem[i*total_length_per_NeV + pos],h_elem[i*total_length_per_NeV + pos + 1]);
-// 	      }
-
-// //     for(int k=0;k<240;k++){
-// //       printfQuda("EIGENSOLVER: i = %04d, k = %04d: %+e  %+e    %+e  %+e      %+e  %+e\n",i,k,real(helem_cplx[i*LDV+k]),imag(helem_cplx[i*LDV+k]),
-// // 		 h_elem[2*(LDV*i+k)],h_elem[2*(LDV*i+k)+1],
-// // 		 real(helem_cplx[i*LDV+k])/h_elem[2*(LDV*i+k)],imag(helem_cplx[i*LDV+k])/h_elem[2*(LDV*i+k)+1]);
-// //     }
-// //     printfQuda("\n\n");
-//     fclose(evec_ptr);
-//   }
-
-//   FILE *eval_ptr;
-//   char eval_fname[257];
-//   sprintf(eval_fname,"evals.txt");
-//   if( (eval_ptr=fopen(eval_fname,"w"))==NULL ) errorQuda("Cannot open eval file for writing\n");
-//   for(int i = 0;i<NeV;i++){
-//     fprintf(eval_ptr,"%05d: %+e  %+e    %+e  %+e      %+e  %+e\n",i,real(evals_cplx[i]),imag(evals_cplx[i]),eigenValues[2*i],eigenValues[2*i+1],
-// 	       real(evals_cplx[i])/eigenValues[2*i],imag(evals_cplx[i])/eigenValues[2*i+1]);
-//   }
-
+  printfQuda("\neigenSolver: TIME_REPORT - Eigenvalues of Dirac operator: %f sec\n",t2-t1);
 
   //free memory
   free(resid);
@@ -3851,7 +3803,6 @@ void QKXTM_Deflation_Kepler<Float>::eigenSolver(){
   free(rwork);
   free(sorted_evals);
   free(sorted_evals_index);
-  //free(zv);
   free(select);
   free(workev);
 
@@ -5350,9 +5301,9 @@ void dumpVector(Float *vec, int is, char file_base[]){
 
 //-C.K: This member function performs the operation vec_defl = vec_in - (U U^dag) vec_in
 template <typename Float>
-void QKXTM_Deflation_Kepler<Float>::deflateSrcVec(QKXTM_Vector_Kepler<Float> &vec_defl, QKXTM_Vector_Kepler<Float> &vec_in, int is){
+void QKXTM_Deflation_Kepler<Float>::projectVector(QKXTM_Vector_Kepler<Float> &vec_defl, QKXTM_Vector_Kepler<Float> &vec_in, int is){
 
-  if(!isFullOp) errorQuda("deflateSrcVec: This function only works with the Full Operator\n");
+  if(!isFullOp) errorQuda("projectVector: This function only works with the Full Operator\n");
   
   if(NeV == 0){
     printfQuda("NeV = %d. Will not deflate source vector!!!\n",NeV);
@@ -5368,7 +5319,7 @@ void QKXTM_Deflation_Kepler<Float>::deflateSrcVec(QKXTM_Vector_Kepler<Float> &ve
   Float *out_vec        = (Float*) calloc(NeV*2,sizeof(Float)) ;
   Float *out_vec_reduce = (Float*) calloc(NeV*2,sizeof(Float)) ;
   
-  if(ptr_elem == NULL || tmp_vec == NULL || out_vec == NULL || out_vec_reduce == NULL) errorQuda("deflateSrcVec: Error with memory allocation\n");
+  if(ptr_elem == NULL || tmp_vec == NULL || out_vec == NULL || out_vec_reduce == NULL) errorQuda("projectVector: Error with memory allocation\n");
   
   Float alpha[2] = {1.,0.};
   Float beta[2] = {0.,0.};
@@ -5406,7 +5357,7 @@ void QKXTM_Deflation_Kepler<Float>::deflateSrcVec(QKXTM_Vector_Kepler<Float> &ve
 
 //   char fbase[257];
   
-//   if(tmp_vec2 == NULL)errorQuda("deflateSrcVec: Error with memory allocation\n");
+//   if(tmp_vec2 == NULL)errorQuda("projectVector: Error with memory allocation\n");
 
 //   memcpy(tmp_vec,vec_in.H_elem(),bytes_total_length_per_NeV); //-C.K. tmp_vec = vec_in
 //   memset(tmp_vec2,0,NN*2*sizeof(Float));
@@ -5433,7 +5384,7 @@ void QKXTM_Deflation_Kepler<Float>::deflateSrcVec(QKXTM_Vector_Kepler<Float> &ve
 
 //       cblas_zdotc_sub(NN, ptr_elem, incx, tmp_vec, incy, udotb); 
 //       MPI_Allreduce(udotb,udotb_reduce,2,MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);  //-C.K.: udotb_reduce = evec[iv]^dag * vec_in
-//       printfQuda("*** deflateSrcVec: evec[%d]^dag * vec_in = %16.15e + i %16.15e\n",iv,udotb_reduce[0],udotb_reduce[1]); 
+//       printfQuda("*** projectVector: evec[%d]^dag * vec_in = %16.15e + i %16.15e\n",iv,udotb_reduce[0],udotb_reduce[1]); 
 
 //       cblas_zaxpy (NN, (void*) udotb_reduce, (void*) ptr_elem, incx, (void*) tmp_vec2, incy);  //-C.K.: tmp_vec2 = (evec[iv]^dag * vec_in)* eVec[iv] + tmp_vec2
 //       //      sprintf(fbase,"scalarDoteVec_%03d",iv);
@@ -5453,14 +5404,14 @@ void QKXTM_Deflation_Kepler<Float>::deflateSrcVec(QKXTM_Vector_Kepler<Float> &ve
   free(out_vec);
   free(out_vec_reduce);
 
-  //  printfQuda("deflateSrcVec: Deflation of the source vector completed succesfully\n");
+  //  printfQuda("projectVector: Deflation of the source vector completed succesfully\n");
 }
 
 //-C.K: This member function performs the operation vec_defl = vec_in - (U U^dag) vec_in
 template <typename Float>
-void QKXTM_Deflation_Kepler<Float>::deflateSrcVec(QKXTM_Vector_Kepler<Float> &vec_defl, QKXTM_Vector_Kepler<Float> &vec_in, int is, int NeV_defl){
+void QKXTM_Deflation_Kepler<Float>::projectVector(QKXTM_Vector_Kepler<Float> &vec_defl, QKXTM_Vector_Kepler<Float> &vec_in, int is, int NeV_defl){
 
-  if(!isFullOp) errorQuda("deflateSrcVec: This function only works with the Full Operator\n");
+  if(!isFullOp) errorQuda("projectVector: This function only works with the Full Operator\n");
   
   if(NeV_defl == 0){
     printfQuda("NeV = %d. Will not deflate source vector!\n",NeV_defl);
@@ -5475,7 +5426,7 @@ void QKXTM_Deflation_Kepler<Float>::deflateSrcVec(QKXTM_Vector_Kepler<Float> &ve
   Float *out_vec        = (Float*) calloc(NeV_defl*2,sizeof(Float)) ;
   Float *out_vec_reduce = (Float*) calloc(NeV_defl*2,sizeof(Float)) ;
   
-  if(ptr_elem == NULL || tmp_vec == NULL || out_vec == NULL || out_vec_reduce == NULL) errorQuda("deflateSrcVec: Error with memory allocation\n");
+  if(ptr_elem == NULL || tmp_vec == NULL || out_vec == NULL || out_vec_reduce == NULL) errorQuda("projectVector: Error with memory allocation\n");
   
   Float alpha[2] = {1.,0.};
   Float beta[2] = {0.,0.};
@@ -5513,7 +5464,7 @@ void QKXTM_Deflation_Kepler<Float>::deflateSrcVec(QKXTM_Vector_Kepler<Float> &ve
 
 //   char fbase[257];
   
-//   if(tmp_vec2 == NULL)errorQuda("deflateSrcVec: Error with memory allocation\n");
+//   if(tmp_vec2 == NULL)errorQuda("projectVector: Error with memory allocation\n");
 
 //   memcpy(tmp_vec,vec_in.H_elem(),bytes_total_length_per_NeV); //-C.K. tmp_vec = vec_in
 //   memset(tmp_vec2,0,NN*2*sizeof(Float));
@@ -5540,7 +5491,7 @@ void QKXTM_Deflation_Kepler<Float>::deflateSrcVec(QKXTM_Vector_Kepler<Float> &ve
 
 //       cblas_zdotc_sub(NN, ptr_elem, incx, tmp_vec, incy, udotb); 
 //       MPI_Allreduce(udotb,udotb_reduce,2,MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);  //-C.K.: udotb_reduce = evec[iv]^dag * vec_in
-//       printfQuda("*** deflateSrcVec: evec[%d]^dag * vec_in = %16.15e + i %16.15e\n",iv,udotb_reduce[0],udotb_reduce[1]); 
+//       printfQuda("*** projectVector: evec[%d]^dag * vec_in = %16.15e + i %16.15e\n",iv,udotb_reduce[0],udotb_reduce[1]); 
 
 //       cblas_zaxpy (NN, (void*) udotb_reduce, (void*) ptr_elem, incx, (void*) tmp_vec2, incy);  //-C.K.: tmp_vec2 = (evec[iv]^dag * vec_in)* eVec[iv] + tmp_vec2
 //       //      sprintf(fbase,"scalarDoteVec_%03d",iv);
@@ -5560,7 +5511,7 @@ void QKXTM_Deflation_Kepler<Float>::deflateSrcVec(QKXTM_Vector_Kepler<Float> &ve
   free(out_vec);
   free(out_vec_reduce);
 
-  //  printfQuda("deflateSrcVec: Deflation of the source vector completed succesfully\n");
+  //  printfQuda("projectVector: Deflation of the source vector completed succesfully\n");
 }
 
 

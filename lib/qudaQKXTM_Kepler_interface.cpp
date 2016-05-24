@@ -3012,28 +3012,25 @@ void calcEigenVectors_loop_wOneD_FullOp(void **gaugeToPlaquette, QudaInvertParam
   
   bool stochEO = loopInfo.fullOp_stochEO;
   bool pc_solution = false; // Construct the full solution spinor
-
-  printfQuda("calcEigenVectors_loop_wOneD_FullOp: Solving the stochastic part using the %s operator\n", stochEO ? "Even-Odd" : "Full");
-
   bool pc_solve;
   bool flag_eo;
   if(stochEO){
     pc_solve = true;
     if(arpackInfo.isEven){
-      printfQuda("calcEigenVectors_loop_wOneD_FullOp: Using the Even-Even Asymmetric operator\n");
       flag_eo = true;
+      printfQuda("calcEigenVectors_loop_wOneD_FullOp: Will solve the stochastic part using the Even-Odd, Even-Even Asymmetric operator\n");
     }
     else{
-      printfQuda("calcEigenVectors_loop_wOneD_FullOp: Using the Odd-Odd Asymmetric operator\n");
       flag_eo = false;
+      printfQuda("calcEigenVectors_loop_wOneD_FullOp: Will solve the stochastic part using the Even-Odd, Odd-Odd Asymmetric operator\n");
     }
   }
   else{
     flag_eo = false;
     pc_solve = false;
+    printfQuda("calcEigenVectors_loop_wOneD_FullOp: Will solve the stochastic part using the Full operator\n");
   }
   //------------------------------------------------------------------------------------------------------------------
-
 
   int Nstoch = loopInfo.Nstoch;
   unsigned long int seed = loopInfo.seed;
@@ -3059,11 +3056,11 @@ void calcEigenVectors_loop_wOneD_FullOp(void **gaugeToPlaquette, QudaInvertParam
   double TSM_tol = 0.0;
   if( (loopInfo.TSM_tol == 0) && (loopInfo.TSM_maxiter !=0 ) ) TSM_maxiter = loopInfo.TSM_maxiter; // LP criterion fixed by iteration number
   else if( (loopInfo.TSM_tol != 0) && (loopInfo.TSM_maxiter == 0) ) TSM_tol = loopInfo.TSM_tol; // LP criterion fixed by tolerance
-  else if( (loopInfo.TSM_tol != 0) && (loopInfo.TSM_maxiter != 0) ){
-    warningQuda("Both max-iter and tolerance defined as criterions for the TSM. Proceeding with max-iter criterion.\n");
+  else if( useTSM && (loopInfo.TSM_tol != 0) && (loopInfo.TSM_maxiter != 0) ){
+    warningQuda("Both max-iter = %ld and tolerance = %lf defined as criterions for the TSM. Proceeding with max-iter = %ld criterion.\n",loopInfo.TSM_maxiter,loopInfo.TSM_tol,loopInfo.TSM_maxiter);
     TSM_maxiter = loopInfo.TSM_maxiter; // LP criterion fixed by iteration number
   }
-
+  //---------------------------------------------------------------------------
 
   loopInfo.loop_type[0] = "Scalar";      loopInfo.loop_oneD[0] = false;   // std-ultra_local
   loopInfo.loop_type[1] = "dOp";         loopInfo.loop_oneD[1] = false;   // gen-ultra_local
@@ -3075,32 +3072,32 @@ void calcEigenVectors_loop_wOneD_FullOp(void **gaugeToPlaquette, QudaInvertParam
   printfQuda("\nLoop Calculation Info\n");
   printfQuda("=====================\n");
   if(useTSM){
-    printfQuda("Will perform the Truncated Solver method using the following parameters:\n");
-    printfQuda("  N_HP = %d\n",TSM_NHP);
-    printfQuda("  N_LP = %d\n",TSM_NLP);
-    if (TSM_maxiter == 0) printfQuda("  CG stopping criterion is: tol = %e\n",TSM_tol);
-    else printfQuda("  CG stopping criterion is: max-iter = %ld\n",TSM_maxiter);
-    printfQuda("  Will dump every %d high-precision noise vectors, thus %d times\n",TSM_NdumpHP,TSM_NprintHP);
-    printfQuda("  Will dump every %d low-precision noise vectors , thus %d times\n",TSM_NdumpLP,TSM_NprintLP);
+    printfQuda(" Will perform the Truncated Solver method using the following parameters:\n");
+    printfQuda("  -N_HP = %d\n",TSM_NHP);
+    printfQuda("  -N_LP = %d\n",TSM_NLP);
+    if (TSM_maxiter == 0) printfQuda("  -CG stopping criterion is: tol = %e\n",TSM_tol);
+    else printfQuda("  -CG stopping criterion is: max-iter = %ld\n",TSM_maxiter);
+    printfQuda("  -Will dump every %d high-precision noise vectors, thus %d times\n",TSM_NdumpHP,TSM_NprintHP);
+    printfQuda("  -Will dump every %d low-precision noise vectors , thus %d times\n",TSM_NdumpLP,TSM_NprintLP);
   }
   else{
-    printfQuda("Will not perform the Truncated Solver method\n");
-    printfQuda("No. of noise vectors: %d\n",Nstoch);
-    printfQuda("Will dump every %d noise vectors, thus %d times\n",Ndump,Nprint);
+    printfQuda(" Will not perform the Truncated Solver method\n");
+    printfQuda(" No. of noise vectors: %d\n",Nstoch);
+    printfQuda(" Will dump every %d noise vectors, thus %d times\n",Ndump,Nprint);
   }
-  printfQuda("The seed is: %ld\n",seed);
-  printfQuda("The conf trajectory is: %04d\n",loopInfo.traj);
-  printfQuda("Will produce the loop for %d Momentum Combinations\n",loopInfo.Nmoms);
-  printfQuda("The loop file format is %s\n",loopInfo.file_format);
-  printfQuda("The loop base name is %s\n",loopInfo.loop_fname);
-  printfQuda("Will perform the loop for the following %d numbers of eigenvalues:",loopInfo.nSteps_defl);
+  printfQuda(" The seed is: %ld\n",seed);
+  printfQuda(" The conf trajectory is: %04d\n",loopInfo.traj);
+  printfQuda(" Will produce the loop for %d Momentum Combinations\n",loopInfo.Nmoms);
+  printfQuda(" The loop file format is %s\n",loopInfo.file_format);
+  printfQuda(" The loop base name is %s\n",loopInfo.loop_fname);
+  printfQuda(" Will perform the loop for the following %d numbers of eigenvalues:",loopInfo.nSteps_defl);
   for(int s=0;s<loopInfo.nSteps_defl;s++){
     printfQuda("  %d",loopInfo.deflStep[s]);
   }
-  if(smethod==1) printfQuda("\nStochastic part according to: MdagM psi = (1-P)Mdag xi\n");
-  else printfQuda("\nStochastic part according to: MdagM phi = Mdag xi\n");
-  if(info.source_type==RANDOM) printfQuda("Will use RANDOM stochastic sources\n");
-  else if (info.source_type==UNITY) printfQuda("Will use UNITY stochastic sources\n");
+  if(smethod==1) printfQuda("\n Stochastic part according to: MdagM psi = (1-P)Mdag xi (smethod=1)\n");
+  else printfQuda("\n Stochastic part according to: MdagM phi = Mdag xi (smethod=0)\n");
+  if(info.source_type==RANDOM) printfQuda(" Will use RANDOM stochastic sources\n");
+  else if (info.source_type==UNITY) printfQuda(" Will use UNITY stochastic sources\n");
   printfQuda("=====================\n\n");
   
   bool exact_part = true;
@@ -3280,8 +3277,10 @@ void calcEigenVectors_loop_wOneD_FullOp(void **gaugeToPlaquette, QudaInvertParam
   //=================================  E X A C T   P A R T  =================================//
   //=========================================================================================//
 
-  int NeV_Full = arpackInfo.nEv;  
+  printfQuda("\n ### Exact part calculation ###\n");
 
+  int NeV_Full = arpackInfo.nEv;  
+  
   QKXTM_Deflation_Kepler<double> *deflation = new QKXTM_Deflation_Kepler<double>(param,arpackInfo);
   deflation->printInfo();
   
@@ -3289,7 +3288,7 @@ void calcEigenVectors_loop_wOneD_FullOp(void **gaugeToPlaquette, QudaInvertParam
   t1 = MPI_Wtime(); 
   deflation->eigenSolver();
   t2 = MPI_Wtime();
-  printfQuda("calcEigenVectors_loop_wOneD_FullOp TIME REPORT: EigenVector Calculation: %f sec\n",t2-t1);
+  printfQuda("calcEigenVectors_loop_wOneD_FullOp TIME REPORT: Full Operator EigenVector Calculation: %f sec\n",t2-t1);
 
   deflation->MapEvenOddToFull();
 
@@ -3358,9 +3357,25 @@ void calcEigenVectors_loop_wOneD_FullOp(void **gaugeToPlaquette, QudaInvertParam
     }//-if
   }//-for NeV_Full
 
+  printfQuda("\n ### Exact part calculation Done ###\n");
+
   //=========================================================================================//
   //============================  S T O C H A S T I C   P A R T  ============================//
   //=========================================================================================//
+
+  printfQuda("\n ### Stochastic part calculation ###\n\n");
+
+  QKXTM_Deflation_Kepler<double> *deflationEO;
+  if(stochEO){    
+    deflationEO = new QKXTM_Deflation_Kepler<double>(param, arpackInfoEO);
+    deflationEO->printInfo();
+
+    //- Calculate the eigenVectors of the Even-Odd operator
+    t1 = MPI_Wtime(); 
+    deflationEO->eigenSolver();
+    t2 = MPI_Wtime();
+    printfQuda("calcEigenVectors_loop_wOneD_FullOp TIME REPORT: Even-Odd Operator EigenVector Calculation: %f sec\n",t2-t1);
+  }
 
   cudaGaugeField *cudaGauge = checkGauge(param);
   checkInvertParam(param);
@@ -3382,7 +3397,7 @@ void calcEigenVectors_loop_wOneD_FullOp(void **gaugeToPlaquette, QudaInvertParam
   param->gflops = 0;
   param->iter = 0;
 
-  // create the dirac operator                                                                                                                                      
+  // Create the dirac operator                                                                                                                                      
   Dirac *d = NULL;
   Dirac *dSloppy = NULL;
   Dirac *dPre = NULL;
@@ -3391,57 +3406,14 @@ void calcEigenVectors_loop_wOneD_FullOp(void **gaugeToPlaquette, QudaInvertParam
   Dirac &diracSloppy = *dSloppy;
   Dirac &diracPre = *dPre;
   profileInvert.TPSTART(QUDA_PROFILE_H2D);
+  //----------------------------------------------
 
-  cudaColorSpinorField *b     = NULL;
-  cudaColorSpinorField *x     = NULL;
-  cudaColorSpinorField *in    = NULL;
-  cudaColorSpinorField *out   = NULL;
-  cudaColorSpinorField *tmp3  = NULL;
-  cudaColorSpinorField *tmp4  = NULL;
-
-  cudaColorSpinorField *x_LP     = NULL;
-  cudaColorSpinorField *out_LP   = NULL;
-
-  void *input_vector  = malloc(GK_localL[0]*GK_localL[1]*GK_localL[2]*GK_localL[3]*spinorSiteSize*sizeof(double));
-  void *output_vector = malloc(GK_localL[0]*GK_localL[1]*GK_localL[2]*GK_localL[3]*spinorSiteSize*sizeof(double));
-
-  memset(input_vector ,0,GK_localL[0]*GK_localL[1]*GK_localL[2]*GK_localL[3]*spinorSiteSize*sizeof(double));
-  memset(output_vector,0,GK_localL[0]*GK_localL[1]*GK_localL[2]*GK_localL[3]*spinorSiteSize*sizeof(double));
-
-  ColorSpinorParam cpuParam(input_vector,*param,GK_localL, pc_solution);
-  ColorSpinorField *h_b = (param->input_location == QUDA_CPU_FIELD_LOCATION) ?
-    static_cast<ColorSpinorField*>(new cpuColorSpinorField(cpuParam)) :
-    static_cast<ColorSpinorField*>(new cudaColorSpinorField(cpuParam));
-
-  cpuParam.v = output_vector;
-  ColorSpinorField *h_x = (param->output_location == QUDA_CPU_FIELD_LOCATION) ?
-    static_cast<ColorSpinorField*>(new cpuColorSpinorField(cpuParam)) :
-    static_cast<ColorSpinorField*>(new cudaColorSpinorField(cpuParam));
-
-
-  ColorSpinorParam cudaParam(cpuParam, *param);
-  cudaParam.create = QUDA_ZERO_FIELD_CREATE;
-  x = new cudaColorSpinorField(cudaParam);
-  cudaParam.create = QUDA_ZERO_FIELD_CREATE;
-  b = new cudaColorSpinorField(cudaParam);
-
-  if(useTSM) x_LP = new cudaColorSpinorField(cudaParam);
-
-  tmp3 = new cudaColorSpinorField(cudaParam);
-  tmp4 = new cudaColorSpinorField(cudaParam);
-
-  profileInvert.TPSTOP(QUDA_PROFILE_H2D);
-  setTuning(param->tune);
-  
-  zeroCuda(*x);
-  zeroCuda(*b);
+  // Create the solvers
   DiracMdagM m(dirac), mSloppy(diracSloppy), mPre(diracPre);
   SolverParam solverParam(*param);
   Solver *solve = Solver::create(solverParam, m, mSloppy, mPre, profileInvert);
-  QKXTM_Vector_Kepler<double> *K_vector = new QKXTM_Vector_Kepler<double>(BOTH,VECTOR);
-  QKXTM_Vector_Kepler<double> *K_srcdef = new QKXTM_Vector_Kepler<double>(BOTH,VECTOR);
 
-  // create the LP solver for TSM                                                                                                                                      
+  // Create the LP solver for TSM                                                                                                                                      
   Solver *solve_LP;
   if(useTSM){
     double orig_tol = param->tol;
@@ -3455,11 +3427,40 @@ void calcEigenVectors_loop_wOneD_FullOp(void **gaugeToPlaquette, QudaInvertParam
     if(TSM_maxiter==0) param->tol = orig_tol;            // Set the
     else if(TSM_tol==0) param->maxiter = orig_maxiter;   // original, high-precision values
   }
+  //---------------------------------------------------------------------------------------------------
 
+  void *input_vector  = malloc(GK_localL[0]*GK_localL[1]*GK_localL[2]*GK_localL[3]*spinorSiteSize*sizeof(double));
+  memset(input_vector ,0,GK_localL[0]*GK_localL[1]*GK_localL[2]*GK_localL[3]*spinorSiteSize*sizeof(double));
+
+  cudaColorSpinorField *b      = NULL;
+  cudaColorSpinorField *x      = NULL;
+  cudaColorSpinorField *in     = NULL;
+  cudaColorSpinorField *out    = NULL;
+  cudaColorSpinorField *tmp3   = NULL;
+  cudaColorSpinorField *tmp4   = NULL;
+  cudaColorSpinorField *x_LP   = NULL;
+  cudaColorSpinorField *out_LP = NULL;
+
+  ColorSpinorParam cpuParam(input_vector,*param,GK_localL,pc_solution);
+  ColorSpinorParam cudaParam(cpuParam, *param);
+  cudaParam.create = QUDA_ZERO_FIELD_CREATE;
+  b    = new cudaColorSpinorField(cudaParam);
+  x    = new cudaColorSpinorField(cudaParam);
+  tmp3 = new cudaColorSpinorField(cudaParam);
+  tmp4 = new cudaColorSpinorField(cudaParam);
+
+  if(useTSM) x_LP = new cudaColorSpinorField(cudaParam);
+
+  profileInvert.TPSTOP(QUDA_PROFILE_H2D);
+  setTuning(param->tune);
+  //---------------------------------------------------------------------------------------------------
+
+  QKXTM_Vector_Kepler<double> *K_vector = new QKXTM_Vector_Kepler<double>(BOTH,VECTOR);
+  QKXTM_Vector_Kepler<double> *K_vecdef = new QKXTM_Vector_Kepler<double>(BOTH,VECTOR);
 
   for(int dstep=0;dstep<loopInfo.nSteps_defl;dstep++){
     int NeV_defl = loopInfo.deflStep[dstep];
-    printfQuda("\n### Performing the stochastic part of the loop for NeV = %d\n\n",NeV_defl);
+    printfQuda("\n# Performing the stochastic inversions for NeV = %d\n\n",NeV_defl);
     
     //- Prepare the loops for the stochastic part
     cudaMemset(std_uloc, 0, sizeof(double)*2*16*GK_localVolume);
@@ -3480,13 +3481,16 @@ void calcEigenVectors_loop_wOneD_FullOp(void **gaugeToPlaquette, QudaInvertParam
 
     int Nrun;
     int Nd;
+    char *msg_str;
     if(useTSM){
       Nrun = TSM_NLP;
       Nd = TSM_NdumpLP;
+      asprintf(&msg_str,"NLP");
     }
     else{
       Nrun = Nstoch;
       Nd = Ndump;
+      asprintf(&msg_str,"Stoch.");
     }
    
     int iPrint = 0;
@@ -3496,72 +3500,61 @@ void calcEigenVectors_loop_wOneD_FullOp(void **gaugeToPlaquette, QudaInvertParam
       memset(input_vector,0,GK_localL[0]*GK_localL[1]*GK_localL[2]*GK_localL[3]*spinorSiteSize*sizeof(double));
       getStochasticRandomSource<double>(input_vector,rNum,info.source_type);
       t2 = MPI_Wtime();
-      printfQuda("TIME_REPORT Stoch. %04d - Source creation: %f sec\n",is+1,t2-t1);
-      t1 = MPI_Wtime();
+      printfQuda("TIME_REPORT: %s %04d - Source creation: %f sec\n",msg_str,is+1,t2-t1);
       K_vector->packVector((double*) input_vector);
       K_vector->loadVector();
-      K_vector->uploadToCuda(b,pc_solve);
-      dirac.prepare(in,out,*x,*b,param->solution_type);
-      // in is reference to the b but for a parity sinlet
-      // out is reference to the x but for a parity sinlet
+      K_vector->uploadToCuda(b,flag_eo);
+      dirac.prepare(in,out,*x,*b,param->solution_type); // in -> b, out -> x, for parity singlets
       cudaColorSpinorField *tmp_up = new cudaColorSpinorField(*in);
-      dirac.Mdag(*in, *tmp_up);  // in = M^dag b
+      dirac.Mdag(*in,*tmp_up); // in <- M^dag * b
       delete tmp_up;
-      t2 = MPI_Wtime();
-      printfQuda("TIME_REPORT Stoch. %04d - Source preparation: %f sec\n",is+1,t2-t1);
+      K_vector->downloadFromCuda(in,flag_eo);
+      K_vector->download();
       
+      t1 = MPI_Wtime();
       if(smethod==1){  // Deflate the source vector (Christos)
-	K_vector->downloadFromCuda(in,pc_solve);
-	K_vector->download();
-	t1 = MPI_Wtime();
-	deflation->deflateSrcVec(*K_srcdef,*K_vector,is+1,NeV_defl);  
-	K_srcdef->uploadToCuda(in,pc_solve);              // Source Vector is deflated and put into "in", in = (1-UU^dag) M^dag b
+	if(stochEO) errorQuda("Stochastic part with Even-Odd operator not applicable with smethod = 1.\n");
+
+	deflation->projectVector(*K_vecdef,*K_vector,is+1,NeV_defl);  
 	t2 = MPI_Wtime();
-	printfQuda("TIME_REPORT Stoch. %04d - Source deflation: %f sec\n",is+1,t2-t1);
+	printfQuda("TIME_REPORT: %s %04d - Source projection: %f sec\n",msg_str,is+1,t2-t1);
+	K_vecdef->uploadToCuda(in,flag_eo);   // Source Vector is projected and put into "in", in <- (1-UU^dag) M^dag b
+	zeroCuda(*out);                       // Set the initial guess to zero!
 
-	zeroCuda(*out);                                   // Set the initial guess to zero!
-	if(useTSM){
-	  t1 = MPI_Wtime();
-	  (*solve_LP)(*out,*in);
-	  t2 = MPI_Wtime();
-	  printfQuda("TIME_REPORT Stoch. %04d - LP Source inversion: %f sec\n",is+1,t2-t1);
-	}
-	else{
-	  t1 = MPI_Wtime();
-	  (*solve)(*out,*in);
-	  t2 = MPI_Wtime();
-	  printfQuda("TIME_REPORT Stoch. %04d - HP Source inversion: %f sec\n",is+1,t2-t1);
-	}
-
+	if(useTSM) (*solve_LP)(*out,*in);
+	else       (*solve)   (*out,*in);
 	dirac.reconstruct(*x,*b,param->solution_type);
-	t1 = MPI_Wtime();
-	oneEndTrick_w_One_Der<double>(*x,*tmp3,*tmp4,param, gen_uloc, std_uloc, gen_oneD, std_oneD, gen_csvC, std_csvC); //-Christos
-	t2 = MPI_Wtime();
-	printfQuda("TIME_REPORT Stoch. %04d - One-end trick: %f sec\n",is+1,t2-t1);
       }
       else{  // Deflate the initial guess and solution (Abdou's procedure)
 	if(loopInfo.nSteps_defl>1) errorQuda("Cannot performed stepped-deflation with smethod different than 1. (yet)\n"); 
-	if(useTSM) errorQuda("Truncated solver method not supported with smethod different than 1. (yet)\n");
-	K_vector->downloadFromCuda(in,pc_solve);
-	K_vector->download();
-	deflation->deflateVector(*K_srcdef,*K_vector);
-	K_srcdef->uploadToCuda(out,pc_solve);             // Initial guess is deflated and put into "out", out = U(\Lambda^-1)U^dag M^dag b
-	(*solve)(*out,*in);
+
+	if(stochEO) deflationEO->deflateVector(*K_vecdef,*K_vector);
+	else deflation->deflateVector(*K_vecdef,*K_vector);
+	t2 = MPI_Wtime();
+	printfQuda("TIME_REPORT %s %04d - Init.guess deflation: %f sec\n",msg_str,is+1,t2-t1);
+	K_vecdef->uploadToCuda(out,flag_eo);             // Initial guess is deflated and put into "out", out = U(\Lambda^-1)U^dag M^dag b
+
+	if(useTSM) (*solve_LP)(*out,*in);
+	else       (*solve)   (*out,*in);
 	dirac.reconstruct(*x,*b,param->solution_type);
-      
-	cudaColorSpinorField *s = new cudaColorSpinorField(*x);
-	cudaColorSpinorField *x1 = new cudaColorSpinorField(*x);
-	K_vector->downloadFromCuda(x,pc_solve);
-	K_vector->download();
-	deflation->deflateSrcVec(*K_srcdef,*K_vector,is);   
-	K_srcdef->uploadToCuda(s,pc_solve);              // Solution is deflated and put into "s", s = (1-UU^dag) x
-	oneEndTrick_w_One_Der_2<double>(*s,*x1,*tmp3,*tmp4,param, gen_uloc, std_uloc, gen_oneD, std_oneD, gen_csvC, std_csvC); //-One-end trick according to Abdou
-	delete s;
-	delete x1;
+
+	t1 = MPI_Wtime();	
+        K_vector->downloadFromCuda(x,flag_eo);
+        K_vector->download();
+        deflation->projectVector(*K_vecdef,*K_vector,is+1,NeV_defl);
+        K_vecdef->uploadToCuda(x,flag_eo);              // Solution is projected and put into x, x <- (1-UU^dag) x
+	t2 = MPI_Wtime();
+	printfQuda("TIME_REPORT: %s %04d - Solution projection: %f sec\n",msg_str,is+1,t2-t1);
       }
-      t4 = MPI_Wtime();
-      printfQuda("TIME_REPORT: One-end trick for Stoch. %04d finished in %f sec\n",is+1,t4-t3);
       
+      t1 = MPI_Wtime();
+      oneEndTrick_w_One_Der<double>(*x,*tmp3,*tmp4,param, gen_uloc, std_uloc, gen_oneD, std_oneD, gen_csvC, std_csvC);
+      t2 = MPI_Wtime();
+      printfQuda("TIME_REPORT: %s %04d - Contractions: %f sec\n",msg_str,is+1,t2-t1);
+
+      t4 = MPI_Wtime();
+      printfQuda("### TIME_REPORT: %s %04d - Finished in %f sec\n",msg_str,is+1,t4-t3);      
+
       if( (is+1)%Nd == 0){
 	t1 = MPI_Wtime();
 	if(GK_nProc[2]==1){      
@@ -3583,7 +3576,6 @@ void calcEigenVectors_loop_wOneD_FullOp(void **gaugeToPlaquette, QudaInvertParam
 	  }
 	}
 	else if(GK_nProc[2]>1){
-	  t1 = MPI_Wtime();
 	  performFFT<double>(buf_std_uloc, std_uloc, iPrint, Nmoms, momQsq);
 	  performFFT<double>(buf_gen_uloc, gen_uloc, iPrint, Nmoms, momQsq);
 
@@ -3595,15 +3587,15 @@ void calcEigenVectors_loop_wOneD_FullOp(void **gaugeToPlaquette, QudaInvertParam
 	  }
 	}
 	t2 = MPI_Wtime();
-	printfQuda("Loops for Nstoch = %d FFT'ed and copied to write buffers in %f sec\n",is+1,t2-t1);
+	printfQuda("Loops for %s = %04d FFT'ed and copied to write buffers in %f sec\n",msg_str,is+1,t2-t1);
 	iPrint++;
       }//-if (is+1)
 
     }//-is-loop
 
     //-Write the stochastic part of the loops
+    t1 = MPI_Wtime();
     sprintf(loop_stoch_fname,"%s_stoch%sNeV%d",loopInfo.loop_fname, useTSM ? "_TSM_" : "_", NeV_defl);
-
     if(strcmp(loopInfo.file_format,"ASCII")==0){ // Write the loops in ASCII format
       writeLoops_ASCII(buf_std_uloc, loop_stoch_fname, loopInfo, momQsq, 0, 0, stoch_part, useTSM, LowPrecSum); // Scalar
       writeLoops_ASCII(buf_gen_uloc, loop_stoch_fname, loopInfo, momQsq, 1, 0, stoch_part, useTSM, LowPrecSum); // dOp
@@ -3617,7 +3609,9 @@ void calcEigenVectors_loop_wOneD_FullOp(void **gaugeToPlaquette, QudaInvertParam
     else if(strcmp(loopInfo.file_format,"HDF5")==0){ // Write the loops in HDF5 format
       writeLoops_HDF5(buf_std_uloc, buf_gen_uloc, buf_std_oneD, buf_std_csvC, buf_gen_oneD, buf_gen_csvC, loop_stoch_fname, loopInfo, momQsq, stoch_part, useTSM, LowPrecSum);
     }
-    printfQuda("Writing the Stochastic part of the loops for NeV = %d completed.\n",NeV_defl);
+    t2 = MPI_Wtime();
+    printfQuda("Writing the Stochastic part of the loops for NeV = %d completed in %f sec.\n",NeV_defl,t2-t1);
+
 
     //-Perform the NHP loops, for the low-precision and the high-precision inversions
     if(useTSM){
@@ -3677,61 +3671,73 @@ void calcEigenVectors_loop_wOneD_FullOp(void **gaugeToPlaquette, QudaInvertParam
 	memset(input_vector,0,GK_localL[0]*GK_localL[1]*GK_localL[2]*GK_localL[3]*spinorSiteSize*sizeof(double));
 	getStochasticRandomSource<double>(input_vector,rNum,info.source_type);
 	t2 = MPI_Wtime();
-	printfQuda("TIME_REPORT Stoch. %04d - Source creation: %f sec\n",is+1,t2-t1);
-	t1 = MPI_Wtime();
+	printfQuda("TIME_REPORT: %s %04d - Source creation: %f sec\n",msg_str,is+1,t2-t1);
 	K_vector->packVector((double*) input_vector);
 	K_vector->loadVector();
-	K_vector->uploadToCuda(b,pc_solve);
-	dirac.prepare(in,out   ,*x   ,*b,param->solution_type);
-	dirac.prepare(in,out_LP,*x_LP,*b,param->solution_type);
-	// in is reference to the b but for a parity sinlet
-	// out is reference to the x but for a parity sinlet
+	K_vector->uploadToCuda(b,flag_eo);
+	dirac.prepare(in,out   ,*x   ,*b,param->solution_type); // in -> b, out -> x, for parity singlets
+	dirac.prepare(in,out_LP,*x_LP,*b,param->solution_type); //
 	cudaColorSpinorField *tmp_up = new cudaColorSpinorField(*in);
-	dirac.Mdag(*in,*tmp_up);  // in = M^dag b
+	dirac.Mdag(*in, *tmp_up);  // in <- M^dag b
 	delete tmp_up;
-	cudaColorSpinorField *in_LP = new cudaColorSpinorField(*in);  //- in_LP = M^dag b
-	t2 = MPI_Wtime();
-	printfQuda("TIME_REPORT Stoch. %04d - Source preparation: %f sec\n",is+1,t2-t1);
+	K_vector->downloadFromCuda(in,flag_eo);
+	K_vector->download();
       
+	t1 = MPI_Wtime();
 	if(smethod==1){  // Deflate the source vector (Christos)
-	  K_vector->downloadFromCuda(in,pc_solve);
-	  K_vector->download();
-	  t1 = MPI_Wtime();
-	  deflation->deflateSrcVec(*K_srcdef,*K_vector,is+1,NeV_defl);  
-	  K_srcdef->uploadToCuda(in   ,pc_solve);              // Source Vector is deflated and put into "in", in = (1-UU^dag) M^dag b
-	  K_srcdef->uploadToCuda(in_LP,pc_solve);              // 
+	  deflation->projectVector(*K_vecdef,*K_vector,is+1,NeV_defl);  
 	  t2 = MPI_Wtime();
-	  printfQuda("TIME_REPORT Stoch. %04d - Source deflation: %f sec\n",is+1,t2-t1);
-	  
-	  //-High-precision inversion
-	  zeroCuda(*out);                                      // Set the initial guess to zero!
-	  t1 = MPI_Wtime();
-	  (*solve)(*out,*in);
+	  printfQuda("TIME_REPORT: NHP %04d - Source projection: %f sec\n",is+1,t2-t1);
+	  K_vecdef->uploadToCuda(in,flag_eo);              // Source Vector is projected and put into "in", in = (1-UU^dag) M^dag b
+	  zeroCuda(*out);    // Set the HP
+	  zeroCuda(*out_LP); // and LP initial guess to zero!
+
+	  (*solve)(*out,*in);       //-High-precision inversion
 	  dirac.reconstruct(*x,*b,param->solution_type);
-	  t2 = MPI_Wtime();
-	  printfQuda("TIME_REPORT Stoch. %04d - HP Source inversion: %f sec\n",is+1,t2-t1);
-
-	  //-Low-recision inversion
-	  zeroCuda(*out_LP);                                   // Set the initial guess to zero!
-	  t1 = MPI_Wtime();
-	  (*solve_LP)(*out_LP,*in_LP);
+	  (*solve_LP)(*out_LP,*in); //-Low-recision inversion
 	  dirac.reconstruct(*x_LP,*b,param->solution_type);
-	  t2 = MPI_Wtime();
-	  printfQuda("TIME_REPORT Stoch. %04d - LP Source inversion: %f sec\n",is+1,t2-t1);
-
-	  t1 = MPI_Wtime();
-	  oneEndTrick_w_One_Der<double>(*x,*tmp3,*tmp4,param, gen_uloc, std_uloc, gen_oneD, std_oneD, gen_csvC, std_csvC); //-high-precision
-	  t2 = MPI_Wtime();
-	  printfQuda("TIME_REPORT Stoch. %04d - One-end trick for HP: %f sec\n",is+1,t2-t1);
-	  t1 = MPI_Wtime();
-	  oneEndTrick_w_One_Der<double>(*x_LP,*tmp3,*tmp4,param, gen_uloc_LP, std_uloc_LP, gen_oneD_LP, std_oneD_LP, gen_csvC_LP, std_csvC_LP); //-low-precision
-	  t2 = MPI_Wtime();
-	  printfQuda("TIME_REPORT Stoch. %04d - One-end trick for LP: %f sec\n",is+1,t2-t1);
 	}
-	else errorQuda("Truncated solver method not supported with smethod different than 1. (yet)\n");
+	else{
+	  if(stochEO) deflationEO->deflateVector(*K_vecdef,*K_vector);
+	  else deflation->deflateVector(*K_vecdef,*K_vector);
+	  t2 = MPI_Wtime();
+	  printfQuda("TIME_REPORT: NHP %04d - Init.guess deflation: %f sec\n",is+1,t2-t1);
+	  K_vecdef->uploadToCuda(out   ,flag_eo);   // Initial guess is deflated and put into "out", out = U(\Lambda^-1)U^dag M^dag b
+	  K_vecdef->uploadToCuda(out_LP,flag_eo);   //
 
+	  (*solve)(*out,*in);       //-High-precision inversion
+	  dirac.reconstruct(*x,*b,param->solution_type);
+	  (*solve_LP)(*out_LP,*in); //-Low-recision inversion
+	  dirac.reconstruct(*x_LP,*b,param->solution_type);
+
+	  t1 = MPI_Wtime();
+	  K_vector->downloadFromCuda(x,flag_eo);
+	  K_vector->download();
+	  deflation->projectVector(*K_vecdef,*K_vector,is+1,NeV_defl);
+	  K_vecdef->uploadToCuda(x,flag_eo);              // HP Solution is projected and put into x, x <- (1-UU^dag) x
+          t2 = MPI_Wtime();
+          printfQuda("TIME_REPORT: NHP %04d - HP solution projection: %f sec\n",is+1,t2-t1);
+
+	  t1 = MPI_Wtime();
+	  K_vector->downloadFromCuda(x_LP,flag_eo);
+	  K_vector->download();
+	  deflation->projectVector(*K_vecdef,*K_vector,is+1,NeV_defl);
+	  K_vecdef->uploadToCuda(x_LP,flag_eo);           // LP Solution is projected and put into x_LP, x_LP <- (1-UU^dag) x_LP
+          t2 = MPI_Wtime();
+          printfQuda("TIME_REPORT: NHP %04d - LP solution projection: %f sec\n",is+1,t2-t1);
+	}
+
+	t1 = MPI_Wtime();
+	oneEndTrick_w_One_Der<double>(*x,*tmp3,*tmp4,param, gen_uloc, std_uloc, gen_oneD, std_oneD, gen_csvC, std_csvC); //-high-precision
+	t2 = MPI_Wtime();
+	printfQuda("TIME_REPORT: NHP %04d - HP Contractions: %f sec\n",is+1,t2-t1);
+	t1 = MPI_Wtime();
+	oneEndTrick_w_One_Der<double>(*x_LP,*tmp3,*tmp4,param, gen_uloc_LP, std_uloc_LP, gen_oneD_LP, std_oneD_LP, gen_csvC_LP, std_csvC_LP); //-low-precision
+	t2 = MPI_Wtime();
+	printfQuda("TIME_REPORT: NHP %04d - LP Contractions: %f sec\n",is+1,t2-t1);
+	
 	t4 = MPI_Wtime();
-	printfQuda("TIME_REPORT: One-end trick for NHP %04d finished in %f sec\n",is+1,t4-t3);
+	printfQuda("### TIME_REPORT: NHP %04d - Finished in %f sec\n",is+1,t4-t3);
 	
 	if( (is+1)%Nd == 0){
 	  t1 = MPI_Wtime();
@@ -3756,7 +3762,6 @@ void calcEigenVectors_loop_wOneD_FullOp(void **gaugeToPlaquette, QudaInvertParam
 	    }
 	  }
 	  else if(GK_nProc[2]>1){
-	    t1 = MPI_Wtime();
 	    performFFT<double>(buf_std_uloc, std_uloc, iPrint, Nmoms, momQsq);  performFFT<double>(buf_std_uloc_LP, std_uloc_LP, iPrint, Nmoms, momQsq);
 	    performFFT<double>(buf_gen_uloc, gen_uloc, iPrint, Nmoms, momQsq);	performFFT<double>(buf_gen_uloc_LP, gen_uloc_LP, iPrint, Nmoms, momQsq);
 	    
@@ -3768,14 +3773,13 @@ void calcEigenVectors_loop_wOneD_FullOp(void **gaugeToPlaquette, QudaInvertParam
 	    }
 	  }
 	  t2 = MPI_Wtime();
-	  printfQuda("Loops for Nstoch = %d FFT'ed and copied to write buffers in %f sec\n",is+1,t2-t1);
+	  printfQuda("Loops for NHP = %04d FFT'ed and copied to write buffers in %f sec\n",is+1,t2-t1);
 	  iPrint++;
 	}//-if (is+1)
-	
-	delete in_LP;
       } // close loop over noise vectors
  
       //-Write the high-precision part
+      t1 = MPI_Wtime();
       sprintf(loop_stoch_fname,"%s_stoch_TSM_NeV%d_HighPrec",loopInfo.loop_fname, NeV_defl);
       if(strcmp(loopInfo.file_format,"ASCII")==0){ // Write the loops in ASCII format
 	writeLoops_ASCII(buf_std_uloc, loop_stoch_fname, loopInfo, momQsq, 0, 0, stoch_part, useTSM, HighPrecSum); // Scalar
@@ -3790,9 +3794,11 @@ void calcEigenVectors_loop_wOneD_FullOp(void **gaugeToPlaquette, QudaInvertParam
       else if(strcmp(loopInfo.file_format,"HDF5")==0){ // Write the loops in HDF5 format
 	writeLoops_HDF5(buf_std_uloc, buf_gen_uloc, buf_std_oneD, buf_std_csvC, buf_gen_oneD, buf_gen_csvC, loop_stoch_fname, loopInfo, momQsq, stoch_part, useTSM, HighPrecSum);
       }
-      printfQuda("Writing the high-precision loops for NeV = %d completed.\n",NeV_defl);
+      t2 = MPI_Wtime();
+      printfQuda("Writing the high-precision loops for NeV = %d completed in %f sec.\n",NeV_defl,t2-t1);
 
       //-Write the low-precision part
+      t1 = MPI_Wtime();
       sprintf(loop_stoch_fname,"%s_stoch_TSM_NeV%d_LowPrec",loopInfo.loop_fname, NeV_defl);
       if(strcmp(loopInfo.file_format,"ASCII")==0){ // Write the loops in ASCII format
 	writeLoops_ASCII(buf_std_uloc_LP, loop_stoch_fname, loopInfo, momQsq, 0, 0, stoch_part, useTSM, HighPrecSum); // Scalar
@@ -3807,13 +3813,15 @@ void calcEigenVectors_loop_wOneD_FullOp(void **gaugeToPlaquette, QudaInvertParam
       else if(strcmp(loopInfo.file_format,"HDF5")==0){ // Write the loops in HDF5 format
 	writeLoops_HDF5(buf_std_uloc_LP, buf_gen_uloc_LP, buf_std_oneD_LP, buf_std_csvC_LP, buf_gen_oneD_LP, buf_gen_csvC_LP, loop_stoch_fname, loopInfo, momQsq, stoch_part, useTSM, HighPrecSum);
       }
-      printfQuda("Writing the low-precision loops for NeV = %d completed.\n",NeV_defl);
-
+      t2 = MPI_Wtime();
+      printfQuda("Writing the low-precision loops for NeV = %d completed in %f sec.\n",NeV_defl,t2-t1);
     }//-useTSM
     
     gsl_rng_free(rNum);
   }//-dstep
     
+  printfQuda("\n ### Stochastic part calculation Done ###\n");
+  printfQuda("\nCleaning up...\n");
 
   //-Free the momentum matrices
   for(int ip=0; ip<SplV; ip++) free(mom[ip]);
@@ -3885,17 +3893,14 @@ void calcEigenVectors_loop_wOneD_FullOp(void **gaugeToPlaquette, QudaInvertParam
 
 
   free(input_vector);
-  free(output_vector);
+  delete deflation;
   delete solve;
   delete d;
   delete dSloppy;
   delete dPre;
-  delete K_srcdef;
+  delete K_vecdef;
   delete K_vector;
   delete K_gauge;
-  delete deflation;
-  delete h_x;
-  delete h_b;
   delete x;
   delete b;
   delete tmp3;
@@ -3906,6 +3911,9 @@ void calcEigenVectors_loop_wOneD_FullOp(void **gaugeToPlaquette, QudaInvertParam
     delete x_LP;
   }
 
+  if(stochEO) delete deflationEO;
+
+  printfQuda("...Done\n");
   popVerbosity();
   saveTuneCache(getVerbosity());
   profileInvert.TPSTOP(QUDA_PROFILE_TOTAL);

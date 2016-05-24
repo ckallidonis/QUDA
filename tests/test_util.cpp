@@ -2990,6 +2990,19 @@ int process_command_line_option(int argc, char** argv, int* idx)
     goto out;
   }
 
+  if( strcmp(argv[i], "--UseEven_EO") ==0){
+    if(i+1 >= argc){
+      usage(argv);
+    }
+    if( strcmp(argv[i+1],"yes")==0 || strcmp(argv[i+1],"YES")==0 ) isEven_EO = true;
+    else if ( strcmp(argv[i+1],"no")==0 || strcmp(argv[i+1],"NO")==0 ) isEven_EO = false;
+    else usage(argv);
+    i++;
+    ret = 0;
+    goto out;
+  }
+
+
   //=============================================================================
   //=============================================================================
   //=============================================================================
