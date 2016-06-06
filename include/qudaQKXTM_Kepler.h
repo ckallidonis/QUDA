@@ -14,7 +14,7 @@
 
 #define QUDAQKXTM_DIM 4
 #define MAX_NSOURCES 1000
-#define MAX_NMOMENTA 1000
+#define MAX_NMOMENTA 5000
 #define MAX_TSINK 10
 #define MAX_DEFLSTEPS 10
 #define MAX_PROJS 5
