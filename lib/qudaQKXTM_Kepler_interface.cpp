@@ -3924,7 +3924,7 @@ void calcEigenVectors_threepTwop_EvenOdd(void **gaugeSmeared, void **gauge, Quda
 					 char *filename_twop, char *filename_threep, WHICHPARTICLE NUCLEON){
 
   bool flag_eo;
-  double t1,t2;
+  double t1,t2,t3,t4;
 
   profileInvert.TPSTART(QUDA_PROFILE_TOTAL);
   if(param->solve_type != QUDA_NORMOP_PC_SOLVE) errorQuda("This function works only with even odd preconditioning");
@@ -4150,6 +4150,8 @@ void calcEigenVectors_threepTwop_EvenOdd(void **gaugeSmeared, void **gauge, Quda
 
 
   for(int isource = 0 ; isource < info.Nsources ; isource++){
+    t3 = MPI_Wtime();
+    printfQuda("\n ### Calculations for source-position %d - %02d.%02d.%02d.%02d begin now ###\n\n",isource,info.sourcePosition[isource][0],info.sourcePosition[isource][1],info.sourcePosition[isource][2],info.sourcePosition[isource][3]);
 
     if( strcmp(info.corr_file_format,"ASCII")==0 ){
       sprintf(filename_mesons,"%s.mesons.SS.%02d.%02d.%02d.%02d.dat",filename_twop,info.sourcePosition[isource][0],info.sourcePosition[isource][1],info.sourcePosition[isource][2],info.sourcePosition[isource][3]);
@@ -4166,12 +4168,11 @@ void calcEigenVectors_threepTwop_EvenOdd(void **gaugeSmeared, void **gauge, Quda
       checkBaryons = exists_file(filename_baryons);
       if( (checkMesons == true) && (checkBaryons == true) ) continue;
     }
-    printfQuda("The baryons two-point function %s filename is: %s\n",info.corr_file_format,filename_baryons);
-    printfQuda("The mesons two-point function %s filename is: %s\n",info.corr_file_format,filename_mesons);
 
+    printfQuda("Forward Inversions:\n");
+    t1 = MPI_Wtime();
     for(int isc = 0 ; isc < 12 ; isc++){
       ///////////////////////////////////////////////////////////////////////////////// forward prop for up quark ///////////////////////////
-      t1 = MPI_Wtime();
       memset(input_vector,0,X[0]*X[1]*X[2]*X[3]*spinorSiteSize*sizeof(double));
       b->changeTwist(QUDA_TWIST_PLUS);
       x->changeTwist(QUDA_TWIST_PLUS);
@@ -4200,7 +4201,8 @@ void calcEigenVectors_threepTwop_EvenOdd(void **gaugeSmeared, void **gauge, Quda
       K_vector->download();
       deflation_up->deflateVector(*K_guess,*K_vector);
       K_guess->uploadToCuda(out,flag_eo); // initial guess is ready
-      //  zeroCuda(*out); // remove it later , just for test
+
+      printfQuda(" up - %02d: ",isc);
       (*solve)(*out,*in);
       dirac.reconstruct(*x,*b,param->solution_type);
       K_vector->downloadFromCuda(x,flag_eo);
@@ -4210,12 +4212,10 @@ void calcEigenVectors_threepTwop_EvenOdd(void **gaugeSmeared, void **gauge, Quda
 
       K_temp->castDoubleToFloat(*K_vector);
       K_prop_up->absorbVectorToDevice(*K_temp,isc/3,isc%3);
-      t2 = MPI_Wtime();
-      printfQuda("Inversion up = %d,  for source = %d finished in time %f sec\n",isc,isource,t2-t1);
+      //      printfQuda("Inversion up = %d,  for source = %d finished in time %f sec\n",isc,isource,t2-t1);
       //////////////////////////////////////////////////////////
       ////////////////////////////////////////////////////////////////////////////// Forward prop for down quark ///////////////////////////////////
       /////////////////////////////////////////////////////////
-      t1 = MPI_Wtime();
       memset(input_vector,0,X[0]*X[1]*X[2]*X[3]*spinorSiteSize*sizeof(double));
       b->changeTwist(QUDA_TWIST_MINUS);
       x->changeTwist(QUDA_TWIST_MINUS);
@@ -4244,7 +4244,8 @@ void calcEigenVectors_threepTwop_EvenOdd(void **gaugeSmeared, void **gauge, Quda
       K_vector->download();
       deflation_down->deflateVector(*K_guess,*K_vector);
       K_guess->uploadToCuda(out,flag_eo); // initial guess is ready
-      //  zeroCuda(*out); // remove it later , just for test
+
+      printfQuda(" dn - %02d: ",isc);
       (*solve)(*out,*in);
       dirac.reconstruct(*x,*b,param->solution_type);
       K_vector->downloadFromCuda(x,flag_eo);
@@ -4254,10 +4255,10 @@ void calcEigenVectors_threepTwop_EvenOdd(void **gaugeSmeared, void **gauge, Quda
 
       K_temp->castDoubleToFloat(*K_vector);
       K_prop_down->absorbVectorToDevice(*K_temp,isc/3,isc%3);
-      t2 = MPI_Wtime();
-      printfQuda("Inversion down = %d,  for source = %d finished in time %f sec\n",isc,isource,t2-t1);
+      //      printfQuda("Inversion down = %d,  for source = %d finished in time %f sec\n",isc,isource,t2-t1);
     } // close loop over 12 spin-color
-
+    t2 = MPI_Wtime();
+    printfQuda("TIME_REPORT - Forward Inversions: %f sec.\n\n",t2-t1);
 
     if(info.run3pt_src[isource]){
 
@@ -4302,13 +4303,14 @@ void calcEigenVectors_threepTwop_EvenOdd(void **gaugeSmeared, void **gauge, Quda
 	    K_temp->zero_device();	
 	  }
 	t2 = MPI_Wtime();
-	printfQuda("Time needed to prepare the 3D props for sink-source[%d]=%d is %f sec\n",its,info.tsinkSource[its],t2-t1);
-
+	printfQuda("TIME_REPORT - 3d Props preparation for sink-source[%d]=%d: %f sec\n",its,info.tsinkSource[its],t2-t1);
 
 	for(int proj=0;proj<info.Nproj[its];proj++){
 	  WHICHPROJECTOR PID = (WHICHPROJECTOR) info.proj_list[its][proj];
 	  char *proj_str;
 	  asprintf(&proj_str,"%s",info.thrp_proj_type[info.proj_list[its][proj]]);
+
+	  printfQuda("\n# Three-point function calculation for source-position = %d, sink-source = %d, projector %s begins now\n",isource,info.tsinkSource[its],proj_str);
 
 	  if( strcmp(info.corr_file_format,"ASCII")==0 ){
 	    asprintf(&filename_threep_base,"%s_tsink%d_proj%s",filename_threep,info.tsinkSource[its],proj_str);
@@ -4316,9 +4318,10 @@ void calcEigenVectors_threepTwop_EvenOdd(void **gaugeSmeared, void **gauge, Quda
 	  }
 
 	  /////////////////////////////////////////sequential propagator for the part 1
+	  printfQuda("Sequential Inversions, flavor %s:\n",NUCLEON == NEUTRON ? "up" : "dn");
+	  t1 = MPI_Wtime();
 	  for(int nu = 0 ; nu < 4 ; nu++)
 	    for(int c2 = 0 ; c2 < 3 ; c2++){
-	      t1 = MPI_Wtime();
 	      K_temp->zero_device();
 	      if(NUCLEON == PROTON){
 		if( (my_fixSinkTime >= 0) && ( my_fixSinkTime < X[3] ) ) K_contract->seqSourceFixSinkPart1(*K_temp,*K_prop3D_up, *K_prop3D_down, my_fixSinkTime, nu, c2, PID, NUCLEON);}
@@ -4353,6 +4356,8 @@ void calcEigenVectors_threepTwop_EvenOdd(void **gaugeSmeared, void **gauge, Quda
 	      else if(NUCLEON == NEUTRON)
 		deflation_up->deflateVector(*K_guess,*K_vector);
 	      K_guess->uploadToCuda(out,flag_eo); // initial guess is ready
+
+	      printfQuda("%02d - ",nu*3+c2);
 	      (*solve)(*out,*in);
 	      dirac.reconstruct(*x,*b,param->solution_type);
 	      K_vector->downloadFromCuda(x,flag_eo);
@@ -4364,25 +4369,24 @@ void calcEigenVectors_threepTwop_EvenOdd(void **gaugeSmeared, void **gauge, Quda
 	      //
 	      K_temp->castDoubleToFloat(*K_vector);
 	      K_seqProp->absorbVectorToDevice(*K_temp,nu,c2);
-	      t2 = MPI_Wtime();
-	      printfQuda("Inversion time for seq prop part 1 = %d, source = %d at sink-source = %d, projector %s is: %f sec\n",nu*3+c2,isource,info.tsinkSource[its],proj_str,t2-t1);
+	      //	      printfQuda("Inversion time for seq prop part 1 = %d, source = %d at sink-source = %d, projector %s is: %f sec\n",nu*3+c2,isource,info.tsinkSource[its],proj_str,t2-t1);
 	    }
+	  t2 = MPI_Wtime();
+	  printfQuda("TIME_REPORT - Sequential Inversions, flavor %s: %f sec\n",NUCLEON == NEUTRON ? "up" : "dn",t2-t1);
 
 	  ////////////////// Contractions for part 1 ////////////////
 	  t1 = MPI_Wtime();
-	  if(NUCLEON == PROTON){
-	    K_contract->contractFixSink(*K_seqProp, *K_prop_up  , *K_gaugeContractions, corrThp_local, corrThp_noether, corrThp_oneD, PID, NUCLEON, 1, isource);
-	  }
-	  if(NUCLEON == NEUTRON){
-	    K_contract->contractFixSink(*K_seqProp, *K_prop_down, *K_gaugeContractions, corrThp_local, corrThp_noether, corrThp_oneD, PID, NUCLEON, 1, isource);
-	  }                
+	  if(NUCLEON == PROTON)  K_contract->contractFixSink(*K_seqProp, *K_prop_up  , *K_gaugeContractions, corrThp_local, corrThp_noether, corrThp_oneD, PID, NUCLEON, 1, isource);
+	  if(NUCLEON == NEUTRON) K_contract->contractFixSink(*K_seqProp, *K_prop_down, *K_gaugeContractions, corrThp_local, corrThp_noether, corrThp_oneD, PID, NUCLEON, 1, isource);
 	  t2 = MPI_Wtime();
-	  printfQuda("Time for fix sink contractions for part 1, source = %d at sink-source = %d, projector %s: %f sec\n",isource,info.tsinkSource[its],proj_str,t2-t1);
+	  printfQuda("TIME_REPORT - Three-point Contractions, flavor %s: %f sec\n",NUCLEON == NEUTRON ? "up" : "dn",t2-t1);
 
-
+	  t1 = MPI_Wtime();
 	  if( strcmp(info.corr_file_format,"ASCII")==0 ){
 	    K_contract->writeThrp_ASCII(corrThp_local, corrThp_noether, corrThp_oneD, NUCLEON, 1, filename_threep_base, isource, info.tsinkSource[its]);
-	    printfQuda("Three-point function for part 1, source = %d at sink-source = %d, projector %s written in ASCII format.\n",isource,info.tsinkSource[its],proj_str);
+	    t2 = MPI_Wtime();
+	    printfQuda("TIME_REPORT - Done: Three-point function for source-position = %d, sink-source = %d, projector %s, flavor %s written in ASCII format in %f sec.\n",
+		       isource,info.tsinkSource[its],proj_str,NUCLEON == NEUTRON ? "up" : "dn",t2-t1);
 	  }
 	  else if( strcmp(info.corr_file_format,"HDF5")==0 ){
 	    int uOrd;
@@ -4396,13 +4400,15 @@ void calcEigenVectors_threepTwop_EvenOdd(void **gaugeSmeared, void **gauge, Quda
 	    for(int mu = 0;mu<4;mu++)
 	      K_contract->copyThrpToHDF5_Buf((void*)Thrp_oneD_HDF5[mu],(void*)corrThp_oneD ,mu, uOrd, its, info.Ntsink, proj, thrp_sign, THRP_ONED);
 
-	    printfQuda("Three-point function for part 1, source = %d at sink-source = %d copied to HDF5 write buffers.\n",isource,info.tsinkSource[its]);
+	    t2 = MPI_Wtime();
+	    printfQuda("TIME_REPORT - Three-point function for flavor %s copied to HDF5 write buffers in %f sec.\n",NUCLEON == NEUTRON ? "up" : "dn",t2-t1);
 	  }
 
 	  /////////////////////////////////////////sequential propagator for the part 2
+	  printfQuda("Sequential Inversions, flavor %s:\n",NUCLEON == NEUTRON ? "dn" : "up");
+	  t1 = MPI_Wtime();
 	  for(int nu = 0 ; nu < 4 ; nu++)
 	    for(int c2 = 0 ; c2 < 3 ; c2++){
-	      t1 = MPI_Wtime();
 	      K_temp->zero_device();
 	      if(NUCLEON == PROTON){
 		if( (my_fixSinkTime >= 0) && ( my_fixSinkTime < X[3] ) ) K_contract->seqSourceFixSinkPart2(*K_temp,*K_prop3D_up, my_fixSinkTime, nu, c2, PID, NUCLEON);}
@@ -4437,6 +4443,8 @@ void calcEigenVectors_threepTwop_EvenOdd(void **gaugeSmeared, void **gauge, Quda
 	      else if(NUCLEON == NEUTRON)
 		deflation_down->deflateVector(*K_guess,*K_vector);
 	      K_guess->uploadToCuda(out,flag_eo); // initial guess is ready
+
+	      printfQuda("%02d - ",nu*3+c2);
 	      (*solve)(*out,*in);
 	      dirac.reconstruct(*x,*b,param->solution_type);
 	      K_vector->downloadFromCuda(x,flag_eo);
@@ -4448,22 +4456,24 @@ void calcEigenVectors_threepTwop_EvenOdd(void **gaugeSmeared, void **gauge, Quda
 	      //
 	      K_temp->castDoubleToFloat(*K_vector);
 	      K_seqProp->absorbVectorToDevice(*K_temp,nu,c2);
-	      t2 = MPI_Wtime();
-	      printfQuda("Inversion time for seq prop part 2 = %d, source = %d at sink-source = %d, projector %s is: %f sec\n",nu*3+c2,isource,info.tsinkSource[its],proj_str,t2-t1);
+	      //	      printfQuda("Inversion time for seq prop part 2 = %d, source = %d at sink-source = %d, projector %s is: %f sec\n",nu*3+c2,isource,info.tsinkSource[its],proj_str,t2-t1);
 	    }
+	  t2 = MPI_Wtime();
+	  printfQuda("TIME_REPORT - Sequential Inversions, flavor %s: %f sec\n",NUCLEON == NEUTRON ? "dn" : "up",t2-t1);
 
 	  ////////////////// Contractions for part 2 ////////////////
 	  t1 = MPI_Wtime();
-	  if(NUCLEON == PROTON)
-	    K_contract->contractFixSink(*K_seqProp, *K_prop_down, *K_gaugeContractions, corrThp_local, corrThp_noether, corrThp_oneD, PID, NUCLEON, 2, isource);
-	  if(NUCLEON == NEUTRON)
-	    K_contract->contractFixSink(*K_seqProp, *K_prop_up  , *K_gaugeContractions, corrThp_local, corrThp_noether, corrThp_oneD, PID, NUCLEON, 2, isource);
+	  if(NUCLEON == PROTON)  K_contract->contractFixSink(*K_seqProp, *K_prop_down, *K_gaugeContractions, corrThp_local, corrThp_noether, corrThp_oneD, PID, NUCLEON, 2, isource);
+	  if(NUCLEON == NEUTRON) K_contract->contractFixSink(*K_seqProp, *K_prop_up  , *K_gaugeContractions, corrThp_local, corrThp_noether, corrThp_oneD, PID, NUCLEON, 2, isource);
 	  t2 = MPI_Wtime();
-	  printfQuda("Time for fix sink contractions for part 2, source = %d at sink-source = %d, projector %s: %f sec\n",isource,info.tsinkSource[its],proj_str,t2-t1);
+	  printfQuda("TIME_REPORT - Three-point Contractions, flavor %s: %f sec\n",NUCLEON == NEUTRON ? "dn" : "up",t2-t1);
 
+	  t1 = MPI_Wtime();
 	  if( strcmp(info.corr_file_format,"ASCII")==0 ){
 	    K_contract->writeThrp_ASCII(corrThp_local, corrThp_noether, corrThp_oneD, NUCLEON, 2, filename_threep_base, isource, info.tsinkSource[its]);
-	    printfQuda("Three-point function for part 2, source = %d at sink-source = %d, projector %s written in ASCII format.\n",isource,info.tsinkSource[its],proj_str);
+	    t2 = MPI_Wtime();
+	    printfQuda("TIME_REPORT - Done: Three-point function for source-position = %d, sink-source = %d, projector %s, flavor %s written in ASCII format in %f sec.\n",
+		       isource,info.tsinkSource[its],proj_str,NUCLEON == NEUTRON ? "dn" : "up",t2-t1);
 	  }
 	  else if( strcmp(info.corr_file_format,"HDF5")==0 ){
 	    int uOrd;
@@ -4477,7 +4487,8 @@ void calcEigenVectors_threepTwop_EvenOdd(void **gaugeSmeared, void **gauge, Quda
 	    for(int mu = 0;mu<4;mu++)
 	      K_contract->copyThrpToHDF5_Buf((void*)Thrp_oneD_HDF5[mu],(void*)corrThp_oneD ,mu, uOrd, its, info.Ntsink, proj, thrp_sign, THRP_ONED);
 	  
-	    printfQuda("Three-point function for part 2, source = %d at sink-source = %d copied to HDF5 write buffers.\n",isource,info.tsinkSource[its]);
+	    t2 = MPI_Wtime();
+	    printfQuda("TIME_REPORT - Three-point function for flavor %s, sink-source = %d, projector %s copied to HDF5 write buffers in %f sec.\n",NUCLEON == NEUTRON ? "dn" : "up",info.tsinkSource[its],proj_str,t2-t1);
 	  }
 
 	}//-loop over projectors
@@ -4485,13 +4496,15 @@ void calcEigenVectors_threepTwop_EvenOdd(void **gaugeSmeared, void **gauge, Quda
 
       //-C.K. Write the three-point function in HDF5 format
       if( strcmp(info.corr_file_format,"HDF5")==0 ){
+	t1 = MPI_Wtime();
 	asprintf(&filename_threep_base,"%s_%s_Qsq%d_SS.%02d.%02d.%02d.%02d.h5",filename_threep, (NUCLEON == PROTON) ? "proton" : "neutron",info.Q_sq,
 		 GK_sourcePosition[isource][0],GK_sourcePosition[isource][1],GK_sourcePosition[isource][2],GK_sourcePosition[isource][3]);
-
 	printfQuda("The three-point function HDF5 filename is: %s\n",filename_threep_base);
 	
 	K_contract->writeThrp_HDF5((void*) Thrp_local_HDF5, (void*) Thrp_noether_HDF5, (void**)Thrp_oneD_HDF5, filename_threep_base, info, isource);
-	printfQuda("Three-point function for source = %d written in HDF5 format.\n",isource);
+	
+	t2 = MPI_Wtime();
+	printfQuda("TIME_REPORT - Done: Three-point function for source-position = %d written in HDF5 format in %f sec.\n",isource,t2-t1);
       }
 
     }//-if running for the specific isource
@@ -4522,27 +4535,37 @@ void calcEigenVectors_threepTwop_EvenOdd(void **gaugeSmeared, void **gauge, Quda
     K_contract->contractMesons( *K_prop_up,*K_prop_down, corrMesons , isource);
     K_contract->contractBaryons(*K_prop_up,*K_prop_down, corrBaryons, isource);
     t2 = MPI_Wtime();
-    printfQuda("Two-point Contractions for source = %d finished in time %f sec\n",isource,t2-t1);
+    printfQuda("\nTIME_REPORT - Two-point Contractions: %f sec\n",t2-t1);
 
+    printfQuda("The baryons two-point function %s filename is: %s\n",info.corr_file_format,filename_baryons);
+    printfQuda("The mesons two-point function %s filename is: %s\n",info.corr_file_format,filename_mesons);
     if( strcmp(info.corr_file_format,"ASCII")==0 ){
+      t1 = MPI_Wtime();
       K_contract->writeTwopMesons_ASCII( corrMesons , filename_mesons , isource);
       K_contract->writeTwopBaryons_ASCII(corrBaryons, filename_baryons, isource);
-      printfQuda("Two-point function for Mesons and Baryons for source = %d written in ASCII format.\n",isource);
+      t2 = MPI_Wtime();
+      printfQuda("TIME_REPORT - Done: Two-point function for Mesons and Baryons for source-position = %d written in ASCII format in %f sec.\n",isource,t2-t1);
     }
     else if( strcmp(info.corr_file_format,"HDF5")==0 ){
+      t1 = MPI_Wtime();
       K_contract->copyTwopBaryonsToHDF5_Buf((void*)Twop_baryons_HDF5, (void*)corrBaryons, isource);
       K_contract->copyTwopMesonsToHDF5_Buf((void*)Twop_mesons_HDF5, (void*)corrMesons);
-      printfQuda("Two-point function for baryons and mesons, source = %d copied to HDF5 write buffers.\n",isource);
+      t2 = MPI_Wtime();
+      printfQuda("TIME_REPORT - Two-point function for baryons and mesons copied to HDF5 write buffers in %f sec.\n",t2-t1);
       
+      t1 = MPI_Wtime();
       K_contract->writeTwopBaryons_HDF5((void*) Twop_baryons_HDF5, filename_baryons, info, isource);
-      printfQuda("Two-point function for Baryons for source = %d written in HDF5 format.\n",isource);
       K_contract->writeTwopMesons_HDF5 ((void*) Twop_mesons_HDF5 , filename_mesons , info, isource);
-      printfQuda("Two-point function for Mesons  for source = %d written in HDF5 format.\n",isource);
+      t2 = MPI_Wtime();
+      printfQuda("TIME_REPORT - Done: Two-point function for Baryons and Mesons for source-position = %d written in HDF5 format in %f sec.\n",isource,t2-t1);
     }
 
+    t4 = MPI_Wtime();
+    printfQuda("\n ### Calculations for source-position %d - %02d.%02d.%02d.%02d Completed in %f sec. ###\n",isource,
+	       info.sourcePosition[isource][0],info.sourcePosition[isource][1],info.sourcePosition[isource][2],info.sourcePosition[isource][3],t4-t3);
   } // close loop over source positions
 
-
+  printfQuda("\nCleaning up...\n");
   free(corrThp_local);
   free(corrThp_noether);
   free(corrThp_oneD);
@@ -4581,6 +4604,8 @@ void calcEigenVectors_threepTwop_EvenOdd(void **gaugeSmeared, void **gauge, Quda
   delete K_seqProp;
   delete K_prop3D_up;
   delete K_prop3D_down;
+
+  printfQuda("...Done\n");
 
   popVerbosity();
   saveTuneCache(getVerbosity());

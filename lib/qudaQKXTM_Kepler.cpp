@@ -1414,6 +1414,9 @@ void QKXTM_Contraction_Kepler<Float>::contractMesons(QKXTM_Propagator_Kepler<Flo
   prop1.createTexObject(&texProp1);
   prop2.createTexObject(&texProp2);
 
+  if( typeid(Float) == typeid(float))  printfQuda("contractMesons: Will perform in single precision\n");
+  if( typeid(Float) == typeid(double)) printfQuda("contractMesons: Will perform in double precision\n");
+
   Float (*corr_mom_local)[2][N_MESONS] =(Float(*)[2][N_MESONS]) calloc(GK_localL[3]*GK_Nmoms*2*N_MESONS*2,sizeof(Float));
   Float (*corr_mom_local_reduced)[2][N_MESONS] =(Float(*)[2][N_MESONS]) calloc(GK_localL[3]*GK_Nmoms*2*N_MESONS*2,sizeof(Float));
   Float (*corr_mom)[2][N_MESONS] = (Float(*)[2][N_MESONS]) calloc(GK_totalL[3]*GK_Nmoms*2*N_MESONS*2,sizeof(Float));
@@ -1468,6 +1471,9 @@ void QKXTM_Contraction_Kepler<Float>::contractBaryons(QKXTM_Propagator_Kepler<Fl
   cudaTextureObject_t texProp1, texProp2;
   prop1.createTexObject(&texProp1);
   prop2.createTexObject(&texProp2);
+
+  if( typeid(Float) == typeid(float))  printfQuda("contractBaryons: Will perform in single precision\n");
+  if( typeid(Float) == typeid(double)) printfQuda("contractBaryons: Will perform in double precision\n");
 
   Float (*corr_mom_local)[2][N_BARYONS][4][4] =(Float(*)[2][N_BARYONS][4][4]) calloc(GK_localL[3]*GK_Nmoms*2*N_BARYONS*4*4*2,sizeof(Float));
   Float (*corr_mom_local_reduced)[2][N_BARYONS][4][4] =(Float(*)[2][N_BARYONS][4][4]) calloc(GK_localL[3]*GK_Nmoms*2*N_BARYONS*4*4*2,sizeof(Float));
@@ -1533,11 +1539,11 @@ void QKXTM_Contraction_Kepler<Float>::writeTwopBaryons_HDF5(void *twopBaryons, c
     hid_t DATATYPE_H5;
     if( typeid(Float) == typeid(float) ){
       DATATYPE_H5 = H5T_NATIVE_FLOAT;
-      printfQuda("**** writeTwopBaryons_HDF5: typeid is float ****\n");
+      printfQuda("writeTwopBaryons_HDF5: Will write in single precision\n");
     }
     if( typeid(Float) == typeid(double)){
       DATATYPE_H5 = H5T_NATIVE_DOUBLE;
-      printfQuda("**** writeTwopBaryons_HDF5: typeid is double ****\n");
+      printfQuda("writeTwopBaryons_HDF5: Will write in double precision\n");
     }
 
     int t_src = GK_sourcePosition[isource][3];
@@ -1713,8 +1719,14 @@ void QKXTM_Contraction_Kepler<Float>::writeTwopBaryons_ASCII(void *corrBaryons, 
   if( GLcorrBaryons == NULL )errorQuda("writeTwopBaryons_ASCII: Cannot allocate memory for Baryon two-point function buffer.");
 
   MPI_Datatype DATATYPE = -1;
-  if( typeid(Float) == typeid(float))  DATATYPE = MPI_FLOAT;
-  if( typeid(Float) == typeid(double)) DATATYPE = MPI_DOUBLE;
+  if( typeid(Float) == typeid(float)){
+    DATATYPE = MPI_FLOAT;
+    printfQuda("writeTwopBaryons_ASCII: Will write in single precision\n");
+  }
+  if( typeid(Float) == typeid(double)){
+    DATATYPE = MPI_DOUBLE;
+    printfQuda("writeTwopBaryons_ASCII: Will write in double precision\n");
+  }
 
   int error;
   if(GK_timeRank >= 0 && GK_timeRank < GK_nProc[3] ){
@@ -1750,6 +1762,10 @@ void QKXTM_Contraction_Kepler<Float>::contractBaryons(QKXTM_Propagator_Kepler<Fl
   prop1.createTexObject(&texProp1);
   prop2.createTexObject(&texProp2);
 
+  if( typeid(Float) == typeid(float))  printfQuda("contractBaryons: Will perform in single precision\n");
+  if( typeid(Float) == typeid(double)) printfQuda("contractBaryons: Will perform in double precision\n");
+
+
   Float (*corrBaryons_local)[2][N_BARYONS][4][4] =(Float(*)[2][N_BARYONS][4][4]) calloc(GK_localL[3]*GK_Nmoms*2*N_BARYONS*4*4*2,sizeof(Float));
 
   if( corrBaryons_local == NULL )errorQuda("Error problem to allocate memory");
@@ -1782,11 +1798,11 @@ void QKXTM_Contraction_Kepler<Float>::writeTwopMesons_HDF5(void *twopMesons, cha
     hid_t DATATYPE_H5;
     if( typeid(Float) == typeid(float) ){
       DATATYPE_H5 = H5T_NATIVE_FLOAT;
-      printfQuda("**** writeTwopMesons_HDF5: typeid is float ****\n");
+      printfQuda("writeTwopMesons_HDF5: Will write in single precision\n");
     }
     if( typeid(Float) == typeid(double)){
       DATATYPE_H5 = H5T_NATIVE_DOUBLE;
-      printfQuda("**** writeTwopMesons_HDF5: typeid is double ****\n");
+      printfQuda("writeTwopMesons_HDF5: Will write in double precision\n");
     }
 
     int t_src = GK_sourcePosition[isource][3];
@@ -1951,8 +1967,14 @@ void QKXTM_Contraction_Kepler<Float>::writeTwopMesons_ASCII(void *corrMesons, ch
   if( GLcorrMesons == NULL )errorQuda("writeTwopMesons_ASCII: Cannot allocate memory for Meson two-point function buffer.");
 
   MPI_Datatype DATATYPE = -1;
-  if( typeid(Float) == typeid(float))  DATATYPE = MPI_FLOAT;
-  if( typeid(Float) == typeid(double)) DATATYPE = MPI_DOUBLE;
+  if( typeid(Float) == typeid(float)){
+    DATATYPE = MPI_FLOAT;
+    printfQuda("writeTwopMesons_ASCII: Will write in single precision\n");
+  }
+  if( typeid(Float) == typeid(double)){
+    DATATYPE = MPI_DOUBLE;
+    printfQuda("writeTwopMesons_ASCII: Will write in double precision\n");
+  }
 
   int error;
   if(GK_timeRank >= 0 && GK_timeRank < GK_nProc[3] ){
@@ -1984,6 +2006,10 @@ void QKXTM_Contraction_Kepler<Float>::contractMesons(QKXTM_Propagator_Kepler<Flo
   cudaTextureObject_t texProp1, texProp2;
   prop1.createTexObject(&texProp1);
   prop2.createTexObject(&texProp2);
+
+  if( typeid(Float) == typeid(float))  printfQuda("contractMesons: Will perform in single precision\n");
+  if( typeid(Float) == typeid(double)) printfQuda("contractMesons: Will perform in double precision\n");
+
 
   Float (*corrMesons_local)[2][N_MESONS] =(Float(*)[2][N_MESONS]) calloc(GK_localL[3]*GK_Nmoms*2*N_MESONS*2,sizeof(Float));
   if( corrMesons_local == NULL )errorQuda("contractMesons: Cannot allocate memory for Meson two-point function contract buffer.");
@@ -2046,11 +2072,11 @@ void QKXTM_Contraction_Kepler<Float>::writeThrp_HDF5(void *Thrp_local_HDF5, void
     hid_t DATATYPE_H5;
     if( typeid(Float) == typeid(float) ){
       DATATYPE_H5 = H5T_NATIVE_FLOAT;
-      printfQuda("**** writeThrp_HDF5: typeid is float ****\n");
+      printfQuda("writeThrp_HDF5: Will write in single precision\n");
     }
     if( typeid(Float) == typeid(double)){
       DATATYPE_H5 = H5T_NATIVE_DOUBLE;
-      printfQuda("**** writeThrp_HDF5: typeid is double ****\n");
+      printfQuda("writeThrp_HDF5: Will write in double precision\n");
     }
 
     Float *writeThrpBuf;
@@ -2388,11 +2414,11 @@ void QKXTM_Contraction_Kepler<Float>::writeThrp_ASCII(void *corrThp_local, void 
   MPI_Datatype DATATYPE = -1;
   if( typeid(Float) == typeid(float)){
     DATATYPE = MPI_FLOAT;
-    printfQuda("**** writeThrp_ASCII: typeid is float ****\n");
+    printfQuda("writeThrp_ASCII: Will write in single precision\n");
   }
   if( typeid(Float) == typeid(double)){
     DATATYPE = MPI_DOUBLE;
-    printfQuda("**** writeThrp_ASCII: typeid is double ****\n");
+    printfQuda("writeThrp_ASCII: Will write in double precision\n");
   }
 
   int error;
@@ -2480,13 +2506,8 @@ void QKXTM_Contraction_Kepler<Float>::contractFixSink(QKXTM_Propagator_Kepler<Fl
 						      void *corrThp_local_reduced, void *corrThp_noether_reduced, void *corrThp_oneD_reduced,
 						      WHICHPROJECTOR typeProj , WHICHPARTICLE testParticle, int partflag, int isource){
 
-  if( typeid(Float) == typeid(float)){
-    printfQuda("**** contractFixSink: typeid is float ****\n");
-  }
-  if( typeid(Float) == typeid(double)){
-    printfQuda("**** contractFixSink: typeid is double ****\n");
-  }
-
+  if( typeid(Float) == typeid(float))  printfQuda("contractFixSink: Will perform in single precision\n");
+  if( typeid(Float) == typeid(double)) printfQuda("contractFixSink: Will perform in double precision\n");
 
   // seq prop apply gamma5 and conjugate
   // do the communication for gauge, prop and seqProp
@@ -2548,13 +2569,8 @@ void QKXTM_Contraction_Kepler<Float>::contractFixSink(QKXTM_Propagator_Kepler<Fl
 template<typename Float>
 void QKXTM_Contraction_Kepler<Float>::contractFixSink(QKXTM_Propagator_Kepler<Float> &seqProp,QKXTM_Propagator_Kepler<Float> &prop, QKXTM_Gauge_Kepler<Float> &gauge, WHICHPROJECTOR typeProj , WHICHPARTICLE testParticle, int partflag , char *filename_out, int isource, int tsinkMtsource){
 
-  if( typeid(Float) == typeid(float)){
-    printfQuda("**** contractFixSink: typeid is float ****\n");
-  }
-  if( typeid(Float) == typeid(double)){
-    printfQuda("**** contractFixSink: typeid is double ****\n");
-  }
-
+  if( typeid(Float) == typeid(float))  printfQuda("contractFixSink: Will perform in single precision\n");
+  if( typeid(Float) == typeid(double)) printfQuda("contractFixSink: Will perform in double precision\n");
 
   // seq prop apply gamma5 and conjugate
   // do the communication for gauge, prop and seqProp
