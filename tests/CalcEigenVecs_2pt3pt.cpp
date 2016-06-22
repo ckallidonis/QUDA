@@ -73,7 +73,7 @@ extern int numSourcePositions;
 extern char pathListSourcePositions[];
 extern char pathListRun3pt[];
 extern char run3pt[];
-extern char corr_file_format[];
+extern char *corr_file_format;
 extern char check_file_exist[];
 
 extern int Nproj;
@@ -430,7 +430,11 @@ int main(int argc, char **argv)
   else if(strcmp(check_file_exist,"no")==0 || strcmp(check_file_exist,"NO")==0) info.check_files = false;
   else errorQuda("Undefined input for option --check_corr_files");
 
-  strcpy(info.corr_file_format,corr_file_format);
+
+  if( strcmp(corr_file_format,"ASCII")==0 || strcmp(corr_file_format,"ascii")==0 ) info.CorrFileFormat = ASCII_FORM;   // Determine whether to write the correlation functions
+  else if( strcmp(corr_file_format,"HDF5")==0 || strcmp(corr_file_format,"hdf5")==0 ) info.CorrFileFormat = HDF5_FORM; // in ASCII or HDF5 format
+  else fprintf(stderr,"Undefined option for --corr_file_format. Options are ASCII(ascii)/HDF5(hdf5)\n");
+
 
   //-C.K: Determine for which source-positions to run for the 3pt
   if(strcmp(run3pt,"all")==0 || strcmp(run3pt,"ALL")==0){

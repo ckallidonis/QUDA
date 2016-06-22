@@ -2628,6 +2628,8 @@ void calcEigenVectors_loop_wOneD_EvenOdd(void **gaugeToPlaquette, QudaInvertPara
   char filename_out[512];
   strcpy(filename_out,loopInfo.loop_fname);
 
+  FILE_WRITE_FORMAT LoopFileFormat = loopInfo.FileFormat;
+
   loopInfo.loop_type[0] = "Scalar";      loopInfo.loop_oneD[0] = false;   // std-ultra_local
   loopInfo.loop_type[1] = "dOp";         loopInfo.loop_oneD[1] = false;   // gen-ultra_local
   loopInfo.loop_type[2] = "Loops";       loopInfo.loop_oneD[2] = true;    // std-one_derivative
@@ -2642,7 +2644,7 @@ void calcEigenVectors_loop_wOneD_EvenOdd(void **gaugeToPlaquette, QudaInvertPara
   printfQuda("The conf trajectory is: %04d\n",loopInfo.traj);
   printfQuda("Will produce the loop for %d Momentum Combinations\n",Nmoms);
   printfQuda("Will dump every %d noise vectors, thus %d times\n",NdumpStep,Nprint);
-  printfQuda("The loop file format is %s\n",loopInfo.file_format);
+  printfQuda("The loop file format is %s\n", (LoopFileFormat == ASCII_FORM) ? "ASCII" : "HDF5");
   printfQuda("The loop base name is %s\n",filename_out);
   printfQuda("=====================\n");
 
@@ -2911,9 +2913,9 @@ void calcEigenVectors_loop_wOneD_EvenOdd(void **gaugeToPlaquette, QudaInvertPara
 
   bool stoch_part = false;
 
-  printfQuda("Will write the loops in %s format\n",loopInfo.file_format);
+  printfQuda("Will write the loops in %s format\n", (LoopFileFormat == ASCII_FORM) ? "ASCII" : "HDF5");
   t1 = MPI_Wtime();
-  if(strcmp(loopInfo.file_format,"ASCII")==0){ // Write the loops in ASCII format
+  if(LoopFileFormat==ASCII_FORM){ // Write the loops in ASCII format
     writeLoops_ASCII(buf_std_uloc, filename_out, loopInfo, momQsq, 0, 0, stoch_part, false, false); // Scalar
     writeLoops_ASCII(buf_gen_uloc, filename_out, loopInfo, momQsq, 1, 0, stoch_part, false, false); // dOp
     for(int mu = 0 ; mu < 4 ; mu++){
@@ -2923,7 +2925,7 @@ void calcEigenVectors_loop_wOneD_EvenOdd(void **gaugeToPlaquette, QudaInvertPara
       writeLoops_ASCII(buf_gen_csvC[mu], filename_out, loopInfo, momQsq, 5, mu, stoch_part, false, false); // LpsDwCv
     }
   }
-  else if(strcmp(loopInfo.file_format,"HDF5")==0){ // Write the loops in HDF5 format
+  else if(LoopFileFormat==HDF5_FORM){ // Write the loops in HDF5 format
     writeLoops_HDF5(buf_std_uloc, buf_gen_uloc, buf_std_oneD, buf_std_csvC, buf_gen_oneD, buf_gen_csvC, filename_out, loopInfo, momQsq, stoch_part, false, false);
   }
   t2 = MPI_Wtime();
@@ -3041,6 +3043,8 @@ void calcEigenVectors_loop_wOneD_FullOp(void **gaugeToPlaquette, QudaInvertParam
   char filename_out[512];
   int smethod = loopInfo.smethod;
 
+  FILE_WRITE_FORMAT LoopFileFormat = loopInfo.FileFormat;
+
   char loop_exact_fname[512];
   char loop_stoch_fname[512];
 
@@ -3088,7 +3092,7 @@ void calcEigenVectors_loop_wOneD_FullOp(void **gaugeToPlaquette, QudaInvertParam
   printfQuda(" The seed is: %ld\n",seed);
   printfQuda(" The conf trajectory is: %04d\n",loopInfo.traj);
   printfQuda(" Will produce the loop for %d Momentum Combinations\n",loopInfo.Nmoms);
-  printfQuda(" The loop file format is %s\n",loopInfo.file_format);
+  printfQuda(" The loop file format is %s\n", (LoopFileFormat == ASCII_FORM) ? "ASCII" : "HDF5");
   printfQuda(" The loop base name is %s\n",loopInfo.loop_fname);
   printfQuda(" Will perform the loop for the following %d numbers of eigenvalues:",loopInfo.nSteps_defl);
   for(int s=0;s<loopInfo.nSteps_defl;s++){
@@ -3338,7 +3342,7 @@ void calcEigenVectors_loop_wOneD_FullOp(void **gaugeToPlaquette, QudaInvertParam
 
       //-Write the exact part of the loop
       sprintf(loop_exact_fname,"%s_exact_NeV%d",loopInfo.loop_fname,n+1);
-      if(strcmp(loopInfo.file_format,"ASCII")==0){ // Write the loops in ASCII format
+      if(LoopFileFormat==ASCII_FORM){ // Write the loops in ASCII format
 	writeLoops_ASCII(buf_std_uloc, loop_exact_fname, loopInfo, momQsq, 0, 0, exact_part, false, false); // Scalar
 	writeLoops_ASCII(buf_gen_uloc, loop_exact_fname, loopInfo, momQsq, 1, 0, exact_part, false ,false); // dOp
 	for(int mu = 0 ; mu < 4 ; mu++){
@@ -3348,7 +3352,7 @@ void calcEigenVectors_loop_wOneD_FullOp(void **gaugeToPlaquette, QudaInvertParam
 	  writeLoops_ASCII(buf_gen_csvC[mu], loop_exact_fname, loopInfo, momQsq, 5, mu, exact_part, false, false); // LpsDwCv
 	}
       }
-      else if(strcmp(loopInfo.file_format,"HDF5")==0){ // Write the loops in HDF5 format
+      else if(LoopFileFormat==HDF5_FORM){ // Write the loops in HDF5 format
 	writeLoops_HDF5(buf_std_uloc, buf_gen_uloc, buf_std_oneD, buf_std_csvC, buf_gen_oneD, buf_gen_csvC, loop_exact_fname, loopInfo, momQsq, exact_part, false, false);
       }
 
@@ -3596,7 +3600,7 @@ void calcEigenVectors_loop_wOneD_FullOp(void **gaugeToPlaquette, QudaInvertParam
     //-Write the stochastic part of the loops
     t1 = MPI_Wtime();
     sprintf(loop_stoch_fname,"%s_stoch%sNeV%d",loopInfo.loop_fname, useTSM ? "_TSM_" : "_", NeV_defl);
-    if(strcmp(loopInfo.file_format,"ASCII")==0){ // Write the loops in ASCII format
+    if(LoopFileFormat==ASCII_FORM){ // Write the loops in ASCII format
       writeLoops_ASCII(buf_std_uloc, loop_stoch_fname, loopInfo, momQsq, 0, 0, stoch_part, useTSM, LowPrecSum); // Scalar
       writeLoops_ASCII(buf_gen_uloc, loop_stoch_fname, loopInfo, momQsq, 1, 0, stoch_part, useTSM, LowPrecSum); // dOp
       for(int mu = 0 ; mu < 4 ; mu++){
@@ -3606,7 +3610,7 @@ void calcEigenVectors_loop_wOneD_FullOp(void **gaugeToPlaquette, QudaInvertParam
 	writeLoops_ASCII(buf_gen_csvC[mu], loop_stoch_fname, loopInfo, momQsq, 5, mu, stoch_part, useTSM, LowPrecSum); // LpsDwCv
       }
     }
-    else if(strcmp(loopInfo.file_format,"HDF5")==0){ // Write the loops in HDF5 format
+    else if(LoopFileFormat==HDF5_FORM){ // Write the loops in HDF5 format
       writeLoops_HDF5(buf_std_uloc, buf_gen_uloc, buf_std_oneD, buf_std_csvC, buf_gen_oneD, buf_gen_csvC, loop_stoch_fname, loopInfo, momQsq, stoch_part, useTSM, LowPrecSum);
     }
     t2 = MPI_Wtime();
@@ -3781,7 +3785,7 @@ void calcEigenVectors_loop_wOneD_FullOp(void **gaugeToPlaquette, QudaInvertParam
       //-Write the high-precision part
       t1 = MPI_Wtime();
       sprintf(loop_stoch_fname,"%s_stoch_TSM_NeV%d_HighPrec",loopInfo.loop_fname, NeV_defl);
-      if(strcmp(loopInfo.file_format,"ASCII")==0){ // Write the loops in ASCII format
+      if(LoopFileFormat==ASCII_FORM){ // Write the loops in ASCII format
 	writeLoops_ASCII(buf_std_uloc, loop_stoch_fname, loopInfo, momQsq, 0, 0, stoch_part, useTSM, HighPrecSum); // Scalar
 	writeLoops_ASCII(buf_gen_uloc, loop_stoch_fname, loopInfo, momQsq, 1, 0, stoch_part, useTSM, HighPrecSum); // dOp
 	for(int mu = 0 ; mu < 4 ; mu++){
@@ -3791,7 +3795,7 @@ void calcEigenVectors_loop_wOneD_FullOp(void **gaugeToPlaquette, QudaInvertParam
 	  writeLoops_ASCII(buf_gen_csvC[mu], loop_stoch_fname, loopInfo, momQsq, 5, mu, stoch_part, useTSM, HighPrecSum); // LpsDwCv
 	}
       }
-      else if(strcmp(loopInfo.file_format,"HDF5")==0){ // Write the loops in HDF5 format
+      else if(LoopFileFormat==HDF5_FORM){ // Write the loops in HDF5 format
 	writeLoops_HDF5(buf_std_uloc, buf_gen_uloc, buf_std_oneD, buf_std_csvC, buf_gen_oneD, buf_gen_csvC, loop_stoch_fname, loopInfo, momQsq, stoch_part, useTSM, HighPrecSum);
       }
       t2 = MPI_Wtime();
@@ -3800,7 +3804,7 @@ void calcEigenVectors_loop_wOneD_FullOp(void **gaugeToPlaquette, QudaInvertParam
       //-Write the low-precision part
       t1 = MPI_Wtime();
       sprintf(loop_stoch_fname,"%s_stoch_TSM_NeV%d_LowPrec",loopInfo.loop_fname, NeV_defl);
-      if(strcmp(loopInfo.file_format,"ASCII")==0){ // Write the loops in ASCII format
+      if(LoopFileFormat==ASCII_FORM){ // Write the loops in ASCII format
 	writeLoops_ASCII(buf_std_uloc_LP, loop_stoch_fname, loopInfo, momQsq, 0, 0, stoch_part, useTSM, HighPrecSum); // Scalar
 	writeLoops_ASCII(buf_gen_uloc_LP, loop_stoch_fname, loopInfo, momQsq, 1, 0, stoch_part, useTSM, HighPrecSum); // dOp
 	for(int mu = 0 ; mu < 4 ; mu++){
@@ -3810,7 +3814,7 @@ void calcEigenVectors_loop_wOneD_FullOp(void **gaugeToPlaquette, QudaInvertParam
 	  writeLoops_ASCII(buf_gen_csvC_LP[mu], loop_stoch_fname, loopInfo, momQsq, 5, mu, stoch_part, useTSM, HighPrecSum); // LpsDwCv
 	}
       }
-      else if(strcmp(loopInfo.file_format,"HDF5")==0){ // Write the loops in HDF5 format
+      else if(LoopFileFormat==HDF5_FORM){ // Write the loops in HDF5 format
 	writeLoops_HDF5(buf_std_uloc_LP, buf_gen_uloc_LP, buf_std_oneD_LP, buf_std_csvC_LP, buf_gen_oneD_LP, buf_gen_csvC_LP, loop_stoch_fname, loopInfo, momQsq, stoch_part, useTSM, HighPrecSum);
       }
       t2 = MPI_Wtime();
@@ -4101,11 +4105,12 @@ void calcEigenVectors_threepTwop_EvenOdd(void **gaugeSmeared, void **gauge, Quda
   CORR_SPACE CorrSpace = info.CorrSpace; // Flag to determine whether to write the correlation functions in position/momentum space
   printfQuda("Will write the correlation functions in %s-space!\n", (CorrSpace == POSITION_SPACE) ? "position" : "momentum");
 
-  if(CorrSpace==POSITION_SPACE && strcmp(info.corr_file_format,"ASCII")==0){
+  if(CorrSpace==POSITION_SPACE && info.CorrFileFormat==ASCII_FORM){
     warningQuda("ASCII format not supported for writing the correlation functions in position-space! Switching to HDF5 format...\n");
-    strcpy(info.corr_file_format,"HDF5");
+    info.CorrFileFormat = HDF5_FORM;
   }
-  printfQuda("Will write the correlation functions in %s format\n",info.corr_file_format);
+  FILE_WRITE_FORMAT CorrFileFormat = info.CorrFileFormat;
+  printfQuda("Will write the correlation functions in %s format\n", (CorrFileFormat == ASCII_FORM) ? "ASCII" : "HDF5");
 
   printfQuda("Will run the three-point function for the following projector(s):\n");
   int NprojMax = 0;
@@ -4142,7 +4147,7 @@ void calcEigenVectors_threepTwop_EvenOdd(void **gaugeSmeared, void **gauge, Quda
   double *Twop_baryons_HDF5 = NULL;
   double *Twop_mesons_HDF5  = NULL;
 
-  if( strcmp(info.corr_file_format,"HDF5")==0 ){
+  if( CorrFileFormat==HDF5_FORM ){
     if( (Thrp_local_HDF5   = (double*) malloc(2*16*alloc_size*2*info.Ntsink*NprojMax*sizeof(double)))==NULL ) errorQuda("Cannot allocate memory for Thrp_local_HDF5.\n");
     if( (Thrp_noether_HDF5 = (double*) malloc(2* 4*alloc_size*2*info.Ntsink*NprojMax*sizeof(double)))==NULL ) errorQuda("Cannot allocate memory for Thrp_noether_HDF5.\n");
 
@@ -4169,11 +4174,11 @@ void calcEigenVectors_threepTwop_EvenOdd(void **gaugeSmeared, void **gauge, Quda
     t3 = MPI_Wtime();
     printfQuda("\n ### Calculations for source-position %d - %02d.%02d.%02d.%02d begin now ###\n\n",isource,info.sourcePosition[isource][0],info.sourcePosition[isource][1],info.sourcePosition[isource][2],info.sourcePosition[isource][3]);
 
-    if( strcmp(info.corr_file_format,"ASCII")==0 ){
+    if( CorrFileFormat==ASCII_FORM ){
       sprintf(filename_mesons,"%s.mesons.SS.%02d.%02d.%02d.%02d.dat",filename_twop,info.sourcePosition[isource][0],info.sourcePosition[isource][1],info.sourcePosition[isource][2],info.sourcePosition[isource][3]);
       sprintf(filename_baryons,"%s.baryons.SS.%02d.%02d.%02d.%02d.dat",filename_twop,info.sourcePosition[isource][0],info.sourcePosition[isource][1],info.sourcePosition[isource][2],info.sourcePosition[isource][3]);
     }
-    else if( strcmp(info.corr_file_format,"HDF5")==0 ){
+    else if( CorrFileFormat==HDF5_FORM ){
       sprintf(filename_mesons ,"%s_mesons_Qsq%d_SS.%02d.%02d.%02d.%02d.h5" ,filename_twop,info.Q_sq,info.sourcePosition[isource][0],info.sourcePosition[isource][1],info.sourcePosition[isource][2],info.sourcePosition[isource][3]);
       sprintf(filename_baryons,"%s_baryons_Qsq%d_SS.%02d.%02d.%02d.%02d.h5",filename_twop,info.Q_sq,info.sourcePosition[isource][0],info.sourcePosition[isource][1],info.sourcePosition[isource][2],info.sourcePosition[isource][3]);
     }
@@ -4328,7 +4333,7 @@ void calcEigenVectors_threepTwop_EvenOdd(void **gaugeSmeared, void **gauge, Quda
 
 	  printfQuda("\n# Three-point function calculation for source-position = %d, sink-source = %d, projector %s begins now\n",isource,info.tsinkSource[its],proj_str);
 
-	  if( strcmp(info.corr_file_format,"ASCII")==0 ){
+	  if( CorrFileFormat==ASCII_FORM ){
 	    asprintf(&filename_threep_base,"%s_tsink%d_proj%s",filename_threep,info.tsinkSource[its],proj_str);
 	    printfQuda("The three-point function ASCII base name is: %s\n",filename_threep_base);
 	  }
@@ -4398,13 +4403,13 @@ void calcEigenVectors_threepTwop_EvenOdd(void **gaugeSmeared, void **gauge, Quda
 	  printfQuda("TIME_REPORT - Three-point Contractions, flavor %s: %f sec\n",NUCLEON == NEUTRON ? "up" : "dn",t2-t1);
 
 	  t1 = MPI_Wtime();
-	  if( strcmp(info.corr_file_format,"ASCII")==0 ){
+	  if( CorrFileFormat==ASCII_FORM ){
 	    K_contract->writeThrp_ASCII(corrThp_local, corrThp_noether, corrThp_oneD, NUCLEON, 1, filename_threep_base, isource, info.tsinkSource[its], CorrSpace);
 	    t2 = MPI_Wtime();
 	    printfQuda("TIME_REPORT - Done: Three-point function for source-position = %d, sink-source = %d, projector %s, flavor %s written in ASCII format in %f sec.\n",
 		       isource,info.tsinkSource[its],proj_str,NUCLEON == NEUTRON ? "up" : "dn",t2-t1);
 	  }
-	  else if( strcmp(info.corr_file_format,"HDF5")==0 ){
+	  else if( CorrFileFormat==HDF5_FORM ){
 	    int uOrd;
 	    if(NUCLEON == PROTON ) uOrd = 0;
 	    if(NUCLEON == NEUTRON) uOrd = 1;
@@ -4485,13 +4490,13 @@ void calcEigenVectors_threepTwop_EvenOdd(void **gaugeSmeared, void **gauge, Quda
 	  printfQuda("TIME_REPORT - Three-point Contractions, flavor %s: %f sec\n",NUCLEON == NEUTRON ? "dn" : "up",t2-t1);
 
 	  t1 = MPI_Wtime();
-	  if( strcmp(info.corr_file_format,"ASCII")==0 ){
+	  if( CorrFileFormat==ASCII_FORM ){
 	    K_contract->writeThrp_ASCII(corrThp_local, corrThp_noether, corrThp_oneD, NUCLEON, 2, filename_threep_base, isource, info.tsinkSource[its], CorrSpace);
 	    t2 = MPI_Wtime();
 	    printfQuda("TIME_REPORT - Done: Three-point function for source-position = %d, sink-source = %d, projector %s, flavor %s written in ASCII format in %f sec.\n",
 		       isource,info.tsinkSource[its],proj_str,NUCLEON == NEUTRON ? "dn" : "up",t2-t1);
 	  }
-	  else if( strcmp(info.corr_file_format,"HDF5")==0 ){
+	  else if( CorrFileFormat==HDF5_FORM ){
 	    int uOrd;
 	    if(NUCLEON == PROTON ) uOrd = 1;
 	    if(NUCLEON == NEUTRON) uOrd = 0;
@@ -4511,7 +4516,7 @@ void calcEigenVectors_threepTwop_EvenOdd(void **gaugeSmeared, void **gauge, Quda
       }//-loop over sink-source separations      
 
       //-C.K. Write the three-point function in HDF5 format
-      if( strcmp(info.corr_file_format,"HDF5")==0 ){
+      if( CorrFileFormat==HDF5_FORM ){
 	t1 = MPI_Wtime();
 	asprintf(&filename_threep_base,"%s_%s_Qsq%d_SS.%02d.%02d.%02d.%02d.h5",filename_threep, (NUCLEON == PROTON) ? "proton" : "neutron",info.Q_sq,
 		 GK_sourcePosition[isource][0],GK_sourcePosition[isource][1],GK_sourcePosition[isource][2],GK_sourcePosition[isource][3]);
@@ -4553,16 +4558,16 @@ void calcEigenVectors_threepTwop_EvenOdd(void **gaugeSmeared, void **gauge, Quda
     t2 = MPI_Wtime();
     printfQuda("\nTIME_REPORT - Two-point Contractions: %f sec\n",t2-t1);
 
-    printfQuda("The baryons two-point function %s filename is: %s\n",info.corr_file_format,filename_baryons);
-    printfQuda("The mesons two-point function %s filename is: %s\n" ,info.corr_file_format,filename_mesons);
-    if( strcmp(info.corr_file_format,"ASCII")==0 ){
+    printfQuda("The baryons two-point function %s filename is: %s\n",(CorrFileFormat==ASCII_FORM) ? "ASCII" : "HDF5",filename_baryons);
+    printfQuda("The mesons two-point function %s filename is: %s\n" ,(CorrFileFormat==ASCII_FORM) ? "ASCII" : "HDF5",filename_mesons);
+    if( CorrFileFormat==ASCII_FORM ){
       t1 = MPI_Wtime();
       K_contract->writeTwopBaryons_ASCII(corrBaryons, filename_baryons, isource, CorrSpace);
       K_contract->writeTwopMesons_ASCII (corrMesons , filename_mesons , isource, CorrSpace);
       t2 = MPI_Wtime();
       printfQuda("TIME_REPORT - Done: Two-point function for Mesons and Baryons for source-position = %d written in ASCII format in %f sec.\n",isource,t2-t1);
     }
-    else if( strcmp(info.corr_file_format,"HDF5")==0 ){
+    else if( CorrFileFormat==HDF5_FORM ){
       t1 = MPI_Wtime();
       K_contract->copyTwopBaryonsToHDF5_Buf((void*)Twop_baryons_HDF5, (void*)corrBaryons, isource, CorrSpace);
       K_contract->copyTwopMesonsToHDF5_Buf ((void*)Twop_mesons_HDF5 , (void*)corrMesons, CorrSpace);
@@ -4588,7 +4593,7 @@ void calcEigenVectors_threepTwop_EvenOdd(void **gaugeSmeared, void **gauge, Quda
   free(corrMesons);
   free(corrBaryons);
 
-  if( strcmp(info.corr_file_format,"HDF5")==0 ){
+  if( CorrFileFormat==HDF5_FORM ){
     free(Thrp_local_HDF5);
     free(Thrp_noether_HDF5);
     for(int mu=0;mu<4;mu++) free(Thrp_oneD_HDF5[mu]);

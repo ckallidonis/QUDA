@@ -65,7 +65,7 @@ extern double csw;
 extern int Nstoch;
 extern unsigned long int seed;
 extern char loop_fname[];
-extern char loop_file_format[];
+extern char *loop_file_format;
 extern int Ndump;
 extern int smethod;
 extern char filename_dSteps[];
@@ -487,8 +487,11 @@ int main(int argc, char **argv)
   loopInfo.traj = traj;
   loopInfo.Qsq = Q_sq;
   loopInfo.smethod = smethod;
-  strcpy(loopInfo.file_format,loop_file_format);
   strcpy(loopInfo.loop_fname,loop_fname);
+
+  if( strcmp(loop_file_format,"ASCII")==0 || strcmp(loop_file_format,"ascii")==0 ) loopInfo.FileFormat = ASCII_FORM;   // Determine whether to write the loops
+  else if( strcmp(loop_file_format,"HDF5")==0 || strcmp(loop_file_format,"hdf5")==0 ) loopInfo.FileFormat = HDF5_FORM; // in ASCII or HDF5 format
+  else fprintf(stderr,"Undefined option for --loop_file_format. Options are ASCII(ascii)/HDF5(hdf5)\n");
 
   loopInfo.fullOp_stochEO = fullOp_stochEO;
 

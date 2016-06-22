@@ -32,6 +32,7 @@ namespace quda {
 
   enum SOURCE_T{UNITY,RANDOM};
   enum CORR_SPACE{POSITION_SPACE,MOMENTUM_SPACE};
+  enum FILE_WRITE_FORMAT{ASCII_FORM,HDF5_FORM};
 
   typedef struct {
     int nsmearAPE;
@@ -55,7 +56,7 @@ namespace quda {
     int tsinkSource[MAX_TSINK];
     int proj_list[MAX_TSINK][MAX_PROJS];
     int run3pt_src[MAX_NSOURCES];
-    char corr_file_format[257];
+    FILE_WRITE_FORMAT CorrFileFormat;
     SOURCE_T source_type;
     CORR_SPACE CorrSpace;
   } qudaQKXTMinfo_Kepler;
@@ -91,7 +92,7 @@ namespace quda {
     int Nprint;
     int Nmoms;
     int Qsq;
-    char file_format[512];
+    FILE_WRITE_FORMAT FileFormat;
     char *loop_type[6]; // = {"Scalar", "dOp", "Loops", "LoopsCv", "LpsDw", "LpsDwCv"}
     bool loop_oneD[6];  // = { false  , false,  true   , true    ,  true  ,  true}
     bool useTSM;

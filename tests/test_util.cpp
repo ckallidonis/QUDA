@@ -1593,7 +1593,7 @@ char prop_path[257] = "prop";
 char pathListRun3pt[257] = "listrun3pt.txt";
 char run3pt[257] = "all";
 char check_file_exist[257] = "no";
-char corr_file_format[257] = "ASCII";
+char *corr_file_format = "ASCII";
 
 int numSourcePositions = 1;
 char pathListSourcePositions[257] = "listSourcePositions.txt";
@@ -1644,7 +1644,7 @@ int Ndump  = 10;      // Write the loop every Ndump stoch. vectors
 char loop_fname[512] = "loop";
 int smethod = 1;
 char filename_dSteps[512]="none";
-char loop_file_format[257] = "ASCII";
+char *loop_file_format = "ASCII";
 char source_type[257] = "random";
 bool useTSM = false;
 bool fullOp_stochEO = false;
@@ -2548,7 +2548,7 @@ int process_command_line_option(int argc, char** argv, int* idx)
     if (i+1 >= argc){
       usage(argv);
     }
-    strcpy(corr_file_format, argv[i+1]);
+    corr_file_format = strdup(argv[i+1]);
     i++;
     ret = 0;
     goto out;
@@ -2651,7 +2651,7 @@ int process_command_line_option(int argc, char** argv, int* idx)
     if (i+1 >= argc){
       usage(argv);
     }
-    strcpy(loop_file_format, argv[i+1]);
+    loop_file_format = strdup(argv[i+1]);
     i++;
     ret = 0;
     goto out;
