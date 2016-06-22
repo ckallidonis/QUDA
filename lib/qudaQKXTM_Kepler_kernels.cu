@@ -467,6 +467,16 @@ __global__ void contractMesons_kernel_float(float2* block, cudaTextureObject_t p
 #undef FLOAT
 }
 
+__global__ void contractMesons_kernel_PosSpace_float(float2* block, cudaTextureObject_t prop1Tex, cudaTextureObject_t prop2Tex,int it, int x0, int y0, int z0){
+#define FLOAT2 float2
+#define FLOAT float
+#define FETCH_FLOAT2 fetch_float2
+#include <contractMesons_core_Kepler_PosSpace.h>
+#undef FETCH_FLOAT2
+#undef FLOAT2
+#undef FLOAT
+}
+
 __global__ void contractMesons_kernel_double(double2* block, cudaTextureObject_t prop1Tex, cudaTextureObject_t prop2Tex,int it, int x0, int y0, int z0){
 #define FLOAT2 double2
 #define FLOAT double
@@ -482,6 +492,16 @@ __global__ void contractBaryons_kernel_float(float2* block, cudaTextureObject_t 
 #define FLOAT float
 #define FETCH_FLOAT2 fetch_float2
 #include <contractBaryons_core_Kepler.h>
+#undef FETCH_FLOAT2
+#undef FLOAT2
+#undef FLOAT
+}
+
+__global__ void contractBaryons_kernel_PosSpace_float(float2* block, cudaTextureObject_t prop1Tex, cudaTextureObject_t prop2Tex,int it, int x0, int y0, int z0, int ip){
+#define FLOAT2 float2
+#define FLOAT float
+#define FETCH_FLOAT2 fetch_float2
+#include <contractBaryons_core_Kepler_PosSpace.h>
 #undef FETCH_FLOAT2
 #undef FLOAT2
 #undef FLOAT
@@ -540,11 +560,22 @@ __global__ void seqSourceFixSinkPart2_kernel_double(double2* out, int timeslice,
 #undef FLOAT
 }
 
+//- Fix Sink kernels, ultra-local
 __global__ void fixSinkContractions_local_kernel_float(float2* block,  cudaTextureObject_t fwdTex, cudaTextureObject_t seqTex, WHICHPARTICLE TESTPARTICLE, int partflag, int it, int x0, int y0, int z0){
 #define FLOAT2 float2
 #define FLOAT float
 #define FETCH_FLOAT2 fetch_float2
 #include <fixSinkContractions_local_core_Kepler.h>
+#undef FETCH_FLOAT2
+#undef FLOAT2
+#undef FLOAT
+}
+
+__global__ void fixSinkContractions_local_kernel_PosSpace_float(float2* block,  cudaTextureObject_t fwdTex, cudaTextureObject_t seqTex, WHICHPARTICLE TESTPARTICLE, int partflag, int it, int x0, int y0, int z0){
+#define FLOAT2 float2
+#define FLOAT float
+#define FETCH_FLOAT2 fetch_float2
+#include <fixSinkContractions_local_core_Kepler_PosSpace.h>
 #undef FETCH_FLOAT2
 #undef FLOAT2
 #undef FLOAT
@@ -560,12 +591,33 @@ __global__ void fixSinkContractions_local_kernel_double(double2* block,  cudaTex
 #undef FLOAT
 }
 
+__global__ void fixSinkContractions_local_kernel_PosSpace_double(double2* block,  cudaTextureObject_t fwdTex, cudaTextureObject_t seqTex, WHICHPARTICLE TESTPARTICLE, int partflag, int it, int x0, int y0, int z0){
+#define FLOAT2 double2
+#define FLOAT double
+#define FETCH_FLOAT2 fetch_double2
+#include <fixSinkContractions_local_core_Kepler_PosSpace.h>
+#undef FETCH_FLOAT2
+#undef FLOAT2
+#undef FLOAT
+}
+//-----------------------------------------------
 
+//- Fix Sink kernels, noether
 __global__ void fixSinkContractions_noether_kernel_float(float2* block,  cudaTextureObject_t fwdTex, cudaTextureObject_t seqTex, cudaTextureObject_t gaugeTex, WHICHPARTICLE TESTPARTICLE, int partflag, int it, int x0, int y0, int z0){
 #define FLOAT2 float2
 #define FLOAT float
 #define FETCH_FLOAT2 fetch_float2
 #include <fixSinkContractions_noether_core_Kepler.h>
+#undef FETCH_FLOAT2
+#undef FLOAT2
+#undef FLOAT
+}
+
+__global__ void fixSinkContractions_noether_kernel_PosSpace_float(float2* block,  cudaTextureObject_t fwdTex, cudaTextureObject_t seqTex, cudaTextureObject_t gaugeTex, WHICHPARTICLE TESTPARTICLE, int partflag, int it, int x0, int y0, int z0){
+#define FLOAT2 float2
+#define FLOAT float
+#define FETCH_FLOAT2 fetch_float2
+#include <fixSinkContractions_noether_core_Kepler_PosSpace.h>
 #undef FETCH_FLOAT2
 #undef FLOAT2
 #undef FLOAT
@@ -581,11 +633,33 @@ __global__ void fixSinkContractions_noether_kernel_double(double2* block,  cudaT
 #undef FLOAT
 }
 
+__global__ void fixSinkContractions_noether_kernel_PosSpace_double(double2* block,  cudaTextureObject_t fwdTex, cudaTextureObject_t seqTex, cudaTextureObject_t gaugeTex, WHICHPARTICLE TESTPARTICLE, int partflag, int it, int x0, int y0, int z0){
+#define FLOAT2 double2
+#define FLOAT double
+#define FETCH_FLOAT2 fetch_double2
+#include <fixSinkContractions_noether_core_Kepler_PosSpace.h>
+#undef FETCH_FLOAT2
+#undef FLOAT2
+#undef FLOAT
+}
+//-----------------------------------------------
+
+//- Fix Sink kernels, one-derivative
 __global__ void fixSinkContractions_oneD_kernel_float(float2* block,  cudaTextureObject_t fwdTex, cudaTextureObject_t seqTex, cudaTextureObject_t gaugeTex, WHICHPARTICLE TESTPARTICLE, int partflag, int it, int dir, int x0, int y0, int z0){
 #define FLOAT2 float2
 #define FLOAT float
 #define FETCH_FLOAT2 fetch_float2
 #include <fixSinkContractions_oneD_core_Kepler.h>
+#undef FETCH_FLOAT2
+#undef FLOAT2
+#undef FLOAT
+}
+
+__global__ void fixSinkContractions_oneD_kernel_PosSpace_float(float2* block,  cudaTextureObject_t fwdTex, cudaTextureObject_t seqTex, cudaTextureObject_t gaugeTex, WHICHPARTICLE TESTPARTICLE, int partflag, int it, int dir, int x0, int y0, int z0){
+#define FLOAT2 float2
+#define FLOAT float
+#define FETCH_FLOAT2 fetch_float2
+#include <fixSinkContractions_oneD_core_Kepler_PosSpace.h>
 #undef FETCH_FLOAT2
 #undef FLOAT2
 #undef FLOAT
@@ -600,6 +674,17 @@ __global__ void fixSinkContractions_oneD_kernel_double(double2* block,  cudaText
 #undef FLOAT2
 #undef FLOAT
 }
+
+__global__ void fixSinkContractions_oneD_kernel_PosSpace_double(double2* block,  cudaTextureObject_t fwdTex, cudaTextureObject_t seqTex, cudaTextureObject_t gaugeTex, WHICHPARTICLE TESTPARTICLE, int partflag, int it, int dir, int x0, int y0, int z0){
+#define FLOAT2 double2
+#define FLOAT double
+#define FETCH_FLOAT2 fetch_double2
+#include <fixSinkContractions_oneD_core_Kepler_PosSpace.h>
+#undef FETCH_FLOAT2
+#undef FLOAT2
+#undef FLOAT
+}
+//-----------------------------------------------
 
 
 template<typename Float, typename Float2>
@@ -862,124 +947,178 @@ void quda::run_ScaleVector(double a, void* inOut, int precision){
 }
 
 template<typename Float2,typename Float>
-static void contractMesons_kernel(cudaTextureObject_t texProp1,cudaTextureObject_t texProp2,Float (*corr)[2][10], int it, int isource){
+static void contractMesons_kernel(cudaTextureObject_t texProp1,cudaTextureObject_t texProp2,Float (*corr)[2][10], int it, int isource, CORR_SPACE CorrSpace){
+
+  if( typeid(Float2) != typeid(float2) ) errorQuda("Unsupported precision for Meson 2pt Contraction kernels!\n");
+
   dim3 blockDim( THREADS_PER_BLOCK , 1, 1);
   dim3 gridDim( (GK_localVolume/GK_localL[3] + blockDim.x -1)/blockDim.x , 1 , 1); // spawn threads only for the spatial volume
+
   Float *h_partial_block = NULL;
   Float *d_partial_block = NULL;
-  h_partial_block = (Float*)malloc(GK_Nmoms*2*10*gridDim.x*2*sizeof(Float));
-  if(h_partial_block == NULL) errorQuda("Error problem with allocation\n");
-  cudaMalloc((void**)&d_partial_block, GK_Nmoms*2*10*gridDim.x*2 * sizeof(Float) );
-  checkCudaError();
-  Float *reduction =(Float*) calloc(GK_Nmoms*2*10*2,sizeof(Float));
-  
-  if( typeid(Float2) == typeid(float2) )
-    contractMesons_kernel_float<<<gridDim,blockDim>>>((float2*) d_partial_block,  texProp1, texProp2, it,  GK_sourcePosition[isource][0] , GK_sourcePosition[isource][1], GK_sourcePosition[isource][2]);
-  else
-    contractMesons_kernel_double<<<gridDim,blockDim>>>((double2*) d_partial_block,  texProp1,  texProp2, it,  GK_sourcePosition[isource][0] , GK_sourcePosition[isource][1], GK_sourcePosition[isource][2]);
-  checkCudaError();
-  cudaMemcpy(h_partial_block , d_partial_block , GK_Nmoms*2*10*gridDim.x*2 * sizeof(Float) , cudaMemcpyDeviceToHost);
-  checkCudaError();
 
-  for(int imom = 0 ; imom < GK_Nmoms ; imom++)
-    for(int iu = 0 ; iu < 2 ; iu++)
-      for(int ip = 0 ; ip < 10 ; ip++)
-	for(int i =0 ; i < gridDim.x ; i++){
-	  reduction[imom*2*10*2 + iu*10*2 + ip*2 + 0] += h_partial_block[imom*2*10*gridDim.x*2 + iu*10*gridDim.x*2 + ip*gridDim.x*2 + i*2 + 0];
-	  reduction[imom*2*10*2 + iu*10*2 + ip*2 + 1] += h_partial_block[imom*2*10*gridDim.x*2 + iu*10*gridDim.x*2 + ip*gridDim.x*2 + i*2 + 1];
+  if(CorrSpace==POSITION_SPACE){
+    long int alloc_size = blockDim.x * gridDim.x;
+    h_partial_block = (Float*)malloc(alloc_size*2*10*2*sizeof(Float));
+    if(h_partial_block == NULL) errorQuda("contractMesons_kernel: Cannot allocate host block.\n");
+
+    cudaMalloc((void**)&d_partial_block, alloc_size*2*10*2*sizeof(Float));
+    checkCudaError();
+
+    contractMesons_kernel_PosSpace_float<<<gridDim,blockDim>>>((float2*) d_partial_block,  texProp1, texProp2, it,  GK_sourcePosition[isource][0] , GK_sourcePosition[isource][1], GK_sourcePosition[isource][2]);
+    checkCudaError();
+
+    cudaMemcpy(h_partial_block , d_partial_block , alloc_size*2*10*2*sizeof(Float) , cudaMemcpyDeviceToHost);
+    checkCudaError();
+
+    //-C.K: - FIXME!!! Copy h_partial_block into corr
+
+    free(h_partial_block);
+    cudaFree(d_partial_block);
+    checkCudaError();
+  }
+  else if(CorrSpace==MOMENTUM_SPACE){
+    h_partial_block = (Float*)malloc(GK_Nmoms*2*10*gridDim.x*2*sizeof(Float));
+    if(h_partial_block == NULL) errorQuda("Error problem with allocation\n");
+
+    cudaMalloc((void**)&d_partial_block, GK_Nmoms*2*10*gridDim.x*2 * sizeof(Float) );
+    checkCudaError();
+
+    Float *reduction =(Float*) calloc(GK_Nmoms*2*10*2,sizeof(Float));
+  
+    contractMesons_kernel_float<<<gridDim,blockDim>>>((float2*) d_partial_block,  texProp1, texProp2, it,  GK_sourcePosition[isource][0] , GK_sourcePosition[isource][1], GK_sourcePosition[isource][2]);
+    checkCudaError();
+
+    cudaMemcpy(h_partial_block , d_partial_block , GK_Nmoms*2*10*gridDim.x*2 * sizeof(Float) , cudaMemcpyDeviceToHost);
+    checkCudaError();
+
+    for(int imom = 0 ; imom < GK_Nmoms ; imom++)
+      for(int iu = 0 ; iu < 2 ; iu++)
+	for(int ip = 0 ; ip < 10 ; ip++)
+	  for(int i =0 ; i < gridDim.x ; i++){
+	    reduction[imom*2*10*2 + iu*10*2 + ip*2 + 0] += h_partial_block[imom*2*10*gridDim.x*2 + iu*10*gridDim.x*2 + ip*gridDim.x*2 + i*2 + 0];
+	    reduction[imom*2*10*2 + iu*10*2 + ip*2 + 1] += h_partial_block[imom*2*10*gridDim.x*2 + iu*10*gridDim.x*2 + ip*gridDim.x*2 + i*2 + 1];
+	  }
+    
+    for(int imom = 0 ; imom < GK_Nmoms ; imom++)
+      for(int iu = 0 ; iu < 2 ; iu++)
+	for(int ip = 0 ; ip < 10 ; ip++){
+	  corr[it*GK_Nmoms*2 + imom*2 + 0][iu][ip] = reduction[imom*2*10*2 + iu*10*2 + ip*2 + 0];
+	  corr[it*GK_Nmoms*2 + imom*2 + 1][iu][ip] = reduction[imom*2*10*2 + iu*10*2 + ip*2 + 1];
 	}
 
-  for(int imom = 0 ; imom < GK_Nmoms ; imom++)
-    for(int iu = 0 ; iu < 2 ; iu++)
-      for(int ip = 0 ; ip < 10 ; ip++){
-	corr[it*GK_Nmoms*2 + imom*2 + 0][iu][ip] = reduction[imom*2*10*2 + iu*10*2 + ip*2 + 0];
-	corr[it*GK_Nmoms*2 + imom*2 + 1][iu][ip] = reduction[imom*2*10*2 + iu*10*2 + ip*2 + 1];
-      }
 
+    free(h_partial_block);
+    cudaFree(d_partial_block);
+    checkCudaError();
+    free(reduction);
+  }//-CorrSpace else
+  else errorQuda("contractMesons_kernel: Supports only POSITION_SPACE and MOMENTUM_SPACE!\n");
 
-  free(h_partial_block);
-  cudaFree(d_partial_block);
-  checkCudaError();
-  free(reduction);
 }
 
-void quda::run_contractMesons(cudaTextureObject_t texProp1,cudaTextureObject_t texProp2,void* corr,  int it, int isource, int precision){
-  if(precision == 4){
-    contractMesons_kernel<float2,float>(texProp1,texProp2,(float(*)[2][10]) corr,it, isource);
-  }
-  else if(precision == 8){
-    contractMesons_kernel<double2,double>(texProp1,texProp2,(double(*)[2][10]) corr,it, isource);
-  }
-  else{
-    errorQuda("Precision not supported\n");
-  }
+void quda::run_contractMesons(cudaTextureObject_t texProp1,cudaTextureObject_t texProp2,void* corr,  int it, int isource, int precision, CORR_SPACE CorrSpace){
+
+  if (CorrSpace==POSITION_SPACE)     cudaFuncSetCacheConfig(contractMesons_kernel_PosSpace_float,cudaFuncCachePreferShared);
+  else if(CorrSpace==MOMENTUM_SPACE) cudaFuncSetCacheConfig(contractMesons_kernel_float         ,cudaFuncCachePreferShared);
+  else errorQuda("run_contractMesons: Supports only POSITION_SPACE and MOMENTUM_SPACE!\n");
+  checkCudaError();
+
+  if(precision == 4) contractMesons_kernel<float2,float>(texProp1,texProp2,(float(*)[2][10]) corr,it, isource, CorrSpace);
+  else if(precision == 8) errorQuda("Double precision in Meson 2pt Contractions unsupported!!!\n");
+  else errorQuda("run_contractMesons: Precision %d not supported\n",precision);
+
 }
 
 template<typename Float2,typename Float>
-static void contractBaryons_kernel(cudaTextureObject_t texProp1,cudaTextureObject_t texProp2,Float (*corr)[2][10][4][4], int it, int isource){
+static void contractBaryons_kernel(cudaTextureObject_t texProp1,cudaTextureObject_t texProp2,Float (*corr)[2][10][4][4], int it, int isource, CORR_SPACE CorrSpace){
+
+  if( typeid(Float2) != typeid(float2) ) errorQuda("Unsupported precision for Baryon 2pt Contraction kernels!\n");
+
   dim3 blockDim( THREADS_PER_BLOCK , 1, 1);
   dim3 gridDim( (GK_localVolume/GK_localL[3] + blockDim.x -1)/blockDim.x , 1 , 1); // spawn threads only for the spatial volume
+
   Float *h_partial_block = NULL;
   Float *d_partial_block = NULL;
-  h_partial_block = (Float*)malloc(GK_Nmoms*2*4*4*gridDim.x*2*sizeof(Float));
-  if(h_partial_block == NULL) errorQuda("Error problem with allocation\n");
-  cudaMalloc((void**)&d_partial_block, GK_Nmoms*2*4*4*gridDim.x*2 * sizeof(Float) );
-  checkCudaError();
-  Float *reduction =(Float*) calloc(GK_Nmoms*2*4*4*2,sizeof(Float));
-  
-  for(int ip = 0 ; ip < 10 ; ip++){
 
+  if(CorrSpace==POSITION_SPACE){
+    long int alloc_size = blockDim.x * gridDim.x;
+    h_partial_block = (Float*)malloc(alloc_size*2*4*4*2*sizeof(Float));
+    if(h_partial_block == NULL) errorQuda("contractBaryons_kernel: Cannot allocate host block.\n");
 
-    if( typeid(Float2) == typeid(float2) )
-      contractBaryons_kernel_float<<<gridDim,blockDim>>>((float2*) d_partial_block,  texProp1, texProp2, it,  GK_sourcePosition[isource][0] , GK_sourcePosition[isource][1], GK_sourcePosition[isource][2],ip);
-    // else
-      //      contractBaryons_kernel_double<<<gridDim,blockDim>>>((double2*) d_partial_block,  texProp1,  texProp2, it,  GK_sourcePosition[isource][0] , GK_sourcePosition[isource][1], GK_sourcePosition[isource][2],ip);
-
-
-
-    cudaMemcpy(h_partial_block , d_partial_block , GK_Nmoms*2*4*4*gridDim.x*2 * sizeof(Float) , cudaMemcpyDeviceToHost);
+    cudaMalloc((void**)&d_partial_block, alloc_size*2*4*4*2*sizeof(Float));
     checkCudaError();
-    memset(reduction,0,GK_Nmoms*2*4*4*2*sizeof(Float));
 
-    for(int imom = 0 ; imom < GK_Nmoms ; imom++)
-      for(int iu = 0 ; iu < 2 ; iu++)
-	for(int gamma = 0 ; gamma < 4 ; gamma++)
-	  for(int gammap = 0 ; gammap < 4 ; gammap++)
-	    for(int i =0 ; i < gridDim.x ; i++){
-	      reduction[imom*2*4*4*2 + iu*4*4*2 + gamma*4*2 + gammap*2 + 0] += h_partial_block[imom*2*4*4*gridDim.x*2 + iu*4*4*gridDim.x*2 + gamma*4*gridDim.x*2 + gammap*gridDim.x*2 + i*2 + 0];
-	      reduction[imom*2*4*4*2 + iu*4*4*2 + gamma*4*2 + gammap*2 + 1] += h_partial_block[imom*2*4*4*gridDim.x*2 + iu*4*4*gridDim.x*2 + gamma*4*gridDim.x*2 + gammap*gridDim.x*2 + i*2 + 1];
+    for(int ip = 0 ; ip < 10 ; ip++){
+      contractBaryons_kernel_PosSpace_float<<<gridDim,blockDim>>>((float2*) d_partial_block,  texProp1, texProp2, it,  GK_sourcePosition[isource][0] , GK_sourcePosition[isource][1], GK_sourcePosition[isource][2],ip);
+      checkCudaError();
+
+      cudaMemcpy(h_partial_block , d_partial_block , alloc_size*2*4*4*2*sizeof(Float) , cudaMemcpyDeviceToHost);
+      checkCudaError();
+
+      //-C.K: - FIXME!!! Copy h_partial_block into corr
+
+    }//-ip
+
+    free(h_partial_block);
+    cudaFree(d_partial_block);
+    checkCudaError();
+  }
+  else if(CorrSpace==MOMENTUM_SPACE){
+    h_partial_block = (Float*)malloc(GK_Nmoms*2*4*4*gridDim.x*2*sizeof(Float));
+    if(h_partial_block == NULL) errorQuda("contractBaryons_kernel: Cannot allocate host block.\n");
+
+    cudaMalloc((void**)&d_partial_block, GK_Nmoms*2*4*4*gridDim.x*2 * sizeof(Float) );
+    checkCudaError();
+
+    Float *reduction =(Float*) calloc(GK_Nmoms*2*4*4*2,sizeof(Float));
+  
+    for(int ip = 0 ; ip < 10 ; ip++){
+      contractBaryons_kernel_float<<<gridDim,blockDim>>>((float2*) d_partial_block,  texProp1, texProp2, it,  GK_sourcePosition[isource][0] , GK_sourcePosition[isource][1], GK_sourcePosition[isource][2],ip);
+      checkCudaError();
+
+      cudaMemcpy(h_partial_block , d_partial_block , GK_Nmoms*2*4*4*gridDim.x*2 * sizeof(Float) , cudaMemcpyDeviceToHost);
+      checkCudaError();
+
+      memset(reduction,0,GK_Nmoms*2*4*4*2*sizeof(Float));      
+      for(int imom = 0 ; imom < GK_Nmoms ; imom++)
+	for(int iu = 0 ; iu < 2 ; iu++)
+	  for(int gamma = 0 ; gamma < 4 ; gamma++)
+	    for(int gammap = 0 ; gammap < 4 ; gammap++)
+	      for(int i =0 ; i < gridDim.x ; i++){
+		reduction[imom*2*4*4*2 + iu*4*4*2 + gamma*4*2 + gammap*2 + 0] += h_partial_block[imom*2*4*4*gridDim.x*2 + iu*4*4*gridDim.x*2 + gamma*4*gridDim.x*2 + gammap*gridDim.x*2 + i*2 + 0];
+		reduction[imom*2*4*4*2 + iu*4*4*2 + gamma*4*2 + gammap*2 + 1] += h_partial_block[imom*2*4*4*gridDim.x*2 + iu*4*4*gridDim.x*2 + gamma*4*gridDim.x*2 + gammap*gridDim.x*2 + i*2 + 1];
+	      }
+      
+      for(int imom = 0 ; imom < GK_Nmoms ; imom++)
+	for(int iu = 0 ; iu < 2 ; iu++)
+	  for(int gamma = 0 ; gamma < 4 ; gamma++)
+	    for(int gammap = 0 ; gammap < 4 ; gammap++){
+	      corr[it*GK_Nmoms*2 + imom*2 + 0][iu][ip][gamma][gammap] = reduction[imom*2*4*4*2 + iu*4*4*2 + gamma*4*2 + gammap*2 + 0];
+	      corr[it*GK_Nmoms*2 + imom*2 + 1][iu][ip][gamma][gammap] = reduction[imom*2*4*4*2 + iu*4*4*2 + gamma*4*2 + gammap*2 + 1];
 	    }
+    }//-ip
 
-    for(int imom = 0 ; imom < GK_Nmoms ; imom++)
-      for(int iu = 0 ; iu < 2 ; iu++)
-	for(int gamma = 0 ; gamma < 4 ; gamma++)
-          for(int gammap = 0 ; gammap < 4 ; gammap++){
-	    corr[it*GK_Nmoms*2 + imom*2 + 0][iu][ip][gamma][gammap] = reduction[imom*2*4*4*2 + iu*4*4*2 + gamma*4*2 + gammap*2 + 0];
-	    corr[it*GK_Nmoms*2 + imom*2 + 1][iu][ip][gamma][gammap] = reduction[imom*2*4*4*2 + iu*4*4*2 + gamma*4*2 + gammap*2 + 1];
-	}
-    
-  } // for over the particles
+    free(h_partial_block);
+    cudaFree(d_partial_block);
+    checkCudaError();
+    free(reduction);
+  }//-CorrSpace else
+  else errorQuda("contractBaryons_kernel: Supports only POSITION_SPACE and MOMENTUM_SPACE!\n");
 
-  free(h_partial_block);
-  cudaFree(d_partial_block);
-  checkCudaError();
-  free(reduction);
 }
 
-void quda::run_contractBaryons(cudaTextureObject_t texProp1,cudaTextureObject_t texProp2,void* corr,  int it, int isource, int precision){
-  cudaFuncSetCacheConfig(contractBaryons_kernel_float,cudaFuncCachePreferShared);
-  //  cudaFuncSetCacheConfig("contractBaryons_kernel_double",cudaFuncCachePreferShared);
+void quda::run_contractBaryons(cudaTextureObject_t texProp1,cudaTextureObject_t texProp2,void* corr,  int it, int isource, int precision, CORR_SPACE CorrSpace){
+
+  if (CorrSpace==POSITION_SPACE)     cudaFuncSetCacheConfig(contractBaryons_kernel_PosSpace_float,cudaFuncCachePreferShared);
+  else if(CorrSpace==MOMENTUM_SPACE) cudaFuncSetCacheConfig(contractBaryons_kernel_float         ,cudaFuncCachePreferShared);
+  else errorQuda("run_contractBaryons: Supports only POSITION_SPACE and MOMENTUM_SPACE!\n");
   checkCudaError();
-  if(precision == 4){
-    contractBaryons_kernel<float2,float>(texProp1,texProp2,(float(*)[2][10][4][4]) corr,it, isource);
-  }
-  else if(precision == 8){
-    //contractBaryons_kernel<double2,double>(texProp1,texProp2,(double(*)[2][10][4][4]) corr,it, isource);
-    errorQuda("For test reasons I do not need it\n");
-  }
-  else{
-    errorQuda("Precision not supported\n");
-  }
+
+  if(precision == 4) contractBaryons_kernel<float2,float>(texProp1,texProp2,(float(*)[2][10][4][4]) corr,it, isource, CorrSpace);
+  else if(precision == 8) errorQuda("Double precision in Baryon 2pt Contractions unsupported!!!\n");
+  else errorQuda("run_contractBaryons: Precision %d not supported\n",precision);
+
 }
 
 void quda::run_rotateToPhysicalBase(void* inOut, int sign, int precision){
@@ -1124,30 +1263,112 @@ void quda::run_seqSourceFixSinkPart2(void* out, int timeslice, cudaTextureObject
 
 
 template<typename Float2,typename Float>
-static void fixSinkContractions_kernel(void* corrThp_local, void* corrThp_noether, void *corrThp_oneD, cudaTextureObject_t fwdTex, cudaTextureObject_t seqTex, cudaTextureObject_t gaugeTex, WHICHPARTICLE PARTICLE, int partflag, int itime, int isource){
+static void fixSinkContractions_kernel(void* corrThp_local, void* corrThp_noether, void *corrThp_oneD, cudaTextureObject_t fwdTex, cudaTextureObject_t seqTex, cudaTextureObject_t gaugeTex,
+				       WHICHPARTICLE PARTICLE, int partflag, int itime, int isource, CORR_SPACE CorrSpace){
 
   dim3 blockDim( THREADS_PER_BLOCK , 1, 1);
   dim3 gridDim( (GK_localVolume/GK_localL[3] + blockDim.x -1)/blockDim.x , 1 , 1); // spawn threads only for the spatial volume
 
-
   Float *h_partial_block = NULL;
   Float *d_partial_block = NULL;
 
-  h_partial_block = (Float*)malloc(GK_Nmoms*16*gridDim.x*2*sizeof(Float));
-  if(h_partial_block == NULL) errorQuda("Error problem with allocation\n");
-  cudaMalloc((void**)&d_partial_block, GK_Nmoms*16*gridDim.x*2 * sizeof(Float) );
-  checkCudaError();
-  Float *reduction =(Float*) calloc(GK_Nmoms*16*2,sizeof(Float));
-  
-  ///////////////////////////////////////////// ultra local operators ///////////////////////
-  if( typeid(Float2) == typeid(float2) )
-    fixSinkContractions_local_kernel_float<<<gridDim,blockDim>>>((float2*) d_partial_block, fwdTex, seqTex, PARTICLE, partflag, itime, GK_sourcePosition[isource][0] , GK_sourcePosition[isource][1], GK_sourcePosition[isource][2]);
-  else if( typeid(Float2) == typeid(double2) )
-    fixSinkContractions_local_kernel_double<<<gridDim,blockDim>>>((double2*) d_partial_block, fwdTex, seqTex, PARTICLE, partflag, itime, GK_sourcePosition[isource][0] , GK_sourcePosition[isource][1], GK_sourcePosition[isource][2]);
+  if(CorrSpace==POSITION_SPACE){
+    size_t alloc_buf;
 
-  cudaMemcpy(h_partial_block , d_partial_block , GK_Nmoms*16*gridDim.x*2 * sizeof(Float) , cudaMemcpyDeviceToHost);
-  checkCudaError();
-  memset(reduction,0,GK_Nmoms*16*2*sizeof(Float));
+    //- Ultra-local operators
+    alloc_buf = blockDim.x * gridDim.x * 16 * 2 * sizeof(Float);
+
+    h_partial_block = (Float*) malloc(alloc_buf);
+    if(h_partial_block == NULL) errorQuda("fixSinkContractions_kernel: Cannot allocate ultra-local host block.\n");
+
+    cudaMalloc((void**)&d_partial_block, alloc_buf);
+    checkCudaError();
+    cudaMemset(d_partial_block, 0, alloc_buf);
+    checkCudaError();
+
+    if( typeid(Float2) == typeid(float2) )
+      fixSinkContractions_local_kernel_PosSpace_float<<<gridDim,blockDim>>> ((float2*) d_partial_block, fwdTex, seqTex, PARTICLE, partflag, itime,
+									     GK_sourcePosition[isource][0] , GK_sourcePosition[isource][1], GK_sourcePosition[isource][2]);
+    else if( typeid(Float2) == typeid(double2) )
+      fixSinkContractions_local_kernel_PosSpace_double<<<gridDim,blockDim>>>((double2*) d_partial_block, fwdTex, seqTex, PARTICLE, partflag, itime,
+									     GK_sourcePosition[isource][0] , GK_sourcePosition[isource][1], GK_sourcePosition[isource][2]);
+
+    cudaMemcpy(h_partial_block , d_partial_block , alloc_buf , cudaMemcpyDeviceToHost);
+    checkCudaError();
+
+    //-C.K: - FIXME!!! Copy h_partial_block to corrThp_local
+
+    //----------------------------------------------------------------------
+
+    //- One-derivative operators
+    for(int dir = 0 ; dir < 4 ; dir++){
+      cudaMemset(d_partial_block, 0, alloc_buf);
+      checkCudaError();
+
+      if( typeid(Float2) == typeid(float2) )
+	fixSinkContractions_oneD_kernel_PosSpace_float<<<gridDim,blockDim>>> ((float2*) d_partial_block, fwdTex, seqTex, gaugeTex, PARTICLE, partflag, itime, dir,
+									      GK_sourcePosition[isource][0] , GK_sourcePosition[isource][1], GK_sourcePosition[isource][2]);
+      else if( typeid(Float2) == typeid(double2) )
+	fixSinkContractions_oneD_kernel_PosSpace_double<<<gridDim,blockDim>>>((double2*) d_partial_block, fwdTex, seqTex, gaugeTex, PARTICLE, partflag, itime, dir,
+									      GK_sourcePosition[isource][0] , GK_sourcePosition[isource][1], GK_sourcePosition[isource][2]);
+
+      cudaMemcpy(h_partial_block , d_partial_block , alloc_buf , cudaMemcpyDeviceToHost);
+      checkCudaError();
+
+      //-C.K: - FIXME!!! Copy h_partial_block to corrThp_oneD for each dir
+
+    }//-dir
+    //----------------------------------------------------------------------
+
+    //- Noether, conserved current
+    //- it's better to reallocate the host and device block buffers here
+    free(h_partial_block);
+    cudaFree(d_partial_block);
+    checkCudaError();
+    h_partial_block = NULL;
+    d_partial_block = NULL;
+    alloc_buf = blockDim.x * gridDim.x * 4 * 2 * sizeof(Float);
+
+    h_partial_block = (Float*) malloc(alloc_buf);
+    if(h_partial_block == NULL) errorQuda("fixSinkContractions_kernel: Cannot allocate noether host block.\n");
+
+    cudaMalloc((void**)&d_partial_block, alloc_buf);
+    checkCudaError();
+    cudaMemset(d_partial_block, 0, alloc_buf);
+    checkCudaError();
+
+    if( typeid(Float2) == typeid(float2) )
+      fixSinkContractions_noether_kernel_PosSpace_float<<<gridDim,blockDim>>> ((float2*) d_partial_block, fwdTex, seqTex, gaugeTex, PARTICLE, partflag, itime,
+								      GK_sourcePosition[isource][0] , GK_sourcePosition[isource][1], GK_sourcePosition[isource][2]);
+    else if( typeid(Float2) == typeid(double2) )
+      fixSinkContractions_noether_kernel_PosSpace_double<<<gridDim,blockDim>>>((double2*) d_partial_block, fwdTex, seqTex, gaugeTex, PARTICLE, partflag, itime,
+								      GK_sourcePosition[isource][0] , GK_sourcePosition[isource][1], GK_sourcePosition[isource][2]);
+
+    cudaMemcpy(h_partial_block , d_partial_block , alloc_buf , cudaMemcpyDeviceToHost);
+    checkCudaError();
+
+    //-C.K: - FIXME!!! Copy h_partial_block to corrThp_noether
+
+    free(h_partial_block);
+    cudaFree(d_partial_block);
+    checkCudaError();
+  }
+  else if(CorrSpace==MOMENTUM_SPACE){
+    h_partial_block = (Float*)malloc(GK_Nmoms*16*gridDim.x*2*sizeof(Float));
+    if(h_partial_block == NULL) errorQuda("fixSinkContractions_kernel: Cannot allocate host block.\n");
+    cudaMalloc((void**)&d_partial_block, GK_Nmoms*16*gridDim.x*2 * sizeof(Float) );
+    checkCudaError();
+    Float *reduction =(Float*) calloc(GK_Nmoms*16*2,sizeof(Float));
+  
+    //- Ultra-local operators
+    if( typeid(Float2) == typeid(float2) )
+      fixSinkContractions_local_kernel_float<<<gridDim,blockDim>>>((float2*) d_partial_block, fwdTex, seqTex, PARTICLE, partflag, itime, GK_sourcePosition[isource][0] , GK_sourcePosition[isource][1], GK_sourcePosition[isource][2]);
+    else if( typeid(Float2) == typeid(double2) )
+      fixSinkContractions_local_kernel_double<<<gridDim,blockDim>>>((double2*) d_partial_block, fwdTex, seqTex, PARTICLE, partflag, itime, GK_sourcePosition[isource][0] , GK_sourcePosition[isource][1], GK_sourcePosition[isource][2]);
+
+    cudaMemcpy(h_partial_block , d_partial_block , GK_Nmoms*16*gridDim.x*2 * sizeof(Float) , cudaMemcpyDeviceToHost);
+    checkCudaError();
+    memset(reduction,0,GK_Nmoms*16*2*sizeof(Float));
 
     for(int imom = 0 ; imom < GK_Nmoms ; imom++)
       for(int iop = 0 ; iop < 16 ; iop++)
@@ -1162,16 +1383,17 @@ static void fixSinkContractions_kernel(void* corrThp_local, void* corrThp_noethe
 	  ((Float*) corrThp_local)[itime*GK_Nmoms*16*2 + imom*16*2 + iop*2 + 0] = reduction[imom*16*2 + iop*2 + 0];
 	  ((Float*) corrThp_local)[itime*GK_Nmoms*16*2 + imom*16*2 + iop*2 + 1] = reduction[imom*16*2 + iop*2 + 1];
 	}
-////////////////////////////////////////////////
-//////////////////////////// noether conserved current ////////
-  if( typeid(Float2) == typeid(float2) )
-    fixSinkContractions_noether_kernel_float<<<gridDim,blockDim>>>((float2*) d_partial_block, fwdTex, seqTex, gaugeTex, PARTICLE, partflag, itime, GK_sourcePosition[isource][0] , GK_sourcePosition[isource][1], GK_sourcePosition[isource][2]);
-  else if( typeid(Float2) == typeid(double2) )
-    fixSinkContractions_noether_kernel_double<<<gridDim,blockDim>>>((double2*) d_partial_block, fwdTex, seqTex, gaugeTex, PARTICLE, partflag, itime, GK_sourcePosition[isource][0] , GK_sourcePosition[isource][1], GK_sourcePosition[isource][2]);
+    //---------------------------------------------------------------
 
-  cudaMemcpy(h_partial_block , d_partial_block , GK_Nmoms*4*gridDim.x*2 * sizeof(Float) , cudaMemcpyDeviceToHost);
-  checkCudaError();
-  memset(reduction,0,GK_Nmoms*4*2*sizeof(Float));
+    //- Noether, conserved current
+    if( typeid(Float2) == typeid(float2) )
+      fixSinkContractions_noether_kernel_float<<<gridDim,blockDim>>>((float2*) d_partial_block, fwdTex, seqTex, gaugeTex, PARTICLE, partflag, itime, GK_sourcePosition[isource][0] , GK_sourcePosition[isource][1], GK_sourcePosition[isource][2]);
+    else if( typeid(Float2) == typeid(double2) )
+      fixSinkContractions_noether_kernel_double<<<gridDim,blockDim>>>((double2*) d_partial_block, fwdTex, seqTex, gaugeTex, PARTICLE, partflag, itime, GK_sourcePosition[isource][0] , GK_sourcePosition[isource][1], GK_sourcePosition[isource][2]);
+
+    cudaMemcpy(h_partial_block , d_partial_block , GK_Nmoms*4*gridDim.x*2 * sizeof(Float) , cudaMemcpyDeviceToHost);
+    checkCudaError();
+    memset(reduction,0,GK_Nmoms*4*2*sizeof(Float));
 
     for(int imom = 0 ; imom < GK_Nmoms ; imom++)
       for(int dir = 0 ; dir < 4 ; dir++)
@@ -1179,61 +1401,57 @@ static void fixSinkContractions_kernel(void* corrThp_local, void* corrThp_noethe
 	  reduction[imom*4*2 + dir*2 + 0] += h_partial_block[imom*4*gridDim.x*2 + dir*gridDim.x*2 + i*2 + 0];
 	  reduction[imom*4*2 + dir*2 + 1] += h_partial_block[imom*4*gridDim.x*2 + dir*gridDim.x*2 + i*2 + 1];
 	}
-
+  
     for(int imom = 0 ; imom < GK_Nmoms ; imom++)
       for(int dir = 0 ; dir < 4 ; dir++)
 	for(int i =0 ; i < gridDim.x ; i++){
 	  ((Float*) corrThp_noether)[itime*GK_Nmoms*4*2 + imom*4*2 + dir*2 + 0] = reduction[imom*4*2 + dir*2 + 0];
 	  ((Float*) corrThp_noether)[itime*GK_Nmoms*4*2 + imom*4*2 + dir*2 + 1] = reduction[imom*4*2 + dir*2 + 1];
 	}
+    //---------------------------------------------------------------
 
-/////////////////////////////////////
-//////////////////////////// one derivative current ////////
-//    cudaPrintfInit();
+    //- One-derivative operators
     for(int dir = 0 ; dir < 4 ; dir++){
       if( typeid(Float2) == typeid(float2) )
 	fixSinkContractions_oneD_kernel_float<<<gridDim,blockDim>>>((float2*) d_partial_block, fwdTex, seqTex, gaugeTex, PARTICLE, partflag, itime, dir, GK_sourcePosition[isource][0] , GK_sourcePosition[isource][1], GK_sourcePosition[isource][2]);
       else if( typeid(Float2) == typeid(double2) )
 	fixSinkContractions_oneD_kernel_double<<<gridDim,blockDim>>>((double2*) d_partial_block, fwdTex, seqTex, gaugeTex, PARTICLE, partflag, itime, dir, GK_sourcePosition[isource][0] , GK_sourcePosition[isource][1], GK_sourcePosition[isource][2]);
       
-      //    if(comm_rank() == 0)  cudaPrintfDisplay(stdout,true);
       cudaMemcpy(h_partial_block , d_partial_block , GK_Nmoms*16*gridDim.x*2 * sizeof(Float) , cudaMemcpyDeviceToHost);
       checkCudaError();
       memset(reduction,0,GK_Nmoms*16*2*sizeof(Float));
-      
+    
       for(int imom = 0 ; imom < GK_Nmoms ; imom++)
 	for(int iop = 0 ; iop < 16 ; iop++)
 	  for(int i =0 ; i < gridDim.x ; i++){
 	    reduction[imom*16*2 + iop*2 + 0] += h_partial_block[imom*16*gridDim.x*2 + iop*gridDim.x*2 + i*2 + 0];
 	    reduction[imom*16*2 + iop*2 + 1] += h_partial_block[imom*16*gridDim.x*2 + iop*gridDim.x*2 + i*2 + 1];
 	  }
-      
+    
       for(int imom = 0 ; imom < GK_Nmoms ; imom++)
 	for(int iop = 0 ; iop < 16 ; iop++)
 	  for(int i =0 ; i < gridDim.x ; i++){
 	    ((Float*) corrThp_oneD)[itime*GK_Nmoms*4*16*2 + imom*4*16*2 + dir*16*2 + iop*2 + 0] = reduction[imom*16*2 + iop*2 + 0];
 	    ((Float*) corrThp_oneD)[itime*GK_Nmoms*4*16*2 + imom*4*16*2 + dir*16*2 + iop*2 + 1] = reduction[imom*16*2 + iop*2 + 1];
 	  }
-    }
-    //    cudaPrintfEnd();
-/////////////////////////////////////
-  free(h_partial_block);
-  cudaFree(d_partial_block);
-  checkCudaError();
-  free(reduction);
+    }//-dir
+    //---------------------------------------------------------------
+
+    free(h_partial_block);
+    cudaFree(d_partial_block);
+    checkCudaError();
+    free(reduction);
+  }
+  else errorQuda("fixSinkContractions_kernel: Supports only POSITION_SPACE and MOMENTUM_SPACE!\n");
+
 }
 
 
-void quda::run_fixSinkContractions(void* corrThp_local, void* corrThp_noether, void* corrThp_oneD, cudaTextureObject_t fwdTex, cudaTextureObject_t seqTex, cudaTextureObject_t gaugeTex, WHICHPARTICLE PARTICLE, int partflag, int it, int isource, int precision){
-  if(precision == 4){
-    fixSinkContractions_kernel<float2,float>(corrThp_local,corrThp_noether,corrThp_oneD,fwdTex,seqTex,gaugeTex,PARTICLE,partflag, it, isource);
-  }
-  else if(precision == 8){
-    fixSinkContractions_kernel<double2,double>(corrThp_local,corrThp_noether,corrThp_oneD,fwdTex,seqTex,gaugeTex,PARTICLE,partflag, it, isource);
-  }
-  else{
-    errorQuda("Precision not supported\n");
-  }
+void quda::run_fixSinkContractions(void* corrThp_local, void* corrThp_noether, void* corrThp_oneD, cudaTextureObject_t fwdTex, cudaTextureObject_t seqTex, cudaTextureObject_t gaugeTex,
+				   WHICHPARTICLE PARTICLE, int partflag, int it, int isource, int precision, CORR_SPACE CorrSpace){
+
+  if(precision == 4)      fixSinkContractions_kernel<float2,float>  (corrThp_local,corrThp_noether,corrThp_oneD,fwdTex,seqTex,gaugeTex,PARTICLE,partflag, it, isource, CorrSpace);
+  else if(precision == 8) fixSinkContractions_kernel<double2,double>(corrThp_local,corrThp_noether,corrThp_oneD,fwdTex,seqTex,gaugeTex,PARTICLE,partflag, it, isource, CorrSpace);
+  else  errorQuda("run_fixSinkContractions: Precision %d not supported\n",precision);
+
 }
-
-

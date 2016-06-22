@@ -79,6 +79,7 @@ extern char check_file_exist[];
 extern int Nproj;
 extern char proj_list_file[];
 
+extern char *corr_write_space;
 
 //-C.K. ARPACK Parameters
 extern int PolyDeg;
@@ -513,8 +514,11 @@ int main(int argc, char **argv)
       fclose(proj_ptr);
     }
   }
-  //--------------------------------------------------
 
+  if( strcmp(corr_write_space,"MOMENTUM")==0 || strcmp(corr_write_space,"momentum")==0 ) info.CorrSpace = MOMENTUM_SPACE;      // Determine whether to write the correlation functions
+  else if( strcmp(corr_write_space,"POSITION")==0 || strcmp(corr_write_space,"position")==0 ) info.CorrSpace = POSITION_SPACE; // in position or momentum space
+  else fprintf(stderr,"Undefined option for --corr_write_space. Options are MOMENTUM(momentum)/POSITION(position)\n");
+  //--------------------------------------------------
 
 
   initQuda(device);

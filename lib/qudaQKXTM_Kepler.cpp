@@ -1410,6 +1410,9 @@ void  QKXTM_Propagator_Kepler<Float>::apply_gamma5(){
 #define N_MESONS 10
 template<typename Float>
 void QKXTM_Contraction_Kepler<Float>::contractMesons(QKXTM_Propagator_Kepler<Float> &prop1,QKXTM_Propagator_Kepler<Float> &prop2, char *filename_out, int isource){
+
+  errorQuda("contractMesons: This version of the function is obsolete. Cannot guarantee correct results. Please call the overloaded-updated version of this function with the corresponding list of arguments.\n");
+
   cudaTextureObject_t texProp1, texProp2;
   prop1.createTexObject(&texProp1);
   prop2.createTexObject(&texProp2);
@@ -1424,7 +1427,7 @@ void QKXTM_Contraction_Kepler<Float>::contractMesons(QKXTM_Propagator_Kepler<Flo
   if( corr_mom_local == NULL || corr_mom_local_reduced == NULL || corr_mom == NULL )errorQuda("Error problem to allocate memory");
 
   for(int it = 0 ; it < GK_localL[3] ; it++){
-    run_contractMesons(texProp1,texProp2,(void*) corr_mom_local,it,isource,sizeof(Float));
+    run_contractMesons(texProp1,texProp2,(void*) corr_mom_local,it,isource,sizeof(Float),MOMENTUM_SPACE);
   }
 
   int error;
@@ -1468,6 +1471,9 @@ void QKXTM_Contraction_Kepler<Float>::contractMesons(QKXTM_Propagator_Kepler<Flo
 #define N_BARYONS 10
 template<typename Float>
 void QKXTM_Contraction_Kepler<Float>::contractBaryons(QKXTM_Propagator_Kepler<Float> &prop1,QKXTM_Propagator_Kepler<Float> &prop2, char *filename_out, int isource){
+
+  errorQuda("contractBaryons: This version of the function is obsolete. Cannot guarantee correct results. Please call the overloaded-updated version of this function with the corresponding list of arguments.\n");
+
   cudaTextureObject_t texProp1, texProp2;
   prop1.createTexObject(&texProp1);
   prop2.createTexObject(&texProp2);
@@ -1482,7 +1488,7 @@ void QKXTM_Contraction_Kepler<Float>::contractBaryons(QKXTM_Propagator_Kepler<Fl
   if( corr_mom_local == NULL || corr_mom_local_reduced == NULL || corr_mom == NULL )errorQuda("Error problem to allocate memory");
 
   for(int it = 0 ; it < GK_localL[3] ; it++){
-    run_contractBaryons(texProp1,texProp2,(void*) corr_mom_local,it,isource,sizeof(Float));
+    run_contractBaryons(texProp1,texProp2,(void*) corr_mom_local,it,isource,sizeof(Float),MOMENTUM_SPACE);
   }
 
   int error;
@@ -1529,21 +1535,42 @@ void QKXTM_Contraction_Kepler<Float>::contractBaryons(QKXTM_Propagator_Kepler<Fl
 //---------------------------------------------------------------------------------------------------
 //---------------------------------------------------------------------------------------------------
 
-
-//-C.K. - New function to write the baryons two-point function in HDF5 format
 template<typename Float>
-void QKXTM_Contraction_Kepler<Float>::writeTwopBaryons_HDF5(void *twopBaryons, char *filename, qudaQKXTMinfo_Kepler info, int isource){
+void QKXTM_Contraction_Kepler<Float>::writeTwopBaryonsHDF5(void *twopBaryons, char *filename, qudaQKXTMinfo_Kepler info, int isource){
+
+  if(info.CorrSpace==MOMENTUM_SPACE)      writeTwopBaryonsHDF5_MomSpace((void*) twopBaryons, filename, info, isource);
+  else if(info.CorrSpace==POSITION_SPACE) writeTwopBaryonsHDF5_PosSpace((void*) twopBaryons, filename, info, isource);
+  else errorQuda("writeTwopBaryonsHDF5: Unsupported value for info.CorrSpace! Supports only POSITION_SPACE and MOMENTUM_SPACE!\n");
+
+}
+
+//-C.K. - New function to write the baryons two-point function in HDF5 format, position-space
+template<typename Float>
+void QKXTM_Contraction_Kepler<Float>::writeTwopBaryonsHDF5_PosSpace(void *twopBaryons, char *filename, qudaQKXTMinfo_Kepler info, int isource){
+
+  if(info.CorrSpace!=POSITION_SPACE) errorQuda("writeTwopBaryonsHDF5_PosSpace: Support for writing the Baryon two-point function only in position-space!\n");
+
+  //-C.K. - FIXME!!!
+
+  return;
+}
+
+//-C.K. - New function to write the baryons two-point function in HDF5 format, momentum-space
+template<typename Float>
+void QKXTM_Contraction_Kepler<Float>::writeTwopBaryonsHDF5_MomSpace(void *twopBaryons, char *filename, qudaQKXTMinfo_Kepler info, int isource){
+
+  if(info.CorrSpace!=MOMENTUM_SPACE) errorQuda("writeTwopBaryonsHDF5_MomSpace: Support for writing the Baryon two-point function only in momentum-space!\n");
 
   if(GK_timeRank >= 0 && GK_timeRank < GK_nProc[3] ){
 
     hid_t DATATYPE_H5;
     if( typeid(Float) == typeid(float) ){
       DATATYPE_H5 = H5T_NATIVE_FLOAT;
-      printfQuda("writeTwopBaryons_HDF5: Will write in single precision\n");
+      printfQuda("writeTwopBaryonsHDF5_MomSpace: Will write in single precision\n");
     }
     if( typeid(Float) == typeid(double)){
       DATATYPE_H5 = H5T_NATIVE_DOUBLE;
-      printfQuda("writeTwopBaryons_HDF5: Will write in double precision\n");
+      printfQuda("writeTwopBaryonsHDF5_MomSpace: Will write in double precision\n");
     }
 
     int t_src = GK_sourcePosition[isource][3];
@@ -1687,33 +1714,40 @@ void QKXTM_Contraction_Kepler<Float>::writeTwopBaryons_HDF5(void *twopBaryons, c
 
 //-C.K. - New function to copy the baryon two-point functions into write Buffers for writing in HDF5 format
 template<typename Float>
-void QKXTM_Contraction_Kepler<Float>::copyTwopBaryonsToHDF5_Buf(void *Twop_baryons_HDF5, void *corrBaryons, int isource){
+void QKXTM_Contraction_Kepler<Float>::copyTwopBaryonsToHDF5_Buf(void *Twop_baryons_HDF5, void *corrBaryons, int isource, CORR_SPACE CorrSpace){
 
-  if(GK_timeRank >= 0 && GK_timeRank < GK_nProc[3] ){
-    int Lt = GK_localL[3];
-    int t_src = GK_sourcePosition[isource][3];
-
-    for(int ip=0;ip<2;ip++){
-      for(int bar=0;bar<N_BARYONS;bar++){
-	for(int imom=0;imom<GK_Nmoms;imom++){
-	  for(int it=0;it<Lt;it++){
-	    int t_glob = GK_timeRank*Lt+it;
-	    int sign = t_glob < t_src ? -1 : +1;
-	    for(int ga=0;ga<4;ga++){
-	      for(int gap=0;gap<4;gap++){
-		int im=gap+4*ga;
-		((Float*)Twop_baryons_HDF5)[0 + 2*im + 2*16*it + 2*16*Lt*imom + 2*16*Lt*GK_Nmoms*bar + 2*16*Lt*GK_Nmoms*N_BARYONS*ip] = sign*((Float(*)[2][N_BARYONS][4][4])corrBaryons)[0 + 2*imom + 2*GK_Nmoms*it][ip][bar][ga][gap];
-		((Float*)Twop_baryons_HDF5)[1 + 2*im + 2*16*it + 2*16*Lt*imom + 2*16*Lt*GK_Nmoms*bar + 2*16*Lt*GK_Nmoms*N_BARYONS*ip] = sign*((Float(*)[2][N_BARYONS][4][4])corrBaryons)[1 + 2*imom + 2*GK_Nmoms*it][ip][bar][ga][gap];
-	      }}}}}
-    }//-ip
-  }//-if
+  if(CorrSpace==MOMENTUM_SPACE){
+    if(GK_timeRank >= 0 && GK_timeRank < GK_nProc[3] ){
+      int Lt = GK_localL[3];
+      int t_src = GK_sourcePosition[isource][3];
+      
+      for(int ip=0;ip<2;ip++){
+	for(int bar=0;bar<N_BARYONS;bar++){
+	  for(int imom=0;imom<GK_Nmoms;imom++){
+	    for(int it=0;it<Lt;it++){
+	      int t_glob = GK_timeRank*Lt+it;
+	      int sign = t_glob < t_src ? -1 : +1;
+	      for(int ga=0;ga<4;ga++){
+		for(int gap=0;gap<4;gap++){
+		  int im=gap+4*ga;
+		  ((Float*)Twop_baryons_HDF5)[0 + 2*im + 2*16*it + 2*16*Lt*imom + 2*16*Lt*GK_Nmoms*bar + 2*16*Lt*GK_Nmoms*N_BARYONS*ip] = sign*((Float(*)[2][N_BARYONS][4][4])corrBaryons)[0 + 2*imom + 2*GK_Nmoms*it][ip][bar][ga][gap];
+		  ((Float*)Twop_baryons_HDF5)[1 + 2*im + 2*16*it + 2*16*Lt*imom + 2*16*Lt*GK_Nmoms*bar + 2*16*Lt*GK_Nmoms*N_BARYONS*ip] = sign*((Float(*)[2][N_BARYONS][4][4])corrBaryons)[1 + 2*imom + 2*GK_Nmoms*it][ip][bar][ga][gap];
+		}}}}}
+      }//-ip
+    }//-if GK_timeRank
+  }//-if CorrSpace
+  else if(CorrSpace==POSITION_SPACE){
+    //-C.K.: FIXME!!!
+  }
 
 }
 
 
 //-C.K. New function to write the baryons two-point function in ASCII format
 template<typename Float>
-void QKXTM_Contraction_Kepler<Float>::writeTwopBaryons_ASCII(void *corrBaryons, char *filename_out, int isource){
+void QKXTM_Contraction_Kepler<Float>::writeTwopBaryons_ASCII(void *corrBaryons, char *filename_out, int isource, CORR_SPACE CorrSpace){
+
+  if(CorrSpace!=MOMENTUM_SPACE) errorQuda("writeTwopBaryons_ASCII: Supports writing only in momentum-space!\n");
 
   Float (*GLcorrBaryons)[2][N_BARYONS][4][4] = (Float(*)[2][N_BARYONS][4][4]) calloc(GK_totalL[3]*GK_Nmoms*2*N_BARYONS*4*4*2,sizeof(Float));
   if( GLcorrBaryons == NULL )errorQuda("writeTwopBaryons_ASCII: Cannot allocate memory for Baryon two-point function buffer.");
@@ -1757,7 +1791,7 @@ void QKXTM_Contraction_Kepler<Float>::writeTwopBaryons_ASCII(void *corrBaryons, 
 
 //-C.K. Overloaded function to perform the baryon contractions without writing the data
 template<typename Float>
-void QKXTM_Contraction_Kepler<Float>::contractBaryons(QKXTM_Propagator_Kepler<Float> &prop1,QKXTM_Propagator_Kepler<Float> &prop2, void *corrBaryons_reduced, int isource){
+void QKXTM_Contraction_Kepler<Float>::contractBaryons(QKXTM_Propagator_Kepler<Float> &prop1,QKXTM_Propagator_Kepler<Float> &prop2, void *corrBaryons, int isource, CORR_SPACE CorrSpace){
   cudaTextureObject_t texProp1, texProp2;
   prop1.createTexObject(&texProp1);
   prop2.createTexObject(&texProp2);
@@ -1765,21 +1799,25 @@ void QKXTM_Contraction_Kepler<Float>::contractBaryons(QKXTM_Propagator_Kepler<Fl
   if( typeid(Float) == typeid(float))  printfQuda("contractBaryons: Will perform in single precision\n");
   if( typeid(Float) == typeid(double)) printfQuda("contractBaryons: Will perform in double precision\n");
 
+  if(CorrSpace==POSITION_SPACE){
+    for(int it = 0 ; it < GK_localL[3] ; it++) run_contractBaryons(texProp1,texProp2,(void*) corrBaryons,it,isource,sizeof(Float),CorrSpace);
+  }
+  else if(CorrSpace==MOMENTUM_SPACE){
+    Float (*corrBaryons_local)[2][N_BARYONS][4][4] = (Float(*)[2][N_BARYONS][4][4]) calloc(GK_localL[3]*GK_Nmoms*2*N_BARYONS*4*4*2,sizeof(Float));
+    if( corrBaryons_local == NULL ) errorQuda("contractBaryons: Cannot allocate memory for Baryon two-point function contract buffer.\n");
 
-  Float (*corrBaryons_local)[2][N_BARYONS][4][4] =(Float(*)[2][N_BARYONS][4][4]) calloc(GK_localL[3]*GK_Nmoms*2*N_BARYONS*4*4*2,sizeof(Float));
+    for(int it = 0 ; it < GK_localL[3] ; it++) run_contractBaryons(texProp1,texProp2,(void*) corrBaryons_local,it,isource,sizeof(Float),CorrSpace);
 
-  if( corrBaryons_local == NULL )errorQuda("Error problem to allocate memory");
+    MPI_Datatype DATATYPE = -1;
+    if( typeid(Float) == typeid(float))  DATATYPE = MPI_FLOAT;
+    if( typeid(Float) == typeid(double)) DATATYPE = MPI_DOUBLE;
 
-  for(int it = 0 ; it < GK_localL[3] ; it++)
-    run_contractBaryons(texProp1,texProp2,(void*) corrBaryons_local,it,isource,sizeof(Float));
+    MPI_Reduce(corrBaryons_local, (Float*) corrBaryons,GK_localL[3]*GK_Nmoms*2*N_BARYONS*4*4*2,DATATYPE,MPI_SUM,0, GK_spaceComm);
 
-  MPI_Datatype DATATYPE = -1;
-  if( typeid(Float) == typeid(float))  DATATYPE = MPI_FLOAT;
-  if( typeid(Float) == typeid(double)) DATATYPE = MPI_DOUBLE;
+    free(corrBaryons_local);
+  }
+  else errorQuda("contractBaryons: Supports only POSITION_SPACE and MOMENTUM_SPACE!\n");
 
-  MPI_Reduce(corrBaryons_local, (Float*) corrBaryons_reduced,GK_localL[3]*GK_Nmoms*2*N_BARYONS*4*4*2,DATATYPE,MPI_SUM,0, GK_spaceComm);
-
-  free(corrBaryons_local);
   prop1.destroyTexObject(texProp1);
   prop2.destroyTexObject(texProp2);
 }
@@ -1788,21 +1826,43 @@ void QKXTM_Contraction_Kepler<Float>::contractBaryons(QKXTM_Propagator_Kepler<Fl
 //---------------------------------------------------------------------------------------------------
 //---------------------------------------------------------------------------------------------------
 
-
-//-C.K. - New function to write the mesons two-point function in HDF5 format
 template<typename Float>
-void QKXTM_Contraction_Kepler<Float>::writeTwopMesons_HDF5(void *twopMesons, char *filename, qudaQKXTMinfo_Kepler info, int isource){
+void QKXTM_Contraction_Kepler<Float>::writeTwopMesonsHDF5(void *twopMesons, char *filename, qudaQKXTMinfo_Kepler info, int isource){
+
+  if(info.CorrSpace==MOMENTUM_SPACE)      writeTwopMesonsHDF5_MomSpace((void*)twopMesons, filename, info, isource);
+  else if(info.CorrSpace==POSITION_SPACE) writeTwopMesonsHDF5_PosSpace((void*)twopMesons, filename, info, isource);
+  else errorQuda("writeTwopMesonsHDF5: Unsupported value for info.CorrSpace! Supports only POSITION_SPACE and MOMENTUM_SPACE!\n");
+
+}
+
+//-C.K. - New function to write the mesons two-point function in HDF5 format, position-space
+template<typename Float>
+void QKXTM_Contraction_Kepler<Float>::writeTwopMesonsHDF5_PosSpace(void *twopMesons, char *filename, qudaQKXTMinfo_Kepler info, int isource){
+
+  if(info.CorrSpace!=POSITION_SPACE) errorQuda("writeTwopMesonsHDF5_PosSpace: Support for writing the Meson two-point function only in position-space!\n");
+
+  //-C.K: - FIXME!!!
+
+  return;
+}
+
+
+//-C.K. - New function to write the mesons two-point function in HDF5 format, momentum-space
+template<typename Float>
+void QKXTM_Contraction_Kepler<Float>::writeTwopMesonsHDF5_MomSpace(void *twopMesons, char *filename, qudaQKXTMinfo_Kepler info, int isource){
+
+  if(info.CorrSpace!=MOMENTUM_SPACE) errorQuda("writeTwopMesonsHDF5_MomSpace: Support for writing the Meson two-point function only in momentum-space!\n");
 
   if(GK_timeRank >= 0 && GK_timeRank < GK_nProc[3] ){
 
     hid_t DATATYPE_H5;
     if( typeid(Float) == typeid(float) ){
       DATATYPE_H5 = H5T_NATIVE_FLOAT;
-      printfQuda("writeTwopMesons_HDF5: Will write in single precision\n");
+      printfQuda("writeTwopMesonsHDF5_MomSpace: Will write in single precision\n");
     }
     if( typeid(Float) == typeid(double)){
       DATATYPE_H5 = H5T_NATIVE_DOUBLE;
-      printfQuda("writeTwopMesons_HDF5: Will write in double precision\n");
+      printfQuda("writeTwopMesons_HDF5_MomSpace: Will write in double precision\n");
     }
 
     int t_src = GK_sourcePosition[isource][3];
@@ -1944,27 +2004,34 @@ void QKXTM_Contraction_Kepler<Float>::writeTwopMesons_HDF5(void *twopMesons, cha
 
 //-C.K. - New function to copy the meson two-point functions into write Buffers for writing in HDF5 format
 template<typename Float>
-void QKXTM_Contraction_Kepler<Float>::copyTwopMesonsToHDF5_Buf(void *Twop_mesons_HDF5, void *corrMesons){
+void QKXTM_Contraction_Kepler<Float>::copyTwopMesonsToHDF5_Buf(void *Twop_mesons_HDF5, void *corrMesons, CORR_SPACE CorrSpace){
 
-  if(GK_timeRank >= 0 && GK_timeRank < GK_nProc[3] ){
-    for(int ip=0;ip<2;ip++)
-      for(int mes=0;mes<N_MESONS;mes++)
-	for(int imom=0;imom<GK_Nmoms;imom++)
-	  for(int it=0;it<GK_localL[3];it++){
-	    ((Float*)Twop_mesons_HDF5)[0 + 2*it + 2*GK_localL[3]*imom + 2*GK_localL[3]*GK_Nmoms*mes + 2*GK_localL[3]*GK_Nmoms*N_MESONS*ip] = ((Float(*)[2][N_MESONS])corrMesons)[0 + 2*imom + 2*GK_Nmoms*it][ip][mes];
-	    ((Float*)Twop_mesons_HDF5)[1 + 2*it + 2*GK_localL[3]*imom + 2*GK_localL[3]*GK_Nmoms*mes + 2*GK_localL[3]*GK_Nmoms*N_MESONS*ip] = ((Float(*)[2][N_MESONS])corrMesons)[1 + 2*imom + 2*GK_Nmoms*it][ip][mes];
-	  }
-  }//-if
+  if(CorrSpace==MOMENTUM_SPACE){
+    if(GK_timeRank >= 0 && GK_timeRank < GK_nProc[3] ){
+      for(int ip=0;ip<2;ip++)
+	for(int mes=0;mes<N_MESONS;mes++)
+	  for(int imom=0;imom<GK_Nmoms;imom++)
+	    for(int it=0;it<GK_localL[3];it++){
+	      ((Float*)Twop_mesons_HDF5)[0 + 2*it + 2*GK_localL[3]*imom + 2*GK_localL[3]*GK_Nmoms*mes + 2*GK_localL[3]*GK_Nmoms*N_MESONS*ip] = ((Float(*)[2][N_MESONS])corrMesons)[0 + 2*imom + 2*GK_Nmoms*it][ip][mes];
+	      ((Float*)Twop_mesons_HDF5)[1 + 2*it + 2*GK_localL[3]*imom + 2*GK_localL[3]*GK_Nmoms*mes + 2*GK_localL[3]*GK_Nmoms*N_MESONS*ip] = ((Float(*)[2][N_MESONS])corrMesons)[1 + 2*imom + 2*GK_Nmoms*it][ip][mes];
+	    }
+    }//-if GK_timeRank
+  }//-if CorrSpace
+  else if(CorrSpace==POSITION_SPACE){
+    //-C.K.: - FIXME!!!
+  }
 
 }
 
 
 //-C.K. New function to write the mesons two-point function in ASCII format
 template<typename Float>
-void QKXTM_Contraction_Kepler<Float>::writeTwopMesons_ASCII(void *corrMesons, char *filename_out, int isource){
+void QKXTM_Contraction_Kepler<Float>::writeTwopMesons_ASCII(void *corrMesons, char *filename_out, int isource, CORR_SPACE CorrSpace){
+
+  if(CorrSpace!=MOMENTUM_SPACE) errorQuda("writeTwopMesons_ASCII: Supports writing only in momentum-space!\n");
 
   Float (*GLcorrMesons)[2][N_MESONS] = (Float(*)[2][N_MESONS]) calloc(GK_totalL[3]*GK_Nmoms*2*N_MESONS*2,sizeof(Float));;
-  if( GLcorrMesons == NULL )errorQuda("writeTwopMesons_ASCII: Cannot allocate memory for Meson two-point function buffer.");
+  if( GLcorrMesons == NULL )errorQuda("writeTwopMesons_ASCII: Cannot allocate memory for Meson two-point function buffer.\n");
 
   MPI_Datatype DATATYPE = -1;
   if( typeid(Float) == typeid(float)){
@@ -2002,7 +2069,7 @@ void QKXTM_Contraction_Kepler<Float>::writeTwopMesons_ASCII(void *corrMesons, ch
 
 //-C.K. Overloaded function to perform the meson contractions without writing the data
 template<typename Float>
-void QKXTM_Contraction_Kepler<Float>::contractMesons(QKXTM_Propagator_Kepler<Float> &prop1,QKXTM_Propagator_Kepler<Float> &prop2, void *corrMesons_reduced, int isource){
+void QKXTM_Contraction_Kepler<Float>::contractMesons(QKXTM_Propagator_Kepler<Float> &prop1,QKXTM_Propagator_Kepler<Float> &prop2, void *corrMesons, int isource, CORR_SPACE CorrSpace){
   cudaTextureObject_t texProp1, texProp2;
   prop1.createTexObject(&texProp1);
   prop2.createTexObject(&texProp2);
@@ -2010,20 +2077,24 @@ void QKXTM_Contraction_Kepler<Float>::contractMesons(QKXTM_Propagator_Kepler<Flo
   if( typeid(Float) == typeid(float))  printfQuda("contractMesons: Will perform in single precision\n");
   if( typeid(Float) == typeid(double)) printfQuda("contractMesons: Will perform in double precision\n");
 
+  if(CorrSpace==POSITION_SPACE){
+    for(int it = 0 ; it < GK_localL[3] ; it++) run_contractMesons(texProp1,texProp2,(void*) corrMesons,it,isource,sizeof(Float),CorrSpace);
+  }
+  else if(CorrSpace==MOMENTUM_SPACE){
+    Float (*corrMesons_local)[2][N_MESONS] = (Float(*)[2][N_MESONS]) calloc(GK_localL[3]*GK_Nmoms*2*N_MESONS*2,sizeof(Float));
+    if( corrMesons_local == NULL )errorQuda("contractMesons: Cannot allocate memory for Meson two-point function contract buffer.\n");
 
-  Float (*corrMesons_local)[2][N_MESONS] =(Float(*)[2][N_MESONS]) calloc(GK_localL[3]*GK_Nmoms*2*N_MESONS*2,sizeof(Float));
-  if( corrMesons_local == NULL )errorQuda("contractMesons: Cannot allocate memory for Meson two-point function contract buffer.");
+    for(int it = 0 ; it < GK_localL[3] ; it++) run_contractMesons(texProp1,texProp2,(void*) corrMesons_local,it,isource,sizeof(Float),CorrSpace);
 
-  for(int it = 0 ; it < GK_localL[3] ; it++)
-    run_contractMesons(texProp1,texProp2,(void*) corrMesons_local,it,isource,sizeof(Float));
+    MPI_Datatype DATATYPE = -1;
+    if( typeid(Float) == typeid(float))  DATATYPE = MPI_FLOAT;
+    if( typeid(Float) == typeid(double)) DATATYPE = MPI_DOUBLE;
+    
+    MPI_Reduce(corrMesons_local, (Float*)corrMesons,GK_localL[3]*GK_Nmoms*2*N_MESONS*2,DATATYPE,MPI_SUM,0, GK_spaceComm);
 
-  MPI_Datatype DATATYPE = -1;
-  if( typeid(Float) == typeid(float))  DATATYPE = MPI_FLOAT;
-  if( typeid(Float) == typeid(double)) DATATYPE = MPI_DOUBLE;
-
-  MPI_Reduce(corrMesons_local, (Float*)corrMesons_reduced,GK_localL[3]*GK_Nmoms*2*N_MESONS*2,DATATYPE,MPI_SUM,0, GK_spaceComm);
-
-  free(corrMesons_local);
+    free(corrMesons_local);
+  }
+  else errorQuda("contractMesons: Supports only POSITION_SPACE and MOMENTUM_SPACE!\n");
 
   prop1.destroyTexObject(texProp1);
   prop2.destroyTexObject(texProp2);
@@ -2063,9 +2134,33 @@ void QKXTM_Contraction_Kepler<Float>::seqSourceFixSinkPart2(QKXTM_Vector_Kepler<
 //---------------------------------------------------------------------------------------------------
 //---------------------------------------------------------------------------------------------------
 
-//-C.K. - New function to write the three-point function in HDF5 format
 template<typename Float>
-void QKXTM_Contraction_Kepler<Float>::writeThrp_HDF5(void *Thrp_local_HDF5, void *Thrp_noether_HDF5, void **Thrp_oneD_HDF5, char *filename, qudaQKXTMinfo_Kepler info, int isource){
+void QKXTM_Contraction_Kepler<Float>::writeThrpHDF5(void *Thrp_local_HDF5, void *Thrp_noether_HDF5, void **Thrp_oneD_HDF5, char *filename, qudaQKXTMinfo_Kepler info, int isource){
+
+  if(info.CorrSpace==MOMENTUM_SPACE)      writeThrpHDF5_MomSpace((void*) Thrp_local_HDF5, (void*) Thrp_noether_HDF5, (void**)Thrp_oneD_HDF5, filename, info, isource);
+  else if(info.CorrSpace==POSITION_SPACE) writeThrpHDF5_PosSpace((void*) Thrp_local_HDF5, (void*) Thrp_noether_HDF5, (void**)Thrp_oneD_HDF5, filename, info, isource);
+  else errorQuda("writeThrpHDF5: Unsupported value for info.CorrSpace! Supports only POSITION_SPACE and MOMENTUM_SPACE!\n");
+
+}
+
+
+//-C.K. - New function to write the three-point function in HDF5 format, position-space
+template<typename Float>
+void QKXTM_Contraction_Kepler<Float>::writeThrpHDF5_PosSpace(void *Thrp_local_HDF5, void *Thrp_noether_HDF5, void **Thrp_oneD_HDF5, char *filename, qudaQKXTMinfo_Kepler info, int isource){
+
+  if(info.CorrSpace!=POSITION_SPACE) errorQuda("writeThrpHDF5_PosSpace: Support for writing the three-point function only in position-space!\n");
+
+  //-C.K. - FIXME!!!
+
+  return;
+}
+
+
+//-C.K. - New function to write the three-point function in HDF5 format, momentum-space
+template<typename Float>
+void QKXTM_Contraction_Kepler<Float>::writeThrpHDF5_MomSpace(void *Thrp_local_HDF5, void *Thrp_noether_HDF5, void **Thrp_oneD_HDF5, char *filename, qudaQKXTMinfo_Kepler info, int isource){
+
+  if(info.CorrSpace!=MOMENTUM_SPACE) errorQuda("writeThrpHDF5_MomSpace: Support for writing the three-point function only in momentum-space!\n");
 
   if(GK_timeRank >= 0 && GK_timeRank < GK_nProc[3] ){
 
@@ -2368,7 +2463,7 @@ void QKXTM_Contraction_Kepler<Float>::writeThrp_HDF5(void *Thrp_local_HDF5, void
 
 //-C.K. - New function to copy the three-point data into write Buffers for writing in HDF5 format
 template<typename Float>
-void QKXTM_Contraction_Kepler<Float>::copyThrpToHDF5_Buf(void *Thrp_HDF5, void *corrThp,  int mu, int uORd, int its, int Nsink, int pr, int sign, THRP_TYPE type){
+void QKXTM_Contraction_Kepler<Float>::copyThrpToHDF5_Buf(void *Thrp_HDF5, void *corrThp,  int mu, int uORd, int its, int Nsink, int pr, int sign, THRP_TYPE type, CORR_SPACE CorrSpace){
 
   int Mel;
   if(type==THRP_LOCAL || type==THRP_ONED) Mel = 16;
@@ -2377,34 +2472,42 @@ void QKXTM_Contraction_Kepler<Float>::copyThrpToHDF5_Buf(void *Thrp_HDF5, void *
 
   int Lt = GK_localL[3];
 
-  if(GK_timeRank >= 0 && GK_timeRank < GK_nProc[3] ){
-    if(type==THRP_LOCAL || type==THRP_NOETHER){
-      for(int it = 0; it<Lt; it++){
-	for(int imom = 0; imom<GK_Nmoms; imom++){
-	  for(int im = 0; im<Mel; im++){
-	    ((Float*)Thrp_HDF5)[0 + 2*im + 2*Mel*it + 2*Mel*Lt*imom + 2*Mel*Lt*GK_Nmoms*uORd + 2*Mel*Lt*GK_Nmoms*2*its + 2*Mel*Lt*GK_Nmoms*2*Nsink*pr] = sign*((Float*)corrThp)[0 + 2*im + 2*Mel*imom + 2*Mel*GK_Nmoms*it];
-	    ((Float*)Thrp_HDF5)[1 + 2*im + 2*Mel*it + 2*Mel*Lt*imom + 2*Mel*Lt*GK_Nmoms*uORd + 2*Mel*Lt*GK_Nmoms*2*its + 2*Mel*Lt*GK_Nmoms*2*Nsink*pr] = sign*((Float*)corrThp)[1 + 2*im + 2*Mel*imom + 2*Mel*GK_Nmoms*it];
+  if(CorrSpace==MOMENTUM_SPACE){
+    if(GK_timeRank >= 0 && GK_timeRank < GK_nProc[3] ){
+      if(type==THRP_LOCAL || type==THRP_NOETHER){
+	for(int it = 0; it<Lt; it++){
+	  for(int imom = 0; imom<GK_Nmoms; imom++){
+	    for(int im = 0; im<Mel; im++){
+	      ((Float*)Thrp_HDF5)[0 + 2*im + 2*Mel*it + 2*Mel*Lt*imom + 2*Mel*Lt*GK_Nmoms*uORd + 2*Mel*Lt*GK_Nmoms*2*its + 2*Mel*Lt*GK_Nmoms*2*Nsink*pr] = sign*((Float*)corrThp)[0 + 2*im + 2*Mel*imom + 2*Mel*GK_Nmoms*it];
+	      ((Float*)Thrp_HDF5)[1 + 2*im + 2*Mel*it + 2*Mel*Lt*imom + 2*Mel*Lt*GK_Nmoms*uORd + 2*Mel*Lt*GK_Nmoms*2*its + 2*Mel*Lt*GK_Nmoms*2*Nsink*pr] = sign*((Float*)corrThp)[1 + 2*im + 2*Mel*imom + 2*Mel*GK_Nmoms*it];
+	    }
 	  }
 	}
       }
-    }
-    else if(type==THRP_ONED){
-      for(int it = 0; it<Lt; it++){
-	for(int imom = 0; imom<GK_Nmoms; imom++){
-	  for(int im = 0; im<Mel; im++){
-	    ((Float*)Thrp_HDF5)[0 + 2*im + 2*Mel*it + 2*Mel*Lt*imom + 2*Mel*Lt*GK_Nmoms*uORd + 2*Mel*Lt*GK_Nmoms*2*its + 2*Mel*Lt*GK_Nmoms*2*Nsink*pr] = sign*((Float*)corrThp)[0 + 2*im + 2*Mel*mu + 2*Mel*4*imom + 2*Mel*4*GK_Nmoms*it];
-	    ((Float*)Thrp_HDF5)[1 + 2*im + 2*Mel*it + 2*Mel*Lt*imom + 2*Mel*Lt*GK_Nmoms*uORd + 2*Mel*Lt*GK_Nmoms*2*its + 2*Mel*Lt*GK_Nmoms*2*Nsink*pr] = sign*((Float*)corrThp)[1 + 2*im + 2*Mel*mu + 2*Mel*4*imom + 2*Mel*4*GK_Nmoms*it];
+      else if(type==THRP_ONED){
+	for(int it = 0; it<Lt; it++){
+	  for(int imom = 0; imom<GK_Nmoms; imom++){
+	    for(int im = 0; im<Mel; im++){
+	      ((Float*)Thrp_HDF5)[0 + 2*im + 2*Mel*it + 2*Mel*Lt*imom + 2*Mel*Lt*GK_Nmoms*uORd + 2*Mel*Lt*GK_Nmoms*2*its + 2*Mel*Lt*GK_Nmoms*2*Nsink*pr] = sign*((Float*)corrThp)[0 + 2*im + 2*Mel*mu + 2*Mel*4*imom + 2*Mel*4*GK_Nmoms*it];
+	      ((Float*)Thrp_HDF5)[1 + 2*im + 2*Mel*it + 2*Mel*Lt*imom + 2*Mel*Lt*GK_Nmoms*uORd + 2*Mel*Lt*GK_Nmoms*2*its + 2*Mel*Lt*GK_Nmoms*2*Nsink*pr] = sign*((Float*)corrThp)[1 + 2*im + 2*Mel*mu + 2*Mel*4*imom + 2*Mel*4*GK_Nmoms*it];
+	    }
 	  }
-	}
-      }      
-    }
-  }//-if
+	}      
+      }
+    }//-if GK_timeRank
+  }//-if CorrSpace
+  else if(CorrSpace==POSITION_SPACE){
+    //-C.K.: - FIXME!!!
+  }
+
 }
 
 
 //-C.K. - New function to write the three-point function in ASCII format
 template<typename Float>
-void QKXTM_Contraction_Kepler<Float>::writeThrp_ASCII(void *corrThp_local, void *corrThp_noether, void *corrThp_oneD, WHICHPARTICLE testParticle, int partflag , char *filename_out, int isource, int tsinkMtsource){
+void QKXTM_Contraction_Kepler<Float>::writeThrp_ASCII(void *corrThp_local, void *corrThp_noether, void *corrThp_oneD, WHICHPARTICLE testParticle, int partflag , char *filename_out, int isource, int tsinkMtsource, CORR_SPACE CorrSpace){
+
+  if(CorrSpace!=MOMENTUM_SPACE) errorQuda("writeThrp_ASCII: Supports writing only in momentum-space!\n");
 
   Float *GLcorrThp_local   = (Float*) calloc(GK_totalL[3]*GK_Nmoms*16  *2,sizeof(Float));
   Float *GLcorrThp_noether = (Float*) calloc(GK_totalL[3]*GK_Nmoms   *4*2,sizeof(Float));
@@ -2503,71 +2606,75 @@ void QKXTM_Contraction_Kepler<Float>::writeThrp_ASCII(void *corrThp_local, void 
 //-C.K. Overloaded function to perform the contractions without writing the data
 template<typename Float>
 void QKXTM_Contraction_Kepler<Float>::contractFixSink(QKXTM_Propagator_Kepler<Float> &seqProp,QKXTM_Propagator_Kepler<Float> &prop, QKXTM_Gauge_Kepler<Float> &gauge,
-						      void *corrThp_local_reduced, void *corrThp_noether_reduced, void *corrThp_oneD_reduced,
-						      WHICHPROJECTOR typeProj , WHICHPARTICLE testParticle, int partflag, int isource){
+						      void *corrThp_local, void *corrThp_noether, void *corrThp_oneD,
+						      WHICHPROJECTOR typeProj , WHICHPARTICLE testParticle, int partflag, int isource, CORR_SPACE CorrSpace){
 
   if( typeid(Float) == typeid(float))  printfQuda("contractFixSink: Will perform in single precision\n");
   if( typeid(Float) == typeid(double)) printfQuda("contractFixSink: Will perform in double precision\n");
 
   // seq prop apply gamma5 and conjugate
-  // do the communication for gauge, prop and seqProp
   seqProp.apply_gamma5();
   seqProp.conjugate();
 
   gauge.ghostToHost();
   gauge.cpuExchangeGhost(); // communicate gauge                                                   
   gauge.ghostToDevice();
-  comm_barrier();          // just in case                                                                                   
-
-
+  comm_barrier();
 
   prop.ghostToHost();
   prop.cpuExchangeGhost(); // communicate forward propagator
   prop.ghostToDevice();
-
-  comm_barrier();          // just in case                                                                                                                             
-
+  comm_barrier();
 
   seqProp.ghostToHost();
   seqProp.cpuExchangeGhost(); // communicate sequential propagator
   seqProp.ghostToDevice();
-  comm_barrier();          // just in case                 
+  comm_barrier();
 
   cudaTextureObject_t seqTex, fwdTex, gaugeTex;
   seqProp.createTexObject(&seqTex);
   prop.createTexObject(&fwdTex);
   gauge.createTexObject(&gaugeTex);
 
-  Float *corrThp_local_local = (Float*) calloc(GK_localL[3]*GK_Nmoms*16*2,sizeof(Float));
-  Float *corrThp_noether_local = (Float*) calloc(GK_localL[3]*GK_Nmoms*4*2,sizeof(Float));
-  Float *corrThp_oneD_local = (Float*) calloc(GK_localL[3]*GK_Nmoms*4*16*2,sizeof(Float));
-  if(corrThp_local_local == NULL || corrThp_noether_local == NULL || corrThp_oneD_local == NULL) errorQuda("Error problem to allocate memory");
+  if(CorrSpace==POSITION_SPACE){
+    for(int it = 0 ; it < GK_localL[3] ; it++)
+      run_fixSinkContractions(corrThp_local, corrThp_noether, corrThp_oneD, fwdTex, seqTex, gaugeTex, testParticle, partflag, it, isource, sizeof(Float), CorrSpace);
+  }
+  else if(CorrSpace==MOMENTUM_SPACE){
+    Float *corrThp_local_local   = (Float*) calloc(GK_localL[3]*GK_Nmoms*16  *2,sizeof(Float));
+    Float *corrThp_noether_local = (Float*) calloc(GK_localL[3]*GK_Nmoms   *4*2,sizeof(Float));
+    Float *corrThp_oneD_local    = (Float*) calloc(GK_localL[3]*GK_Nmoms*16*4*2,sizeof(Float));
+    if(corrThp_local_local == NULL || corrThp_noether_local == NULL || corrThp_oneD_local == NULL) errorQuda("contractFixSink: Cannot allocate memory for three-point function contract buffers.\n");
+    
+    for(int it = 0 ; it < GK_localL[3] ; it++)
+      run_fixSinkContractions(corrThp_local_local, corrThp_noether_local, corrThp_oneD_local, fwdTex, seqTex, gaugeTex, testParticle, partflag, it, isource, sizeof(Float), CorrSpace);
 
-  for(int it = 0 ; it < GK_localL[3] ; it++)
-    run_fixSinkContractions(corrThp_local_local,corrThp_noether_local,corrThp_oneD_local,fwdTex,seqTex,gaugeTex,testParticle,partflag,it,isource,sizeof(Float));
-
-  MPI_Datatype DATATYPE = -1;
-  if( typeid(Float) == typeid(float))  DATATYPE = MPI_FLOAT;
-  if( typeid(Float) == typeid(double)) DATATYPE = MPI_DOUBLE;
-
-  MPI_Reduce(corrThp_local_local, (Float*)corrThp_local_reduced, GK_localL[3]*GK_Nmoms*16*2, DATATYPE, MPI_SUM, 0, GK_spaceComm);
-  MPI_Reduce(corrThp_noether_local, (Float*)corrThp_noether_reduced, GK_localL[3]*GK_Nmoms*4*2, DATATYPE, MPI_SUM, 0, GK_spaceComm);
-  MPI_Reduce(corrThp_oneD_local, (Float*)corrThp_oneD_reduced, GK_localL[3]*GK_Nmoms*4*16*2, DATATYPE, MPI_SUM, 0, GK_spaceComm);
-
-
-  free(corrThp_local_local);
-  free(corrThp_noether_local);
-  free(corrThp_oneD_local);
+    MPI_Datatype DATATYPE = -1;
+    if( typeid(Float) == typeid(float))  DATATYPE = MPI_FLOAT;
+    if( typeid(Float) == typeid(double)) DATATYPE = MPI_DOUBLE;
+    
+    MPI_Reduce(corrThp_local_local  , (Float*)corrThp_local  , GK_localL[3]*GK_Nmoms*16  *2, DATATYPE, MPI_SUM, 0, GK_spaceComm);
+    MPI_Reduce(corrThp_noether_local, (Float*)corrThp_noether, GK_localL[3]*GK_Nmoms   *4*2, DATATYPE, MPI_SUM, 0, GK_spaceComm);
+    MPI_Reduce(corrThp_oneD_local   , (Float*)corrThp_oneD   , GK_localL[3]*GK_Nmoms*16*4*2, DATATYPE, MPI_SUM, 0, GK_spaceComm);
+        
+    free(corrThp_local_local);
+    free(corrThp_noether_local);
+    free(corrThp_oneD_local);
+  }
+  else errorQuda("contractFixSink: Supports only POSITION_SPACE and MOMENTUM_SPACE!\n");
 
   seqProp.destroyTexObject(seqTex);
   prop.destroyTexObject(fwdTex);
   gauge.destroyTexObject(gaugeTex);
+
 }
 
 //---------------------------------------------------------------------------------------------------
 
 template<typename Float>
 void QKXTM_Contraction_Kepler<Float>::contractFixSink(QKXTM_Propagator_Kepler<Float> &seqProp,QKXTM_Propagator_Kepler<Float> &prop, QKXTM_Gauge_Kepler<Float> &gauge, WHICHPROJECTOR typeProj , WHICHPARTICLE testParticle, int partflag , char *filename_out, int isource, int tsinkMtsource){
+
+  errorQuda("contractFixSink: This version of the function is obsolete. Cannot guarantee correct results. Please call the overloaded-updated version of this function with the corresponding list of arguments.\n");
 
   if( typeid(Float) == typeid(float))  printfQuda("contractFixSink: Will perform in single precision\n");
   if( typeid(Float) == typeid(double)) printfQuda("contractFixSink: Will perform in double precision\n");
@@ -2625,7 +2732,7 @@ void QKXTM_Contraction_Kepler<Float>::contractFixSink(QKXTM_Propagator_Kepler<Fl
 
 
   for(int it = 0 ; it < GK_localL[3] ; it++)
-    run_fixSinkContractions(corrThp_local_local,corrThp_noether_local,corrThp_oneD_local,fwdTex,seqTex,gaugeTex,testParticle,partflag,it,isource,sizeof(Float));
+    run_fixSinkContractions(corrThp_local_local,corrThp_noether_local,corrThp_oneD_local,fwdTex,seqTex,gaugeTex,testParticle,partflag,it,isource,sizeof(Float),MOMENTUM_SPACE);
 
 
 

@@ -4098,8 +4098,14 @@ void calcEigenVectors_threepTwop_EvenOdd(void **gaugeSmeared, void **gauge, Quda
   info.meson_type[8] = "g3";
   info.meson_type[9] = "g4";
 
-  printfQuda("Will write the correlation functions in %s format\n",info.corr_file_format);
+  CORR_SPACE CorrSpace = info.CorrSpace; // Flag to determine whether to write the correlation functions in position/momentum space
+  printfQuda("Will write the correlation functions in %s-space!\n", (CorrSpace == POSITION_SPACE) ? "position" : "momentum");
 
+  if(CorrSpace==POSITION_SPACE && strcmp(info.corr_file_format,"ASCII")==0){
+    warningQuda("ASCII format not supported for writing the correlation functions in position-space! Switching to HDF5 format...\n");
+    strcpy(info.corr_file_format,"HDF5");
+  }
+  printfQuda("Will write the correlation functions in %s format\n",info.corr_file_format);
 
   printfQuda("Will run the three-point function for the following projector(s):\n");
   int NprojMax = 0;
@@ -4110,43 +4116,53 @@ void calcEigenVectors_threepTwop_EvenOdd(void **gaugeSmeared, void **gauge, Quda
     for(int p=0;p<info.Nproj[its];p++) printfQuda("  %s\n",info.thrp_proj_type[info.proj_list[its][p]]);
   }
 
-  //-Allocate the Three-Point function data Buffers
-  double *corrThp_local   = (double*) calloc(GK_localL[3]*GK_Nmoms*16*2,sizeof(double));
-  double *corrThp_noether = (double*) calloc(GK_localL[3]*GK_Nmoms*4*2,sizeof(double));
-  double *corrThp_oneD    = (double*) calloc(GK_localL[3]*GK_Nmoms*4*16*2,sizeof(double));
+
+  //-Allocate the Two-point and Three-point function data buffers
+  long int alloc_size;
+  if(CorrSpace==MOMENTUM_SPACE) alloc_size = GK_localL[3]*GK_Nmoms;
+  else if(CorrSpace==POSITION_SPACE) alloc_size = GK_localVolume;
+
+  //-Three-Point function
+  double *corrThp_local   = (double*) calloc(alloc_size  *16*2,sizeof(double));
+  double *corrThp_noether = (double*) calloc(alloc_size*4   *2,sizeof(double));
+  double *corrThp_oneD    = (double*) calloc(alloc_size*4*16*2,sizeof(double));
   if(corrThp_local == NULL || corrThp_noether == NULL || corrThp_oneD == NULL) errorQuda("Cannot allocate memory for Three-point function write Buffers.");
 
-  //-Allocate the Two-point function data buffers
-  double (*corrMesons)[2][N_MESONS] =(double(*)[2][N_MESONS]) calloc(GK_localL[3]*GK_Nmoms*2*N_MESONS*2,sizeof(double));
-  double (*corrBaryons)[2][N_BARYONS][4][4] =(double(*)[2][N_BARYONS][4][4]) calloc(GK_localL[3]*GK_Nmoms*2*N_BARYONS*4*4*2,sizeof(double));
+  //-Two-point function
+  double (*corrMesons)[2][N_MESONS] = (double(*)[2][N_MESONS]) calloc(alloc_size*2*N_MESONS*2,sizeof(double));
+  double (*corrBaryons)[2][N_BARYONS][4][4] = (double(*)[2][N_BARYONS][4][4]) calloc(alloc_size*2*N_BARYONS*4*4*2,sizeof(double));
   if(corrMesons == NULL || corrBaryons == NULL) errorQuda("Cannot allocate memory for Two-point function write Buffers.");
 
 
-  //-Declare and allocate the HDF5 buffers for the three-point function
-  double *Thrp_local_HDF5 = NULL;
+  //-HDF5 buffers for the three-point and two-point function
+  double *Thrp_local_HDF5   = NULL;
   double *Thrp_noether_HDF5 = NULL;
-  double **Thrp_oneD_HDF5 = NULL;
+  double **Thrp_oneD_HDF5   = NULL;
   
   double *Twop_baryons_HDF5 = NULL;
-  double *Twop_mesons_HDF5 = NULL;
+  double *Twop_mesons_HDF5  = NULL;
 
   if( strcmp(info.corr_file_format,"HDF5")==0 ){
-    if( (Thrp_local_HDF5   = (double*) malloc(2*16*GK_localL[3]*GK_Nmoms*2*info.Ntsink*NprojMax*sizeof(double)))==NULL ) errorQuda("Cannot allocate memory for Thrp_local_HDF5.\n");
-    if( (Thrp_noether_HDF5 = (double*) malloc(2* 4*GK_localL[3]*GK_Nmoms*2*info.Ntsink*NprojMax*sizeof(double)))==NULL ) errorQuda("Cannot allocate memory for Thrp_noether_HDF5.\n");
+    if( (Thrp_local_HDF5   = (double*) malloc(2*16*alloc_size*2*info.Ntsink*NprojMax*sizeof(double)))==NULL ) errorQuda("Cannot allocate memory for Thrp_local_HDF5.\n");
+    if( (Thrp_noether_HDF5 = (double*) malloc(2* 4*alloc_size*2*info.Ntsink*NprojMax*sizeof(double)))==NULL ) errorQuda("Cannot allocate memory for Thrp_noether_HDF5.\n");
 
-    memset(Thrp_local_HDF5  , 0, 2*16*GK_localL[3]*GK_Nmoms*2*info.Ntsink*NprojMax*sizeof(double));
-    memset(Thrp_noether_HDF5, 0, 2* 4*GK_localL[3]*GK_Nmoms*2*info.Ntsink*NprojMax*sizeof(double));
+    memset(Thrp_local_HDF5  , 0, 2*16*alloc_size*2*info.Ntsink*NprojMax*sizeof(double));
+    memset(Thrp_noether_HDF5, 0, 2* 4*alloc_size*2*info.Ntsink*NprojMax*sizeof(double));
 
     if( (Thrp_oneD_HDF5 = (double**) malloc(4*sizeof(double*))) == NULL ) errorQuda("Cannot allocate memory for Thrp_oneD_HDF5.\n");
     for(int mu=0;mu<4;mu++){
-      if( (Thrp_oneD_HDF5[mu] = (double*) malloc(2*16*GK_localL[3]*GK_Nmoms*2*info.Ntsink*NprojMax*sizeof(double)))==NULL ) errorQuda("Cannot allocate memory for Thrp_oned_HDF5[%d].\n",mu);
+      if( (Thrp_oneD_HDF5[mu] = (double*) malloc(2*16*alloc_size*2*info.Ntsink*NprojMax*sizeof(double)))==NULL ) errorQuda("Cannot allocate memory for Thrp_oned_HDF5[%d].\n",mu);
 
-      memset(Thrp_oneD_HDF5[mu], 0, 2*16*GK_localL[3]*GK_Nmoms*2*info.Ntsink*NprojMax*sizeof(double));
+      memset(Thrp_oneD_HDF5[mu], 0, 2*16*alloc_size*2*info.Ntsink*NprojMax*sizeof(double));
     }
 
-    if( (Twop_baryons_HDF5 = (double*) malloc(2*16*GK_localL[3]*GK_Nmoms*2*N_BARYONS*sizeof(double)))==NULL ) errorQuda("Cannot allocate memory for Twop_baryons_HDF5.\n");
-    if( (Twop_mesons_HDF5 = (double*) malloc(2*GK_localL[3]*GK_Nmoms*2*N_MESONS*sizeof(double)))==NULL ) errorQuda("Cannot allocate memory for Twop_mesons_HDF5.\n");
+    if( (Twop_baryons_HDF5 = (double*) malloc(2*16*alloc_size*2*N_BARYONS*sizeof(double)))==NULL ) errorQuda("Cannot allocate memory for Twop_baryons_HDF5.\n");
+    if( (Twop_mesons_HDF5  = (double*) malloc(2   *alloc_size*2*N_MESONS *sizeof(double)))==NULL ) errorQuda("Cannot allocate memory for Twop_mesons_HDF5.\n");
+
+    memset(Twop_baryons_HDF5, 0, 2*16*alloc_size*2*N_BARYONS*sizeof(double));
+    memset(Twop_mesons_HDF5 , 0, 2   *alloc_size*2*N_MESONS *sizeof(double));
   }
+  //------------------------------------------------------------------------
 
 
   for(int isource = 0 ; isource < info.Nsources ; isource++){
@@ -4264,7 +4280,7 @@ void calcEigenVectors_threepTwop_EvenOdd(void **gaugeSmeared, void **gauge, Quda
 
       /////////////////////////////////// Smearing on the 3D propagators
 
-      //-C.Kallidonis: Loop over the number of sink-source separations
+      //-C.K: Loop over the number of sink-source separations
       int my_fixSinkTime;
       char *filename_threep_base;
       for(int its=0;its<info.Ntsink;its++){
@@ -4376,14 +4392,14 @@ void calcEigenVectors_threepTwop_EvenOdd(void **gaugeSmeared, void **gauge, Quda
 
 	  ////////////////// Contractions for part 1 ////////////////
 	  t1 = MPI_Wtime();
-	  if(NUCLEON == PROTON)  K_contract->contractFixSink(*K_seqProp, *K_prop_up  , *K_gaugeContractions, corrThp_local, corrThp_noether, corrThp_oneD, PID, NUCLEON, 1, isource);
-	  if(NUCLEON == NEUTRON) K_contract->contractFixSink(*K_seqProp, *K_prop_down, *K_gaugeContractions, corrThp_local, corrThp_noether, corrThp_oneD, PID, NUCLEON, 1, isource);
+	  if(NUCLEON == PROTON)  K_contract->contractFixSink(*K_seqProp, *K_prop_up  , *K_gaugeContractions, corrThp_local, corrThp_noether, corrThp_oneD, PID, NUCLEON, 1, isource, CorrSpace);
+	  if(NUCLEON == NEUTRON) K_contract->contractFixSink(*K_seqProp, *K_prop_down, *K_gaugeContractions, corrThp_local, corrThp_noether, corrThp_oneD, PID, NUCLEON, 1, isource, CorrSpace);
 	  t2 = MPI_Wtime();
 	  printfQuda("TIME_REPORT - Three-point Contractions, flavor %s: %f sec\n",NUCLEON == NEUTRON ? "up" : "dn",t2-t1);
 
 	  t1 = MPI_Wtime();
 	  if( strcmp(info.corr_file_format,"ASCII")==0 ){
-	    K_contract->writeThrp_ASCII(corrThp_local, corrThp_noether, corrThp_oneD, NUCLEON, 1, filename_threep_base, isource, info.tsinkSource[its]);
+	    K_contract->writeThrp_ASCII(corrThp_local, corrThp_noether, corrThp_oneD, NUCLEON, 1, filename_threep_base, isource, info.tsinkSource[its], CorrSpace);
 	    t2 = MPI_Wtime();
 	    printfQuda("TIME_REPORT - Done: Three-point function for source-position = %d, sink-source = %d, projector %s, flavor %s written in ASCII format in %f sec.\n",
 		       isource,info.tsinkSource[its],proj_str,NUCLEON == NEUTRON ? "up" : "dn",t2-t1);
@@ -4395,10 +4411,10 @@ void calcEigenVectors_threepTwop_EvenOdd(void **gaugeSmeared, void **gauge, Quda
 
 	    int thrp_sign = ( info.tsinkSource[its] + GK_sourcePosition[isource][3] ) >= GK_totalL[3] ? -1 : +1;
 
-	    K_contract->copyThrpToHDF5_Buf((void*)Thrp_local_HDF5  , (void*)corrThp_local  , 0, uOrd, its, info.Ntsink, proj, thrp_sign, THRP_LOCAL);
-	    K_contract->copyThrpToHDF5_Buf((void*)Thrp_noether_HDF5, (void*)corrThp_noether, 0, uOrd, its, info.Ntsink, proj, thrp_sign, THRP_NOETHER);
+	    K_contract->copyThrpToHDF5_Buf((void*)Thrp_local_HDF5  , (void*)corrThp_local  , 0, uOrd, its, info.Ntsink, proj, thrp_sign, THRP_LOCAL  , CorrSpace);
+	    K_contract->copyThrpToHDF5_Buf((void*)Thrp_noether_HDF5, (void*)corrThp_noether, 0, uOrd, its, info.Ntsink, proj, thrp_sign, THRP_NOETHER, CorrSpace);
 	    for(int mu = 0;mu<4;mu++)
-	      K_contract->copyThrpToHDF5_Buf((void*)Thrp_oneD_HDF5[mu],(void*)corrThp_oneD ,mu, uOrd, its, info.Ntsink, proj, thrp_sign, THRP_ONED);
+	      K_contract->copyThrpToHDF5_Buf((void*)Thrp_oneD_HDF5[mu],(void*)corrThp_oneD ,mu, uOrd, its, info.Ntsink, proj, thrp_sign, THRP_ONED   , CorrSpace);
 
 	    t2 = MPI_Wtime();
 	    printfQuda("TIME_REPORT - Three-point function for flavor %s copied to HDF5 write buffers in %f sec.\n",NUCLEON == NEUTRON ? "up" : "dn",t2-t1);
@@ -4463,14 +4479,14 @@ void calcEigenVectors_threepTwop_EvenOdd(void **gaugeSmeared, void **gauge, Quda
 
 	  ////////////////// Contractions for part 2 ////////////////
 	  t1 = MPI_Wtime();
-	  if(NUCLEON == PROTON)  K_contract->contractFixSink(*K_seqProp, *K_prop_down, *K_gaugeContractions, corrThp_local, corrThp_noether, corrThp_oneD, PID, NUCLEON, 2, isource);
-	  if(NUCLEON == NEUTRON) K_contract->contractFixSink(*K_seqProp, *K_prop_up  , *K_gaugeContractions, corrThp_local, corrThp_noether, corrThp_oneD, PID, NUCLEON, 2, isource);
+	  if(NUCLEON == PROTON)  K_contract->contractFixSink(*K_seqProp, *K_prop_down, *K_gaugeContractions, corrThp_local, corrThp_noether, corrThp_oneD, PID, NUCLEON, 2, isource, CorrSpace);
+	  if(NUCLEON == NEUTRON) K_contract->contractFixSink(*K_seqProp, *K_prop_up  , *K_gaugeContractions, corrThp_local, corrThp_noether, corrThp_oneD, PID, NUCLEON, 2, isource, CorrSpace);
 	  t2 = MPI_Wtime();
 	  printfQuda("TIME_REPORT - Three-point Contractions, flavor %s: %f sec\n",NUCLEON == NEUTRON ? "dn" : "up",t2-t1);
 
 	  t1 = MPI_Wtime();
 	  if( strcmp(info.corr_file_format,"ASCII")==0 ){
-	    K_contract->writeThrp_ASCII(corrThp_local, corrThp_noether, corrThp_oneD, NUCLEON, 2, filename_threep_base, isource, info.tsinkSource[its]);
+	    K_contract->writeThrp_ASCII(corrThp_local, corrThp_noether, corrThp_oneD, NUCLEON, 2, filename_threep_base, isource, info.tsinkSource[its], CorrSpace);
 	    t2 = MPI_Wtime();
 	    printfQuda("TIME_REPORT - Done: Three-point function for source-position = %d, sink-source = %d, projector %s, flavor %s written in ASCII format in %f sec.\n",
 		       isource,info.tsinkSource[its],proj_str,NUCLEON == NEUTRON ? "dn" : "up",t2-t1);
@@ -4482,10 +4498,10 @@ void calcEigenVectors_threepTwop_EvenOdd(void **gaugeSmeared, void **gauge, Quda
 
 	    int thrp_sign = ( info.tsinkSource[its] + GK_sourcePosition[isource][3] ) >= GK_totalL[3] ? -1 : +1;
 
-	    K_contract->copyThrpToHDF5_Buf((void*)Thrp_local_HDF5  , (void*)corrThp_local  , 0, uOrd, its, info.Ntsink, proj, thrp_sign, THRP_LOCAL);
-	    K_contract->copyThrpToHDF5_Buf((void*)Thrp_noether_HDF5, (void*)corrThp_noether, 0, uOrd, its, info.Ntsink, proj, thrp_sign, THRP_NOETHER);
+	    K_contract->copyThrpToHDF5_Buf((void*)Thrp_local_HDF5  , (void*)corrThp_local  , 0, uOrd, its, info.Ntsink, proj, thrp_sign, THRP_LOCAL  , CorrSpace);
+	    K_contract->copyThrpToHDF5_Buf((void*)Thrp_noether_HDF5, (void*)corrThp_noether, 0, uOrd, its, info.Ntsink, proj, thrp_sign, THRP_NOETHER, CorrSpace);
 	    for(int mu = 0;mu<4;mu++)
-	      K_contract->copyThrpToHDF5_Buf((void*)Thrp_oneD_HDF5[mu],(void*)corrThp_oneD ,mu, uOrd, its, info.Ntsink, proj, thrp_sign, THRP_ONED);
+	      K_contract->copyThrpToHDF5_Buf((void*)Thrp_oneD_HDF5[mu],(void*)corrThp_oneD ,mu, uOrd, its, info.Ntsink, proj, thrp_sign, THRP_ONED   , CorrSpace);
 	  
 	    t2 = MPI_Wtime();
 	    printfQuda("TIME_REPORT - Three-point function for flavor %s, sink-source = %d, projector %s copied to HDF5 write buffers in %f sec.\n",NUCLEON == NEUTRON ? "dn" : "up",info.tsinkSource[its],proj_str,t2-t1);
@@ -4501,7 +4517,7 @@ void calcEigenVectors_threepTwop_EvenOdd(void **gaugeSmeared, void **gauge, Quda
 		 GK_sourcePosition[isource][0],GK_sourcePosition[isource][1],GK_sourcePosition[isource][2],GK_sourcePosition[isource][3]);
 	printfQuda("The three-point function HDF5 filename is: %s\n",filename_threep_base);
 	
-	K_contract->writeThrp_HDF5((void*) Thrp_local_HDF5, (void*) Thrp_noether_HDF5, (void**)Thrp_oneD_HDF5, filename_threep_base, info, isource);
+	K_contract->writeThrpHDF5((void*) Thrp_local_HDF5, (void*) Thrp_noether_HDF5, (void**)Thrp_oneD_HDF5, filename_threep_base, info, isource);
 	
 	t2 = MPI_Wtime();
 	printfQuda("TIME_REPORT - Done: Three-point function for source-position = %d written in HDF5 format in %f sec.\n",isource,t2-t1);
@@ -4532,30 +4548,30 @@ void calcEigenVectors_threepTwop_EvenOdd(void **gaugeSmeared, void **gauge, Quda
     K_prop_up->rotateToPhysicalBase_device(+1);
     K_prop_down->rotateToPhysicalBase_device(-1);
     t1 = MPI_Wtime();
-    K_contract->contractMesons( *K_prop_up,*K_prop_down, corrMesons , isource);
-    K_contract->contractBaryons(*K_prop_up,*K_prop_down, corrBaryons, isource);
+    K_contract->contractBaryons(*K_prop_up,*K_prop_down, corrBaryons, isource, CorrSpace);
+    K_contract->contractMesons (*K_prop_up,*K_prop_down, corrMesons , isource, CorrSpace);
     t2 = MPI_Wtime();
     printfQuda("\nTIME_REPORT - Two-point Contractions: %f sec\n",t2-t1);
 
     printfQuda("The baryons two-point function %s filename is: %s\n",info.corr_file_format,filename_baryons);
-    printfQuda("The mesons two-point function %s filename is: %s\n",info.corr_file_format,filename_mesons);
+    printfQuda("The mesons two-point function %s filename is: %s\n" ,info.corr_file_format,filename_mesons);
     if( strcmp(info.corr_file_format,"ASCII")==0 ){
       t1 = MPI_Wtime();
-      K_contract->writeTwopMesons_ASCII( corrMesons , filename_mesons , isource);
-      K_contract->writeTwopBaryons_ASCII(corrBaryons, filename_baryons, isource);
+      K_contract->writeTwopBaryons_ASCII(corrBaryons, filename_baryons, isource, CorrSpace);
+      K_contract->writeTwopMesons_ASCII (corrMesons , filename_mesons , isource, CorrSpace);
       t2 = MPI_Wtime();
       printfQuda("TIME_REPORT - Done: Two-point function for Mesons and Baryons for source-position = %d written in ASCII format in %f sec.\n",isource,t2-t1);
     }
     else if( strcmp(info.corr_file_format,"HDF5")==0 ){
       t1 = MPI_Wtime();
-      K_contract->copyTwopBaryonsToHDF5_Buf((void*)Twop_baryons_HDF5, (void*)corrBaryons, isource);
-      K_contract->copyTwopMesonsToHDF5_Buf((void*)Twop_mesons_HDF5, (void*)corrMesons);
+      K_contract->copyTwopBaryonsToHDF5_Buf((void*)Twop_baryons_HDF5, (void*)corrBaryons, isource, CorrSpace);
+      K_contract->copyTwopMesonsToHDF5_Buf ((void*)Twop_mesons_HDF5 , (void*)corrMesons, CorrSpace);
       t2 = MPI_Wtime();
       printfQuda("TIME_REPORT - Two-point function for baryons and mesons copied to HDF5 write buffers in %f sec.\n",t2-t1);
       
       t1 = MPI_Wtime();
-      K_contract->writeTwopBaryons_HDF5((void*) Twop_baryons_HDF5, filename_baryons, info, isource);
-      K_contract->writeTwopMesons_HDF5 ((void*) Twop_mesons_HDF5 , filename_mesons , info, isource);
+      K_contract->writeTwopBaryonsHDF5((void*) Twop_baryons_HDF5, filename_baryons, info, isource);
+      K_contract->writeTwopMesonsHDF5 ((void*) Twop_mesons_HDF5 , filename_mesons , info, isource);
       t2 = MPI_Wtime();
       printfQuda("TIME_REPORT - Done: Two-point function for Baryons and Mesons for source-position = %d written in HDF5 format in %f sec.\n",isource,t2-t1);
     }

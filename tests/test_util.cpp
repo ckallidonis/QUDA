@@ -1606,6 +1606,7 @@ char pathEigenValuesDown[257] = "evals_d.dat";
 int Nproj = 1;
 char proj_list_file[257] = "default";
 
+char *corr_write_space = "MOMENTUM";
 
 //-C.K. ARPACK Parameters
 int PolyDeg = 100;     // degree of the Chebysev polynomial
@@ -1766,6 +1767,7 @@ void usage(char** argv )
   printf("    --corr_file_format                        # file format for the 2pt-3pt functions, ASCII/HDF5 (default \"ASCII_format\")\n");
   printf("    --check_corr_files                        # check if 2pt-functions exist to avoid reproducing (default \"no\")\n");
   printf("    --proj_list                               # path to a file-list of projectors for 3pt function (default: only G4)\n");
+  printf("    --corr_write_space                        # whether to write the correlation functions in position space (MOMENTUM/POSITION, default: MOMENTUM)\n");
 
   //-C.K. Loop INPUT
   printf("    --Q_sqMax_loop                            # The maximum Q^2 momentum (loop) (default 0)\n");
@@ -2572,6 +2574,15 @@ int process_command_line_option(int argc, char** argv, int* idx)
     goto out;
   }
 
+  if( strcmp(argv[i], "--corr_write_space") ==0){
+    if(i+1 >= argc){
+      usage(argv);
+    }    
+    corr_write_space = strdup(argv[i+1]);
+    i++;
+    ret = 0;
+    goto out;
+  }
 
   //=============================================================================
 
