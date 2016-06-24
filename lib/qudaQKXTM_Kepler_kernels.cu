@@ -951,14 +951,16 @@ static void contractMesons_kernel(cudaTextureObject_t texProp1,cudaTextureObject
 
   if( typeid(Float2) != typeid(float2) ) errorQuda("Unsupported precision for Meson 2pt Contraction kernels!\n");
 
+  int SpVol = GK_localVolume/GK_localL[3];
+
   dim3 blockDim( THREADS_PER_BLOCK , 1, 1);
-  dim3 gridDim( (GK_localVolume/GK_localL[3] + blockDim.x -1)/blockDim.x , 1 , 1); // spawn threads only for the spatial volume
+  dim3 gridDim( (SpVol + blockDim.x -1)/blockDim.x , 1 , 1); // spawn threads only for the spatial volume
 
   Float *h_partial_block = NULL;
   Float *d_partial_block = NULL;
 
   if(CorrSpace==POSITION_SPACE){
-    long int alloc_size = blockDim.x * gridDim.x;
+    long int alloc_size = blockDim.x * gridDim.x; // That's basically local spatial volume
     h_partial_block = (Float*)malloc(alloc_size*2*10*2*sizeof(Float));
     if(h_partial_block == NULL) errorQuda("contractMesons_kernel: Cannot allocate host block.\n");
 
@@ -971,7 +973,15 @@ static void contractMesons_kernel(cudaTextureObject_t texProp1,cudaTextureObject
     cudaMemcpy(h_partial_block , d_partial_block , alloc_size*2*10*2*sizeof(Float) , cudaMemcpyDeviceToHost);
     checkCudaError();
 
-    //-C.K: - FIXME!!! Copy h_partial_block into corr
+    //-C.K. Copy host block into corr buffer                                                                                                                                                                                                 
+    for(int pt = 0; pt < 2 ; pt++){
+      for( int mes = 0; mes < 10; mes++){
+	for(int sv = 0; sv < SpVol ; sv++){
+	  corr[ 0 + 2*sv + 2*SpVol*it ][pt][mes] = h_partial_block[ 0 + 2*sv + 2*SpVol*mes + 2*SpVol*10*pt ];
+	  corr[ 1 + 2*sv + 2*SpVol*it ][pt][mes] = h_partial_block[ 1 + 2*sv + 2*SpVol*mes + 2*SpVol*10*pt ];
+	}
+      }
+    }
 
     free(h_partial_block);
     cudaFree(d_partial_block);
@@ -1035,14 +1045,16 @@ static void contractBaryons_kernel(cudaTextureObject_t texProp1,cudaTextureObjec
 
   if( typeid(Float2) != typeid(float2) ) errorQuda("Unsupported precision for Baryon 2pt Contraction kernels!\n");
 
+  int SpVol = GK_localVolume/GK_localL[3];
+
   dim3 blockDim( THREADS_PER_BLOCK , 1, 1);
-  dim3 gridDim( (GK_localVolume/GK_localL[3] + blockDim.x -1)/blockDim.x , 1 , 1); // spawn threads only for the spatial volume
+  dim3 gridDim( (SpVol + blockDim.x -1)/blockDim.x , 1 , 1); // spawn threads only for the spatial volume
 
   Float *h_partial_block = NULL;
   Float *d_partial_block = NULL;
 
   if(CorrSpace==POSITION_SPACE){
-    long int alloc_size = blockDim.x * gridDim.x;
+    long int alloc_size = blockDim.x * gridDim.x; // That's basically local spatial volume
     h_partial_block = (Float*)malloc(alloc_size*2*4*4*2*sizeof(Float));
     if(h_partial_block == NULL) errorQuda("contractBaryons_kernel: Cannot allocate host block.\n");
 
@@ -1053,10 +1065,18 @@ static void contractBaryons_kernel(cudaTextureObject_t texProp1,cudaTextureObjec
       contractBaryons_kernel_PosSpace_float<<<gridDim,blockDim>>>((float2*) d_partial_block,  texProp1, texProp2, it,  GK_sourcePosition[isource][0] , GK_sourcePosition[isource][1], GK_sourcePosition[isource][2],ip);
       checkCudaError();
 
-      cudaMemcpy(h_partial_block , d_partial_block , alloc_size*2*4*4*2*sizeof(Float) , cudaMemcpyDeviceToHost);
+      cudaMemcpy(h_partial_block , d_partial_block , alloc_size*2*4*4*2*sizeof(Float) , cudaMemcpyDeviceToHost); //-C.K. Copy device block into host block
       checkCudaError();
 
-      //-C.K: - FIXME!!! Copy h_partial_block into corr
+      //-C.K. Copy host block into corr buffer
+      for(int pt = 0; pt < 2 ; pt++){
+	for(int ga = 0 ; ga < 4 ; ga++){
+	  for(int gap = 0; gap < 4 ; gap++){
+	    for(int sv = 0; sv < SpVol ; sv++){
+	      corr[ 0 + 2*sv + 2*SpVol*it ][pt][ip][ga][gap] = h_partial_block[ 0 + 2*sv + 2*SpVol*gap + 2*SpVol*4*ga + 2*SpVol*4*4*pt ];
+	      corr[ 1 + 2*sv + 2*SpVol*it ][pt][ip][ga][gap] = h_partial_block[ 1 + 2*sv + 2*SpVol*gap + 2*SpVol*4*ga + 2*SpVol*4*4*pt ];
+	    }}}
+      }
 
     }//-ip
 

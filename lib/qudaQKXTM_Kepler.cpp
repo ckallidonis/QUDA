@@ -1716,11 +1716,13 @@ void QKXTM_Contraction_Kepler<Float>::writeTwopBaryonsHDF5_MomSpace(void *twopBa
 template<typename Float>
 void QKXTM_Contraction_Kepler<Float>::copyTwopBaryonsToHDF5_Buf(void *Twop_baryons_HDF5, void *corrBaryons, int isource, CORR_SPACE CorrSpace){
 
+  int Lt = GK_localL[3];
+  int SpVol = GK_localVolume/Lt;
+  int t_src = GK_sourcePosition[isource][3];
+
   if(CorrSpace==MOMENTUM_SPACE){
-    if(GK_timeRank >= 0 && GK_timeRank < GK_nProc[3] ){
-      int Lt = GK_localL[3];
-      int t_src = GK_sourcePosition[isource][3];
-      
+    if(GK_timeRank >= 0 && GK_timeRank < GK_nProc[3] ){      
+
       for(int ip=0;ip<2;ip++){
 	for(int bar=0;bar<N_BARYONS;bar++){
 	  for(int imom=0;imom<GK_Nmoms;imom++){
@@ -1734,11 +1736,26 @@ void QKXTM_Contraction_Kepler<Float>::copyTwopBaryonsToHDF5_Buf(void *Twop_baryo
 		  ((Float*)Twop_baryons_HDF5)[1 + 2*im + 2*16*it + 2*16*Lt*imom + 2*16*Lt*GK_Nmoms*bar + 2*16*Lt*GK_Nmoms*N_BARYONS*ip] = sign*((Float(*)[2][N_BARYONS][4][4])corrBaryons)[1 + 2*imom + 2*GK_Nmoms*it][ip][bar][ga][gap];
 		}}}}}
       }//-ip
+
     }//-if GK_timeRank
   }//-if CorrSpace
   else if(CorrSpace==POSITION_SPACE){
-    //-C.K.: FIXME!!!
-  }
+
+    for(int ip=0;ip<2;ip++){
+      for(int bar=0;bar<N_BARYONS;bar++){
+	for(int ga=0;ga<4;ga++){
+	  for(int gap=0;gap<4;gap++){
+	    int im=gap+4*ga;
+	    for(int it=0;it<Lt;it++){
+	      int t_glob = GK_timeRank*Lt+it;
+	      int sign = t_glob < t_src ? -1 : +1;  // FIXME!!! Make sure that this should be here
+	      for(int sv=0;sv<SpVol;sv++){
+		((Float*)Twop_baryons_HDF5)[0 + 2*im + 2*16*sv + 2*16*SpVol*it + 2*16*SpVol*Lt*bar + 2*16*SpVol*Lt*N_BARYONS*ip] = sign*((Float(*)[2][N_BARYONS][4][4])corrBaryons)[0 + 2*sv + 2*SpVol*it][ip][bar][ga][gap];
+		((Float*)Twop_baryons_HDF5)[1 + 2*im + 2*16*sv + 2*16*SpVol*it + 2*16*SpVol*Lt*bar + 2*16*SpVol*Lt*N_BARYONS*ip] = sign*((Float(*)[2][N_BARYONS][4][4])corrBaryons)[1 + 2*sv + 2*SpVol*it][ip][bar][ga][gap];
+	      }}}}}
+    }//-ip
+
+  }//-else if
 
 }
 
@@ -2008,18 +2025,30 @@ void QKXTM_Contraction_Kepler<Float>::copyTwopMesonsToHDF5_Buf(void *Twop_mesons
 
   if(CorrSpace==MOMENTUM_SPACE){
     if(GK_timeRank >= 0 && GK_timeRank < GK_nProc[3] ){
-      for(int ip=0;ip<2;ip++)
-	for(int mes=0;mes<N_MESONS;mes++)
-	  for(int imom=0;imom<GK_Nmoms;imom++)
+
+      for(int ip=0;ip<2;ip++){
+	for(int mes=0;mes<N_MESONS;mes++){
+	  for(int imom=0;imom<GK_Nmoms;imom++){
 	    for(int it=0;it<GK_localL[3];it++){
 	      ((Float*)Twop_mesons_HDF5)[0 + 2*it + 2*GK_localL[3]*imom + 2*GK_localL[3]*GK_Nmoms*mes + 2*GK_localL[3]*GK_Nmoms*N_MESONS*ip] = ((Float(*)[2][N_MESONS])corrMesons)[0 + 2*imom + 2*GK_Nmoms*it][ip][mes];
 	      ((Float*)Twop_mesons_HDF5)[1 + 2*it + 2*GK_localL[3]*imom + 2*GK_localL[3]*GK_Nmoms*mes + 2*GK_localL[3]*GK_Nmoms*N_MESONS*ip] = ((Float(*)[2][N_MESONS])corrMesons)[1 + 2*imom + 2*GK_Nmoms*it][ip][mes];
-	    }
+	    }}}
+      }//-ip
+
     }//-if GK_timeRank
   }//-if CorrSpace
   else if(CorrSpace==POSITION_SPACE){
-    //-C.K.: - FIXME!!!
-  }
+    int Lv = GK_localVolume;
+
+    for(int ip=0;ip<2;ip++){
+      for(int mes=0;mes<N_MESONS;mes++){
+	for(int v=0;v<Lv;v++){
+	  ((Float*)Twop_mesons_HDF5)[0 + 2*v + 2*Lv*mes + 2*Lv*N_MESONS*ip] = ((Float(*)[2][N_MESONS])corrMesons)[0 + 2*v][ip][mes];
+	  ((Float*)Twop_mesons_HDF5)[1 + 2*v + 2*Lv*mes + 2*Lv*N_MESONS*ip] = ((Float(*)[2][N_MESONS])corrMesons)[1 + 2*v][ip][mes];
+	}}
+    }//-ip
+
+  }//-else if
 
 }
 
