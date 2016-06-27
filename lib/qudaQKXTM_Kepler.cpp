@@ -1952,9 +1952,102 @@ void QKXTM_Contraction_Kepler<Float>::writeTwopMesonsHDF5_PosSpace(void *twopMes
 
   if(info.CorrSpace!=POSITION_SPACE) errorQuda("writeTwopMesonsHDF5_PosSpace: Support for writing the Meson two-point function only in position-space!\n");
 
-  //-C.K: - FIXME!!!
+  hid_t DATATYPE_H5;
+  if( typeid(Float) == typeid(float) ){
+    DATATYPE_H5 = H5T_NATIVE_FLOAT;
+    printfQuda("writeTwopBaryonsHDF5_PosSpace: Will write in single precision\n");
+  }
+  if( typeid(Float) == typeid(double)){
+    DATATYPE_H5 = H5T_NATIVE_DOUBLE;
+    printfQuda("writeTwopBaryonsHDF5_PosSpace: Will write in double precision\n");
+  }
 
-  return;
+  Float *writeTwopBuf;
+
+  int Sdim = 6;
+  int pc[4];
+  int tL[4];
+  int lL[4];
+  for(int i=0;i<4;i++){
+    pc[i] = comm_coords(default_topo)[i];
+    tL[i] = GK_totalL[i];
+    lL[i] = GK_localL[i];
+  }
+  int lV = GK_localVolume;
+
+  hsize_t dims[6]  = {2,tL[3],tL[2],tL[1],tL[0],2}; // Size of the dataspace -> #Baryons, volume, spin, re-im
+  hsize_t ldims[6] = {2,lL[3],lL[2],lL[1],lL[0],2}; // Dimensions of the "local" dataspace, for each rank
+  hsize_t start[6] = {0,pc[3]*lL[3],pc[2]*lL[2],pc[1]*lL[1],pc[0]*lL[0],0}; // start position for each rank
+
+
+  hid_t fapl_id = H5Pcreate(H5P_FILE_ACCESS);
+  H5Pset_fapl_mpio(fapl_id, GK_timeComm, MPI_INFO_NULL);
+  hid_t file_id = H5Fcreate(filename, H5F_ACC_TRUNC, H5P_DEFAULT, fapl_id);
+  H5Pclose(fapl_id);
+
+  char *group1_tag;
+  asprintf(&group1_tag,"conf_%04d",info.traj);
+  hid_t group1_id = H5Gcreate(file_id, group1_tag, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+
+  char *group2_tag;
+  asprintf(&group2_tag,"sx%02dsy%02dsz%02dst%02d",GK_sourcePosition[isource][0],GK_sourcePosition[isource][1],GK_sourcePosition[isource][2],GK_sourcePosition[isource][3]);
+  hid_t group2_id = H5Gcreate(group1_id, group2_tag, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+
+  /* Attribute writing */
+  //- Source position
+  char *src_pos;
+  asprintf(&src_pos," x = %02d\n y = %02d\n z = %02d\n t = %02d\0",GK_sourcePosition[isource][0],GK_sourcePosition[isource][1],GK_sourcePosition[isource][2],GK_sourcePosition[isource][3]);
+  hid_t attrdat_id = H5Screate(H5S_SCALAR);
+  hid_t type_id = H5Tcopy(H5T_C_S1);
+  H5Tset_size(type_id, strlen(src_pos));
+  hid_t attr_id = H5Acreate2(file_id, "soure-position", type_id, attrdat_id, H5P_DEFAULT, H5P_DEFAULT);
+  H5Awrite(attr_id, type_id, &src_pos);
+  H5Aclose(attr_id);
+  H5Tclose(type_id);
+  H5Sclose(attrdat_id);
+
+  //- Index identification-ordering, precision
+  char *corr_info;
+  asprintf(&corr_info," Position-space meson 2pt-correlator\n Index Order: [flav, t, z, y, x, real/imag]\n Precision: %s\0",(typeid(Float) == typeid(float)) ? "single" : "double");
+  attrdat_id = H5Screate(H5S_SCALAR);
+  type_id = H5Tcopy(H5T_C_S1);
+  H5Tset_size(type_id, strlen(corr_info));
+  attr_id = H5Acreate2(file_id, "Correlator-info", type_id, attrdat_id, H5P_DEFAULT, H5P_DEFAULT);
+  H5Awrite(attr_id, type_id, &corr_info);
+  H5Aclose(attr_id);
+  H5Tclose(type_id);
+  H5Sclose(attrdat_id);
+  //------------------------------------------------------------
+
+  for(int mes=0;mes<N_MESONS;mes++){
+    char *group3_tag;
+    asprintf(&group3_tag,"%s",info.meson_type[mes]);
+    hid_t group3_id = H5Gcreate(group2_id, group3_tag, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+
+    hid_t filespace  = H5Screate_simple(Sdim, dims,  NULL);
+    hid_t subspace   = H5Screate_simple(Sdim, ldims, NULL);
+    hid_t dataset_id = H5Dcreate(group3_id, "twop-meson", DATATYPE_H5, filespace, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+    filespace = H5Dget_space(dataset_id);
+    H5Sselect_hyperslab(filespace, H5S_SELECT_SET, start, NULL, ldims, NULL);
+    hid_t plist_id = H5Pcreate(H5P_DATASET_XFER);
+    H5Pset_dxpl_mpio(plist_id, H5FD_MPIO_COLLECTIVE);
+
+    writeTwopBuf = &(((Float*)twopMesons)[2*lV*2*mes]);
+
+    herr_t status = H5Dwrite(dataset_id, DATATYPE_H5, subspace, filespace, plist_id, writeTwopBuf);
+    if(status<0) errorQuda("writeTwopMesonsHDF5_PosSpace: Unsuccessful writing of the dataset. Exiting\n");
+
+    H5Dclose(dataset_id);
+    H5Pclose(plist_id);
+    H5Sclose(subspace);
+    H5Sclose(filespace);
+    H5Gclose(group3_id);
+  }
+
+  H5Gclose(group2_id);
+  H5Gclose(group1_id);
+  H5Fclose(file_id);
+
 }
 
 
@@ -2137,8 +2230,8 @@ void QKXTM_Contraction_Kepler<Float>::copyTwopMesonsToHDF5_Buf(void *Twop_mesons
     for(int ip=0;ip<2;ip++){
       for(int mes=0;mes<N_MESONS;mes++){
 	for(int v=0;v<Lv;v++){
-	  ((Float*)Twop_mesons_HDF5)[0 + 2*v + 2*Lv*mes + 2*Lv*N_MESONS*ip] = ((Float(*)[2][N_MESONS])corrMesons)[0 + 2*v][ip][mes];
-	  ((Float*)Twop_mesons_HDF5)[1 + 2*v + 2*Lv*mes + 2*Lv*N_MESONS*ip] = ((Float(*)[2][N_MESONS])corrMesons)[1 + 2*v][ip][mes];
+	  ((Float*)Twop_mesons_HDF5)[0 + 2*v + 2*Lv*ip + 2*Lv*2*mes] = ((Float(*)[2][N_MESONS])corrMesons)[0 + 2*v][ip][mes];
+	  ((Float*)Twop_mesons_HDF5)[1 + 2*v + 2*Lv*ip + 2*Lv*2*mes] = ((Float(*)[2][N_MESONS])corrMesons)[1 + 2*v][ip][mes];
 	}}
     }//-ip
 
