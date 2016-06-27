@@ -4179,8 +4179,11 @@ void calcEigenVectors_threepTwop_EvenOdd(void **gaugeSmeared, void **gauge, Quda
       sprintf(filename_baryons,"%s.baryons.SS.%02d.%02d.%02d.%02d.dat",filename_twop,info.sourcePosition[isource][0],info.sourcePosition[isource][1],info.sourcePosition[isource][2],info.sourcePosition[isource][3]);
     }
     else if( CorrFileFormat==HDF5_FORM ){
-      sprintf(filename_mesons ,"%s_mesons_Qsq%d_SS.%02d.%02d.%02d.%02d.h5" ,filename_twop,info.Q_sq,info.sourcePosition[isource][0],info.sourcePosition[isource][1],info.sourcePosition[isource][2],info.sourcePosition[isource][3]);
-      sprintf(filename_baryons,"%s_baryons_Qsq%d_SS.%02d.%02d.%02d.%02d.h5",filename_twop,info.Q_sq,info.sourcePosition[isource][0],info.sourcePosition[isource][1],info.sourcePosition[isource][2],info.sourcePosition[isource][3]);
+      char *str;
+      if(CorrSpace==MOMENTUM_SPACE) asprintf(&str,"Qsq%d",info.Q_sq);
+      else if (CorrSpace==POSITION_SPACE) asprintf(&str,"PosSpace");
+      sprintf(filename_mesons ,"%s_mesons_%s_SS.%02d.%02d.%02d.%02d.h5" ,filename_twop,str,info.sourcePosition[isource][0],info.sourcePosition[isource][1],info.sourcePosition[isource][2],info.sourcePosition[isource][3]);
+      sprintf(filename_baryons,"%s_baryons_%s_SS.%02d.%02d.%02d.%02d.h5",filename_twop,str,info.sourcePosition[isource][0],info.sourcePosition[isource][1],info.sourcePosition[isource][2],info.sourcePosition[isource][3]);
     }
 
     if(info.check_files){
