@@ -1130,8 +1130,8 @@ static void contractBaryons_kernel(cudaTextureObject_t texProp1,cudaTextureObjec
 
 void quda::run_contractBaryons(cudaTextureObject_t texProp1,cudaTextureObject_t texProp2,void* corr,  int it, int isource, int precision, CORR_SPACE CorrSpace){
 
-  if (CorrSpace==POSITION_SPACE)     cudaFuncSetCacheConfig(contractBaryons_kernel_PosSpace_float,cudaFuncCachePreferShared);
-  else if(CorrSpace==MOMENTUM_SPACE) cudaFuncSetCacheConfig(contractBaryons_kernel_float         ,cudaFuncCachePreferShared);
+  if (CorrSpace==POSITION_SPACE) cudaFuncSetCacheConfig(contractBaryons_kernel_PosSpace_float,cudaFuncCachePreferShared);
+  else if(CorrSpace==MOMENTUM_SPACE)  cudaFuncSetCacheConfig(contractBaryons_kernel_float         ,cudaFuncCachePreferShared);
   else errorQuda("run_contractBaryons: Supports only POSITION_SPACE and MOMENTUM_SPACE!\n");
   checkCudaError();
 

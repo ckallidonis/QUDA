@@ -4084,9 +4084,9 @@ void calcEigenVectors_threepTwop_EvenOdd(void **gaugeSmeared, void **gauge, Quda
   info.baryon_type[1] = "nucl_roper";
   info.baryon_type[2] = "roper_nucl";
   info.baryon_type[3] = "roper_roper";
-  info.baryon_type[4] = "deltapp_deltam_11";
-  info.baryon_type[5] = "deltapp_deltam_22";
-  info.baryon_type[6] = "deltapp_deltam_33";
+  info.baryon_type[4] = "deltapp_deltamm_11";
+  info.baryon_type[5] = "deltapp_deltamm_22";
+  info.baryon_type[6] = "deltapp_deltamm_33";
   info.baryon_type[7] = "deltap_deltaz_11";
   info.baryon_type[8] = "deltap_deltaz_22";
   info.baryon_type[9] = "deltap_deltaz_33";

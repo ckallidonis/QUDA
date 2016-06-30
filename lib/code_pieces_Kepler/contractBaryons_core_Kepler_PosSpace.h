@@ -275,8 +275,8 @@ if (sid < c_threads/c_localL[3]){ // I work only on the spatial volume
 
   for(int ga=0;ga<4;ga++){
     for(int gap=0;gap<4;gap++){
-      block[sid + 2*locV*gap + 2*locV*4*ga + 2*locV*4*4*0 ] = accum1[ga][gap];
-      block[sid + 2*locV*gap + 2*locV*4*ga + 2*locV*4*4*1 ] = accum2[ga][gap];
+      block[sid + locV*gap + locV*4*ga + locV*4*4*0 ] = accum1[ga][gap];
+      block[sid + locV*gap + locV*4*ga + locV*4*4*1 ] = accum2[ga][gap];
     }
   }
  }

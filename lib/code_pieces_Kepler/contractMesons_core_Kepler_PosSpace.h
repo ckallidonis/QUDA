@@ -30,8 +30,8 @@ if (sid < c_threads/c_localL[3]){ // I work only on the spatial volume
     }
     __syncthreads();
 
-    block[sid + 2*locV*ip + 2*locV*10*0 ] = accum1[ip];
-    block[sid + 2*locV*ip + 2*locV*10*1 ] = accum2[ip];
+    block[sid + locV*ip + locV*10*0 ] = accum1[ip];
+    block[sid + locV*ip + locV*10*1 ] = accum2[ip];
 
     __syncthreads();
 

@@ -1580,7 +1580,7 @@ void QKXTM_Contraction_Kepler<Float>::writeTwopBaryonsHDF5_PosSpace(void *twopBa
 
 
   hid_t fapl_id = H5Pcreate(H5P_FILE_ACCESS);
-  H5Pset_fapl_mpio(fapl_id, GK_timeComm, MPI_INFO_NULL);
+  H5Pset_fapl_mpio(fapl_id, MPI_COMM_WORLD, MPI_INFO_NULL);
   hid_t file_id = H5Fcreate(filename, H5F_ACC_TRUNC, H5P_DEFAULT, fapl_id);
   H5Pclose(fapl_id);
 
@@ -1595,27 +1595,27 @@ void QKXTM_Contraction_Kepler<Float>::writeTwopBaryonsHDF5_PosSpace(void *twopBa
   /* Attribute writing */
   //- Source position
   char *src_pos;
-  asprintf(&src_pos," x = %02d\n y = %02d\n z = %02d\n t = %02d\0",GK_sourcePosition[isource][0],GK_sourcePosition[isource][1],GK_sourcePosition[isource][2],GK_sourcePosition[isource][3]);
+  asprintf(&src_pos," [x, y, z, t] = [%02d, %02d, %02d, %02d]\0",GK_sourcePosition[isource][0],GK_sourcePosition[isource][1],GK_sourcePosition[isource][2],GK_sourcePosition[isource][3]);
   hid_t attrdat_id = H5Screate(H5S_SCALAR);
   hid_t type_id = H5Tcopy(H5T_C_S1);
   H5Tset_size(type_id, strlen(src_pos));
-  hid_t attr_id = H5Acreate2(file_id, "soure-position", type_id, attrdat_id, H5P_DEFAULT, H5P_DEFAULT);
-  H5Awrite(attr_id, type_id, &src_pos);
+  hid_t attr_id = H5Acreate2(group2_id, "source-position", type_id, attrdat_id, H5P_DEFAULT, H5P_DEFAULT);
+  H5Awrite(attr_id, type_id, src_pos);
   H5Aclose(attr_id);
   H5Tclose(type_id);
   H5Sclose(attrdat_id);
 
   //- Index identification-ordering, precision
   char *corr_info;
-  asprintf(&corr_info," Position-space baryon 2pt-correlator\n Index Order: [flav, t, z, y, x, spin, real/imag]\n Spin-index order: Row-major\n Precision: %s\0",(typeid(Float) == typeid(float)) ? "single" : "double");
-  attrdat_id = H5Screate(H5S_SCALAR);
-  type_id = H5Tcopy(H5T_C_S1);
-  H5Tset_size(type_id, strlen(corr_info));
-  attr_id = H5Acreate2(file_id, "Correlator-info", type_id, attrdat_id, H5P_DEFAULT, H5P_DEFAULT);
-  H5Awrite(attr_id, type_id, &corr_info);
-  H5Aclose(attr_id);
-  H5Tclose(type_id);
-  H5Sclose(attrdat_id);
+  asprintf(&corr_info,"Position-space baryon 2pt-correlator\nIndex Order: [flav, t, z, y, x, spin, real/imag]\nSpin-index order: Row-major\nPrecision: %s\0",(typeid(Float) == typeid(float)) ? "single" : "double");
+  hid_t attrdat_id_2 = H5Screate(H5S_SCALAR);
+  hid_t type_id_2 = H5Tcopy(H5T_C_S1);
+  H5Tset_size(type_id_2, strlen(corr_info));
+  hid_t attr_id_2 = H5Acreate2(file_id, "Correlator-info", type_id_2, attrdat_id_2, H5P_DEFAULT, H5P_DEFAULT);
+  H5Awrite(attr_id_2, type_id_2, corr_info);
+  H5Aclose(attr_id_2);
+  H5Tclose(type_id_2);
+  H5Sclose(attrdat_id_2);
   //------------------------------------------------------------
 
   for(int bar=0;bar<N_BARYONS;bar++){
@@ -1955,11 +1955,11 @@ void QKXTM_Contraction_Kepler<Float>::writeTwopMesonsHDF5_PosSpace(void *twopMes
   hid_t DATATYPE_H5;
   if( typeid(Float) == typeid(float) ){
     DATATYPE_H5 = H5T_NATIVE_FLOAT;
-    printfQuda("writeTwopBaryonsHDF5_PosSpace: Will write in single precision\n");
+    printfQuda("writeTwopMesonsHDF5_PosSpace: Will write in single precision\n");
   }
   if( typeid(Float) == typeid(double)){
     DATATYPE_H5 = H5T_NATIVE_DOUBLE;
-    printfQuda("writeTwopBaryonsHDF5_PosSpace: Will write in double precision\n");
+    printfQuda("writeTwopMesonsHDF5_PosSpace: Will write in double precision\n");
   }
 
   Float *writeTwopBuf;
@@ -1981,7 +1981,7 @@ void QKXTM_Contraction_Kepler<Float>::writeTwopMesonsHDF5_PosSpace(void *twopMes
 
 
   hid_t fapl_id = H5Pcreate(H5P_FILE_ACCESS);
-  H5Pset_fapl_mpio(fapl_id, GK_timeComm, MPI_INFO_NULL);
+  H5Pset_fapl_mpio(fapl_id, MPI_COMM_WORLD, MPI_INFO_NULL);
   hid_t file_id = H5Fcreate(filename, H5F_ACC_TRUNC, H5P_DEFAULT, fapl_id);
   H5Pclose(fapl_id);
 
@@ -1996,27 +1996,27 @@ void QKXTM_Contraction_Kepler<Float>::writeTwopMesonsHDF5_PosSpace(void *twopMes
   /* Attribute writing */
   //- Source position
   char *src_pos;
-  asprintf(&src_pos," x = %02d\n y = %02d\n z = %02d\n t = %02d\0",GK_sourcePosition[isource][0],GK_sourcePosition[isource][1],GK_sourcePosition[isource][2],GK_sourcePosition[isource][3]);
+  asprintf(&src_pos," [x, y, z, t] = [%02d, %02d, %02d, %02d]\0",GK_sourcePosition[isource][0],GK_sourcePosition[isource][1],GK_sourcePosition[isource][2],GK_sourcePosition[isource][3]);
   hid_t attrdat_id = H5Screate(H5S_SCALAR);
   hid_t type_id = H5Tcopy(H5T_C_S1);
   H5Tset_size(type_id, strlen(src_pos));
-  hid_t attr_id = H5Acreate2(file_id, "soure-position", type_id, attrdat_id, H5P_DEFAULT, H5P_DEFAULT);
-  H5Awrite(attr_id, type_id, &src_pos);
+  hid_t attr_id = H5Acreate2(group2_id, "source-position", type_id, attrdat_id, H5P_DEFAULT, H5P_DEFAULT);
+  H5Awrite(attr_id, type_id, src_pos);
   H5Aclose(attr_id);
   H5Tclose(type_id);
   H5Sclose(attrdat_id);
 
   //- Index identification-ordering, precision
   char *corr_info;
-  asprintf(&corr_info," Position-space meson 2pt-correlator\n Index Order: [flav, t, z, y, x, real/imag]\n Precision: %s\0",(typeid(Float) == typeid(float)) ? "single" : "double");
-  attrdat_id = H5Screate(H5S_SCALAR);
-  type_id = H5Tcopy(H5T_C_S1);
-  H5Tset_size(type_id, strlen(corr_info));
-  attr_id = H5Acreate2(file_id, "Correlator-info", type_id, attrdat_id, H5P_DEFAULT, H5P_DEFAULT);
-  H5Awrite(attr_id, type_id, &corr_info);
-  H5Aclose(attr_id);
-  H5Tclose(type_id);
-  H5Sclose(attrdat_id);
+  asprintf(&corr_info,"Position-space meson 2pt-correlator\nIndex Order: [flav, t, z, y, x, real/imag]\nPrecision: %s\0",(typeid(Float) == typeid(float)) ? "single" : "double");
+  hid_t attrdat_id_2 = H5Screate(H5S_SCALAR);
+  hid_t type_id_2 = H5Tcopy(H5T_C_S1);
+  H5Tset_size(type_id_2, strlen(corr_info));
+  hid_t attr_id_2 = H5Acreate2(file_id, "Correlator-info", type_id_2, attrdat_id_2, H5P_DEFAULT, H5P_DEFAULT);
+  H5Awrite(attr_id_2, type_id_2, corr_info);
+  H5Aclose(attr_id_2);
+  H5Tclose(type_id_2);
+  H5Sclose(attrdat_id_2);
   //------------------------------------------------------------
 
   for(int mes=0;mes<N_MESONS;mes++){
