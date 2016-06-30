@@ -4084,9 +4084,9 @@ void calcEigenVectors_threepTwop_EvenOdd(void **gaugeSmeared, void **gauge, Quda
   info.baryon_type[1] = "nucl_roper";
   info.baryon_type[2] = "roper_nucl";
   info.baryon_type[3] = "roper_roper";
-  info.baryon_type[4] = "deltapp_deltamm_11";
-  info.baryon_type[5] = "deltapp_deltamm_22";
-  info.baryon_type[6] = "deltapp_deltamm_33";
+  info.baryon_type[4] = "deltapp_deltam_11";
+  info.baryon_type[5] = "deltapp_deltam_22";
+  info.baryon_type[6] = "deltapp_deltam_33";
   info.baryon_type[7] = "deltap_deltaz_11";
   info.baryon_type[8] = "deltap_deltaz_22";
   info.baryon_type[9] = "deltap_deltaz_33";
@@ -4102,6 +4102,25 @@ void calcEigenVectors_threepTwop_EvenOdd(void **gaugeSmeared, void **gauge, Quda
   info.meson_type[8] = "g3";
   info.meson_type[9] = "g4";
 
+  printfQuda("\nThe total number of source-positions is %d\n",info.Nsources);
+
+  int nRun3pt = 0;
+  for(int i=0;i<info.Nsources;i++) nRun3pt += info.run3pt_src[i];
+
+  int NprojMax = 0;
+  if(nRun3pt==0) printfQuda("Will NOT perform the three-point function for any of the source positions\n");
+  else if (nRun3pt>0){
+    printfQuda("Will perform the three-point function for %d source positions, for the following source-sink separations and projectors:\n",nRun3pt);
+    for(int its=0;its<info.Ntsink;its++){
+      if(info.Nproj[its] >= NprojMax) NprojMax = info.Nproj[its];
+      
+      printfQuda(" sink-source = %d:\n",info.tsinkSource[its]);
+      for(int p=0;p<info.Nproj[its];p++) printfQuda("  %s\n",info.thrp_proj_type[info.proj_list[its][p]]);
+    }
+  }
+  else errorQuda("Check your option for running the three-point function! Exiting.\n");
+
+
   CORR_SPACE CorrSpace = info.CorrSpace; // Flag to determine whether to write the correlation functions in position/momentum space
   printfQuda("Will write the correlation functions in %s-space!\n", (CorrSpace == POSITION_SPACE) ? "position" : "momentum");
 
@@ -4111,15 +4130,6 @@ void calcEigenVectors_threepTwop_EvenOdd(void **gaugeSmeared, void **gauge, Quda
   }
   FILE_WRITE_FORMAT CorrFileFormat = info.CorrFileFormat;
   printfQuda("Will write the correlation functions in %s format\n", (CorrFileFormat == ASCII_FORM) ? "ASCII" : "HDF5");
-
-  printfQuda("Will run the three-point function for the following projector(s):\n");
-  int NprojMax = 0;
-  for(int its=0;its<info.Ntsink;its++){
-    if(info.Nproj[its] >= NprojMax) NprojMax = info.Nproj[its];
-
-    printfQuda(" tsink = %d:\n",info.tsinkSource[its]);
-    for(int p=0;p<info.Nproj[its];p++) printfQuda("  %s\n",info.thrp_proj_type[info.proj_list[its][p]]);
-  }
 
 
   //-Allocate the Two-point and Three-point function data buffers
@@ -4327,7 +4337,7 @@ void calcEigenVectors_threepTwop_EvenOdd(void **gaugeSmeared, void **gauge, Quda
 	    K_temp->zero_device();	
 	  }
 	t2 = MPI_Wtime();
-	printfQuda("TIME_REPORT - 3d Props preparation for sink-source[%d]=%d: %f sec\n",its,info.tsinkSource[its],t2-t1);
+	//printfQuda("TIME_REPORT - 3d Props preparation for sink-source[%d]=%d: %f sec\n",its,info.tsinkSource[its],t2-t1);
 
 	for(int proj=0;proj<info.Nproj[its];proj++){
 	  WHICHPROJECTOR PID = (WHICHPROJECTOR) info.proj_list[its][proj];
@@ -4512,7 +4522,7 @@ void calcEigenVectors_threepTwop_EvenOdd(void **gaugeSmeared, void **gauge, Quda
 	      K_contract->copyThrpToHDF5_Buf((void*)Thrp_oneD_HDF5[mu],(void*)corrThp_oneD ,mu, uOrd, its, info.Ntsink, proj, thrp_sign, THRP_ONED   , CorrSpace);
 	  
 	    t2 = MPI_Wtime();
-	    printfQuda("TIME_REPORT - Three-point function for flavor %s, sink-source = %d, projector %s copied to HDF5 write buffers in %f sec.\n",NUCLEON == NEUTRON ? "dn" : "up",info.tsinkSource[its],proj_str,t2-t1);
+	    printfQuda("TIME_REPORT - Three-point function for flavor %s copied to HDF5 write buffers in %f sec.\n",NUCLEON == NEUTRON ? "dn" : "up",t2-t1);
 	  }
 
 	}//-loop over projectors
@@ -4523,7 +4533,7 @@ void calcEigenVectors_threepTwop_EvenOdd(void **gaugeSmeared, void **gauge, Quda
 	t1 = MPI_Wtime();
 	asprintf(&filename_threep_base,"%s_%s_Qsq%d_SS.%02d.%02d.%02d.%02d.h5",filename_threep, (NUCLEON == PROTON) ? "proton" : "neutron",info.Q_sq,
 		 GK_sourcePosition[isource][0],GK_sourcePosition[isource][1],GK_sourcePosition[isource][2],GK_sourcePosition[isource][3]);
-	printfQuda("The three-point function HDF5 filename is: %s\n",filename_threep_base);
+	printfQuda("\nThe three-point function HDF5 filename is: %s\n",filename_threep_base);
 	
 	K_contract->writeThrpHDF5((void*) Thrp_local_HDF5, (void*) Thrp_noether_HDF5, (void**)Thrp_oneD_HDF5, filename_threep_base, info, isource);
 	
@@ -4531,6 +4541,7 @@ void calcEigenVectors_threepTwop_EvenOdd(void **gaugeSmeared, void **gauge, Quda
 	printfQuda("TIME_REPORT - Done: Three-point function for source-position = %d written in HDF5 format in %f sec.\n",isource,t2-t1);
       }
 
+      printfQuda("\n");
     }//-if running for the specific isource
 
 
@@ -4559,9 +4570,9 @@ void calcEigenVectors_threepTwop_EvenOdd(void **gaugeSmeared, void **gauge, Quda
     K_contract->contractBaryons(*K_prop_up,*K_prop_down, corrBaryons, isource, CorrSpace);
     K_contract->contractMesons (*K_prop_up,*K_prop_down, corrMesons , isource, CorrSpace);
     t2 = MPI_Wtime();
-    printfQuda("\nTIME_REPORT - Two-point Contractions: %f sec\n",t2-t1);
+    printfQuda("TIME_REPORT - Two-point Contractions: %f sec\n",t2-t1);
 
-    printfQuda("The baryons two-point function %s filename is: %s\n",(CorrFileFormat==ASCII_FORM) ? "ASCII" : "HDF5",filename_baryons);
+    printfQuda("\nThe baryons two-point function %s filename is: %s\n",(CorrFileFormat==ASCII_FORM) ? "ASCII" : "HDF5",filename_baryons);
     printfQuda("The mesons two-point function %s filename is: %s\n" ,(CorrFileFormat==ASCII_FORM) ? "ASCII" : "HDF5",filename_mesons);
     if( CorrFileFormat==ASCII_FORM ){
       t1 = MPI_Wtime();

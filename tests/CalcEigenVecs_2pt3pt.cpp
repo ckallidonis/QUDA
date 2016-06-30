@@ -438,27 +438,20 @@ int main(int argc, char **argv)
 
   //-C.K: Determine for which source-positions to run for the 3pt
   if(strcmp(run3pt,"all")==0 || strcmp(run3pt,"ALL")==0){
-    printfQuda("Will run for all %d source-positions for 2pt- and 3pt- functions\n",numSourcePositions);
-    for(int is = 0; is < numSourcePositions; is++){
-      info.run3pt_src[is] = 1;
-    }
+    for(int is = 0; is < numSourcePositions; is++) info.run3pt_src[is] = 1;
+  }
+  else if(strcmp(run3pt,"none")==0 || strcmp(run3pt,"NONE")==0){
+    for(int is = 0; is < numSourcePositions; is++) info.run3pt_src[is] = 0;
   }
   else if(strcmp(run3pt,"file")==0 || strcmp(run3pt,"FILE")==0){
-    printfQuda("Will read from file %s for which source-positions for 3pt- functions to run\n",pathListRun3pt);  
+    printfQuda("Will read from file %s for which source-positions to perform the three-point function\n",pathListRun3pt);  
     FILE *ptr_run3pt;
     ptr_run3pt = fopen(pathListRun3pt,"r");
     if(ptr_run3pt == NULL){
       fprintf(stderr,"Error opening file %s \n",pathListRun3pt);
       exit(-1);
     }
-
-    int nRun3pt = 0;
-    for(int is = 0; is < numSourcePositions; is++){
-      fscanf(ptr_run3pt,"%d\n",&(info.run3pt_src[is]));
-      nRun3pt += info.run3pt_src[is];
-    }
-    printfQuda("Will run for %d source-positions for 3pt-functions\n",nRun3pt);  
-
+    for(int is = 0; is < numSourcePositions; is++) fscanf(ptr_run3pt,"%d\n",&(info.run3pt_src[is]));
     fclose(ptr_run3pt);
   }
   else{
@@ -488,10 +481,7 @@ int main(int argc, char **argv)
     fprintf(stderr,"Error opening file for sink-source separations\n");
     exit(-1);
   }
-  for(int it = 0 ; it < Ntsink ; it++){
-    fscanf(ptr_tsink,"%d\n",&(info.tsinkSource[it]));
-    printfQuda("Got source sink time separation %d: %d\n",it,info.tsinkSource[it]);
-  }
+  for(int it = 0 ; it < Ntsink ; it++) fscanf(ptr_tsink,"%d\n",&(info.tsinkSource[it]));
   fclose(ptr_tsink);
   //--------------------------------------------------
 
