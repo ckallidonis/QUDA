@@ -1841,7 +1841,7 @@ void QKXTM_Contraction_Kepler<Float>::copyTwopBaryonsToHDF5_Buf(void *Twop_baryo
 	  for(int gap=0;gap<4;gap++){
 	    int im=gap+4*ga;
 	    for(int it=0;it<Lt;it++){
-	      int t_glob = GK_timeRank*Lt+it;
+	      int t_glob = comm_coords(default_topo)[3]*Lt+it;
 	      int sign = t_glob < t_src ? -1 : +1;
 	      for(int sv=0;sv<SpVol;sv++){
 		((Float*)Twop_baryons_HDF5)[0 + 2*im + 2*16*sv + 2*16*SpVol*it + 2*16*SpVol*Lt*ip + 2*16*SpVol*Lt*2*bar] = sign*((Float(*)[2][N_BARYONS][4][4])corrBaryons)[0 + 2*sv + 2*SpVol*it][ip][bar][ga][gap];
@@ -2351,10 +2351,10 @@ void QKXTM_Contraction_Kepler<Float>::seqSourceFixSinkPart2(QKXTM_Vector_Kepler<
 //---------------------------------------------------------------------------------------------------
 
 template<typename Float>
-void QKXTM_Contraction_Kepler<Float>::writeThrpHDF5(void *Thrp_local_HDF5, void *Thrp_noether_HDF5, void **Thrp_oneD_HDF5, char *filename, qudaQKXTMinfo_Kepler info, int isource){
+void QKXTM_Contraction_Kepler<Float>::writeThrpHDF5(void *Thrp_local_HDF5, void *Thrp_noether_HDF5, void **Thrp_oneD_HDF5, char *filename, qudaQKXTMinfo_Kepler info, int isource, WHICHPARTICLE NUCLEON){
 
-  if(info.CorrSpace==MOMENTUM_SPACE)      writeThrpHDF5_MomSpace((void*) Thrp_local_HDF5, (void*) Thrp_noether_HDF5, (void**)Thrp_oneD_HDF5, filename, info, isource);
-  else if(info.CorrSpace==POSITION_SPACE) writeThrpHDF5_PosSpace((void*) Thrp_local_HDF5, (void*) Thrp_noether_HDF5, (void**)Thrp_oneD_HDF5, filename, info, isource);
+  if(info.CorrSpace==MOMENTUM_SPACE)      writeThrpHDF5_MomSpace((void*) Thrp_local_HDF5, (void*) Thrp_noether_HDF5, (void**)Thrp_oneD_HDF5, filename, info, isource, NUCLEON);
+  else if(info.CorrSpace==POSITION_SPACE) writeThrpHDF5_PosSpace((void*) Thrp_local_HDF5, (void*) Thrp_noether_HDF5, (void**)Thrp_oneD_HDF5, filename, info, isource, NUCLEON);
   else errorQuda("writeThrpHDF5: Unsupported value for info.CorrSpace! Supports only POSITION_SPACE and MOMENTUM_SPACE!\n");
 
 }
@@ -2362,11 +2362,227 @@ void QKXTM_Contraction_Kepler<Float>::writeThrpHDF5(void *Thrp_local_HDF5, void 
 
 //-C.K. - New function to write the three-point function in HDF5 format, position-space
 template<typename Float>
-void QKXTM_Contraction_Kepler<Float>::writeThrpHDF5_PosSpace(void *Thrp_local_HDF5, void *Thrp_noether_HDF5, void **Thrp_oneD_HDF5, char *filename, qudaQKXTMinfo_Kepler info, int isource){
+void QKXTM_Contraction_Kepler<Float>::writeThrpHDF5_PosSpace(void *Thrp_local_HDF5, void *Thrp_noether_HDF5, void **Thrp_oneD_HDF5, char *filename, qudaQKXTMinfo_Kepler info, int isource, WHICHPARTICLE NUCLEON){
 
   if(info.CorrSpace!=POSITION_SPACE) errorQuda("writeThrpHDF5_PosSpace: Support for writing the three-point function only in position-space!\n");
 
-  //-C.K. - FIXME!!!
+  hid_t DATATYPE_H5;
+  if( typeid(Float) == typeid(float) ){
+    DATATYPE_H5 = H5T_NATIVE_FLOAT;
+    printfQuda("writeThrpHDF5_PosSpace: Will write in single precision\n");
+  }
+  if( typeid(Float) == typeid(double)){
+    DATATYPE_H5 = H5T_NATIVE_DOUBLE;
+    printfQuda("writeThrp_HDF5_PosSpace: Will write in double precision\n");
+  }
+
+  Float *writeThrpBuf;
+
+  int Nsink = info.Ntsink;
+  int pc[4];
+  int tL[4];
+  int lL[4];
+  for(int i=0;i<4;i++){
+    pc[i] = comm_coords(default_topo)[i];
+    tL[i] = GK_totalL[i];
+    lL[i] = GK_localL[i];
+  }
+  int lV = GK_localVolume;
+
+  hid_t fapl_id = H5Pcreate(H5P_FILE_ACCESS);
+  H5Pset_fapl_mpio(fapl_id, MPI_COMM_WORLD, MPI_INFO_NULL);
+  hid_t file_id = H5Fcreate(filename, H5F_ACC_TRUNC, H5P_DEFAULT, fapl_id);
+  H5Pclose(fapl_id);
+
+  char *group1_tag;
+  asprintf(&group1_tag,"conf_%04d",info.traj);
+  hid_t group1_id = H5Gcreate(file_id, group1_tag, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+
+  char *group2_tag;
+  asprintf(&group2_tag,"sx%02dsy%02dsz%02dst%02d",GK_sourcePosition[isource][0],GK_sourcePosition[isource][1],GK_sourcePosition[isource][2],GK_sourcePosition[isource][3]);
+  hid_t group2_id = H5Gcreate(group1_id, group2_tag, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+
+  /* Attribute writing */
+  //- Need these further on
+  char *dir_order,*operator_list;
+  asprintf(&dir_order,"[0,1,2,3] = [x,y,z,t]");
+  asprintf(&operator_list,"0 = g5\n1 = gx\n2 = gy\n3 = gz\n4 = g0\n5 = Unity\n6 = g5gx\n7 = g5gy\n8 = g5gz\n9 = g5g0\n10 = g5sixy\n11 = g5sixz\n12 = g5siyz\n13 = g5si0x\n14 = g5si0y\n15 = g5si0z\n");
+
+  //- Write the Source position
+  char *src_pos;
+  asprintf(&src_pos," [x, y, z, t] = [%02d, %02d, %02d, %02d]\0",GK_sourcePosition[isource][0],GK_sourcePosition[isource][1],GK_sourcePosition[isource][2],GK_sourcePosition[isource][3]);
+  hid_t attrdat_id = H5Screate(H5S_SCALAR);
+  hid_t type_id = H5Tcopy(H5T_C_S1);
+  H5Tset_size(type_id, strlen(src_pos));
+  hid_t attr_id = H5Acreate2(group2_id, "source-position", type_id, attrdat_id, H5P_DEFAULT, H5P_DEFAULT);
+  H5Awrite(attr_id, type_id, src_pos);
+  H5Aclose(attr_id);
+  H5Tclose(type_id);
+  H5Sclose(attrdat_id);
+
+  //- Write general Correlator Info
+  char *corr_info;
+  asprintf(&corr_info,"Position-space %s 3pt-correlator\nIncludes ultra-local and one-derivative operators, noether current\nPrecision: %s\0",(NUCLEON==PROTON)?"proton":"neutron",(typeid(Float) == typeid(float)) ? "single" : "double");
+  hid_t attrdat_id_2 = H5Screate(H5S_SCALAR);
+  hid_t type_id_2 = H5Tcopy(H5T_C_S1);
+  H5Tset_size(type_id_2, strlen(corr_info));
+  hid_t attr_id_2 = H5Acreate2(file_id, "Correlator-info", type_id_2, attrdat_id_2, H5P_DEFAULT, H5P_DEFAULT);
+  H5Awrite(attr_id_2, type_id_2, corr_info);
+  H5Aclose(attr_id_2);
+  H5Tclose(type_id_2);
+  H5Sclose(attrdat_id_2);
+  //------------------------------------------------------------
+
+  hid_t group3_id;
+  hid_t group4_id;
+  hid_t group5_id;
+
+  for(int its=0;its<Nsink;its++){
+    int tsink = info.tsinkSource[its];
+    char *group3_tag;
+    asprintf(&group3_tag,"tsink_%02d",tsink);
+    group3_id = H5Gcreate(group2_id, group3_tag, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+
+    for(int ipr=0;ipr<info.Nproj[its];ipr++){
+      char *group4_tag;
+      asprintf(&group4_tag,"proj_%s",info.thrp_proj_type[info.proj_list[its][ipr]]);
+      group4_id = H5Gcreate(group3_id, group4_tag, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+
+      for(int thrp_int=0;thrp_int<3;thrp_int++){
+	THRP_TYPE type = (THRP_TYPE) thrp_int;
+
+	char *group5_tag;
+	asprintf(&group5_tag,"%s", info.thrp_type[thrp_int]);
+	group5_id = H5Gcreate(group4_id, group5_tag, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+
+	if(type==THRP_LOCAL){
+	  char *attr_info;
+	  asprintf(&attr_info,"Ultra-local operators:\nIndex-order: [operator, up-0/down-1, t, z, y, x, real/imag]\nOperator list:\n%s\0",operator_list);
+	  hid_t attrdat_id_c = H5Screate(H5S_SCALAR);
+	  hid_t type_id_c = H5Tcopy(H5T_C_S1);
+	  H5Tset_size(type_id_c, strlen(attr_info));
+	  hid_t attr_id_c = H5Acreate2(group5_id, "Ultra-local Info", type_id_c, attrdat_id_c, H5P_DEFAULT, H5P_DEFAULT);
+	  H5Awrite(attr_id_c, type_id_c, attr_info);
+	  H5Aclose(attr_id_c);
+	  H5Tclose(type_id_c);
+	  H5Sclose(attrdat_id_c);
+
+	  int Mel = 16;
+	  int Sdim = 7;
+	  
+	  hsize_t dims[7]  = {Mel, 2, tL[3], tL[2], tL[1], tL[0], 2}; // Size of the dataspace -> Operator, up-down, localVolume, Re-Im
+	  hsize_t ldims[7] = {Mel, 2, lL[3], lL[2], lL[1], lL[0], 2}; // Dimensions of the local dataspace for each rank
+	  hsize_t start[7] = {0,0,pc[3]*lL[3],pc[2]*lL[2],pc[1]*lL[1],pc[0]*lL[0],0}; // start position for each rank
+
+	  hid_t filespace  = H5Screate_simple(Sdim, dims,  NULL);
+	  hid_t subspace   = H5Screate_simple(Sdim, ldims, NULL);
+	  hid_t dataset_id = H5Dcreate(group5_id, "threep", DATATYPE_H5, filespace, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+	  filespace = H5Dget_space(dataset_id);
+	  H5Sselect_hyperslab(filespace, H5S_SELECT_SET, start, NULL, ldims, NULL);
+	  hid_t plist_id = H5Pcreate(H5P_DATASET_XFER);
+	  H5Pset_dxpl_mpio(plist_id, H5FD_MPIO_COLLECTIVE);
+
+	  writeThrpBuf = &(((Float*)Thrp_local_HDF5)[2*lV*2*Mel*its + 2*lV*2*Mel*Nsink*ipr]);
+
+	  herr_t status = H5Dwrite(dataset_id, DATATYPE_H5, subspace, filespace, plist_id, writeThrpBuf);
+	  if(status<0) errorQuda("writeThrpHDF5_PosSpace: Unsuccessful writing of the %s dataset. Exiting\n",info.thrp_type[thrp_int]);
+
+	  H5Sclose(subspace);
+	  H5Dclose(dataset_id);
+	  H5Sclose(filespace);
+	  H5Pclose(plist_id);
+	}//-ultra_local
+	else if(type==THRP_NOETHER){
+	  char *attr_info;
+	  asprintf(&attr_info,"Noether current:\nIndex-order: [direction, up-0/down-1, t, z, y, x, real/imag]\nDirection order:\n%s\0",dir_order);
+	  hid_t attrdat_id_c = H5Screate(H5S_SCALAR);
+	  hid_t type_id_c = H5Tcopy(H5T_C_S1);
+	  H5Tset_size(type_id_c, strlen(attr_info));
+	  hid_t attr_id_c = H5Acreate2(group5_id, "Noether current Info", type_id_c, attrdat_id_c, H5P_DEFAULT, H5P_DEFAULT);
+	  H5Awrite(attr_id_c, type_id_c, attr_info);
+	  H5Aclose(attr_id_c);
+	  H5Tclose(type_id_c);
+	  H5Sclose(attrdat_id_c);
+
+	  int Mel = 4;
+	  int Sdim = 7;
+	  
+	  hsize_t dims[7]  = {Mel,2,tL[3],tL[2],tL[1],tL[0],2}; // Size of the dataspace -> Operator, up-down, localVolume, Re-Im
+	  hsize_t ldims[7] = {Mel,2,lL[3],lL[2],lL[1],lL[0],2}; // Dimensions of the local dataspace for each rank
+	  hsize_t start[7] = {0,0,pc[3]*lL[3],pc[2]*lL[2],pc[1]*lL[1],pc[0]*lL[0],0}; // start position for each rank
+
+	  hid_t filespace  = H5Screate_simple(Sdim, dims,  NULL);
+	  hid_t subspace   = H5Screate_simple(Sdim, ldims, NULL);
+	  hid_t dataset_id = H5Dcreate(group5_id, "threep", DATATYPE_H5, filespace, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+	  filespace = H5Dget_space(dataset_id);
+	  H5Sselect_hyperslab(filespace, H5S_SELECT_SET, start, NULL, ldims, NULL);
+	  hid_t plist_id = H5Pcreate(H5P_DATASET_XFER);
+	  H5Pset_dxpl_mpio(plist_id, H5FD_MPIO_COLLECTIVE);
+
+	  writeThrpBuf = &(((Float*)Thrp_noether_HDF5)[2*lV*2*Mel*its + 2*lV*2*Mel*Nsink*ipr]);
+
+	  herr_t status = H5Dwrite(dataset_id, DATATYPE_H5, subspace, filespace, plist_id, writeThrpBuf);
+	  if(status<0) errorQuda("writeThrpHDF5_PosSpace: Unsuccessful writing of the %s dataset. Exiting\n",info.thrp_type[thrp_int]);
+
+	  H5Sclose(subspace);
+	  H5Dclose(dataset_id);
+	  H5Sclose(filespace);
+	  H5Pclose(plist_id);
+	}//- noether
+	else if(type==THRP_ONED){
+	  char *attr_info;
+	  asprintf(&attr_info,"One-derivative operators:\nIndex-order: [direction, operator, up-0/down-1, t, z, y, x, real/imag]\nOperator list:%s\nDirection order:\n%s\0",operator_list,dir_order);
+	  hid_t attrdat_id_c = H5Screate(H5S_SCALAR);
+	  hid_t type_id_c = H5Tcopy(H5T_C_S1);
+	  H5Tset_size(type_id_c, strlen(attr_info));
+	  hid_t attr_id_c = H5Acreate2(group5_id, "One-derivative Info", type_id_c, attrdat_id_c, H5P_DEFAULT, H5P_DEFAULT);
+	  H5Awrite(attr_id_c, type_id_c, attr_info);
+	  H5Aclose(attr_id_c);
+	  H5Tclose(type_id_c);
+	  H5Sclose(attrdat_id_c);
+
+	  int Mel = 16;
+	  int Sdim = 8;
+	  
+	  hsize_t dims[8]  = {4,Mel,2,tL[3],tL[2],tL[1],tL[0],2}; // Size of the dataspace -> Direction, Operator, up-down, localVolume, Re-Im
+	  hsize_t ldims[8] = {4,Mel,2,lL[3],lL[2],lL[1],lL[0],2}; // Dimensions of the local dataspace for each rank
+	  hsize_t start[8] = {0,0,0,pc[3]*lL[3],pc[2]*lL[2],pc[1]*lL[1],pc[0]*lL[0],0}; // start position for each rank
+
+	  hid_t filespace  = H5Screate_simple(Sdim, dims,  NULL);
+	  hid_t subspace   = H5Screate_simple(Sdim, ldims, NULL);
+	  hid_t dataset_id = H5Dcreate(group5_id, "threep", DATATYPE_H5, filespace, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+	  filespace = H5Dget_space(dataset_id);
+	  H5Sselect_hyperslab(filespace, H5S_SELECT_SET, start, NULL, ldims, NULL);
+	  hid_t plist_id = H5Pcreate(H5P_DATASET_XFER);
+	  H5Pset_dxpl_mpio(plist_id, H5FD_MPIO_COLLECTIVE);
+
+	  writeThrpBuf = NULL;
+	  if( (writeThrpBuf = (Float*) malloc(2*lV*2*Mel*4*sizeof(Float))) == NULL ) errorQuda("writeThrpHDF5_PosSpace: Cannot allocate writeBuffer for one-derivative three-point correlator\n");
+
+	  for(int dir=0;dir<4;dir++) memcpy(&(writeThrpBuf[2*lV*2*Mel*dir]), &(((Float*)Thrp_oneD_HDF5[dir])[2*lV*2*Mel*its + 2*lV*2*Mel*Nsink*ipr]), 2*lV*2*Mel*sizeof(Float));
+
+	  herr_t status = H5Dwrite(dataset_id, DATATYPE_H5, subspace, filespace, plist_id, writeThrpBuf);
+	  if(status<0) errorQuda("writeThrpHDF5_PosSpace: Unsuccessful writing of the %s dataset. Exiting\n",info.thrp_type[thrp_int]);
+
+	  free(writeThrpBuf);
+
+	  H5Sclose(subspace);
+	  H5Dclose(dataset_id);
+	  H5Sclose(filespace);
+	  H5Pclose(plist_id);
+	}//- oneD
+
+	H5Gclose(group5_id);
+      }//-thrp_int
+      H5Gclose(group4_id);
+    }//-ipr
+    H5Gclose(group3_id);
+  }//-its
+
+  H5Gclose(group2_id);
+  H5Gclose(group1_id);
+  H5Fclose(file_id);
+
 
   return;
 }
@@ -2374,7 +2590,7 @@ void QKXTM_Contraction_Kepler<Float>::writeThrpHDF5_PosSpace(void *Thrp_local_HD
 
 //-C.K. - New function to write the three-point function in HDF5 format, momentum-space
 template<typename Float>
-void QKXTM_Contraction_Kepler<Float>::writeThrpHDF5_MomSpace(void *Thrp_local_HDF5, void *Thrp_noether_HDF5, void **Thrp_oneD_HDF5, char *filename, qudaQKXTMinfo_Kepler info, int isource){
+void QKXTM_Contraction_Kepler<Float>::writeThrpHDF5_MomSpace(void *Thrp_local_HDF5, void *Thrp_noether_HDF5, void **Thrp_oneD_HDF5, char *filename, qudaQKXTMinfo_Kepler info, int isource, WHICHPARTICLE NUCLEON){
 
   if(info.CorrSpace!=MOMENTUM_SPACE) errorQuda("writeThrpHDF5_MomSpace: Support for writing the three-point function only in momentum-space!\n");
 
@@ -2383,11 +2599,11 @@ void QKXTM_Contraction_Kepler<Float>::writeThrpHDF5_MomSpace(void *Thrp_local_HD
     hid_t DATATYPE_H5;
     if( typeid(Float) == typeid(float) ){
       DATATYPE_H5 = H5T_NATIVE_FLOAT;
-      printfQuda("writeThrp_HDF5: Will write in single precision\n");
+      printfQuda("writeThrpHDF5_MomSpace: Will write in single precision\n");
     }
     if( typeid(Float) == typeid(double)){
       DATATYPE_H5 = H5T_NATIVE_DOUBLE;
-      printfQuda("writeThrp_HDF5: Will write in double precision\n");
+      printfQuda("writeThrp_HDF5_MomSpace: Will write in double precision\n");
     }
 
     Float *writeThrpBuf;
@@ -2483,7 +2699,7 @@ void QKXTM_Contraction_Kepler<Float>::writeThrpHDF5_MomSpace(void *Thrp_local_HD
 	    //-Determine the global dimensions
 	    if(type==THRP_LOCAL || type==THRP_ONED) Mel = 16;
 	    else if (type==THRP_NOETHER) Mel = 4;
-	    else errorQuda("writeThrp_HDF5: Undefined three-point function type.\n");
+	    else errorQuda("writeThrpHDF5_MomSpace: Undefined three-point function type.\n");
 	    dims[0] = tsink+1;
 	    dims[1] = Mel;
 	    dims[2] = 2;
@@ -2713,8 +2929,18 @@ void QKXTM_Contraction_Kepler<Float>::copyThrpToHDF5_Buf(void *Thrp_HDF5, void *
     }//-if GK_timeRank
   }//-if CorrSpace
   else if(CorrSpace==POSITION_SPACE){
-    //-C.K.: - FIXME!!!
-  }
+    int lV = GK_localVolume;
+    Float *tmp3pt;
+    if(type==THRP_LOCAL || type==THRP_NOETHER) tmp3pt = ((Float*)corrThp);
+    else if(type==THRP_ONED) tmp3pt = &(((Float*)corrThp)[2*16*lV*mu]);
+
+    for(int v = 0; v<lV; v++){
+      for(int im = 0; im<Mel; im++){
+	((Float*)Thrp_HDF5)[0 + 2*v + 2*lV*uORd + 2*lV*2*im + 2*lV*2*Mel*its + 2*lV*2*Mel*Nsink*pr] = sign*tmp3pt[0 + 2*im + 2*Mel*v];
+	((Float*)Thrp_HDF5)[1 + 2*v + 2*lV*uORd + 2*lV*2*im + 2*lV*2*Mel*its + 2*lV*2*Mel*Nsink*pr] = sign*tmp3pt[1 + 2*im + 2*Mel*v];
+      }
+    }
+  }//-else if
 
 }
 
@@ -2854,7 +3080,7 @@ void QKXTM_Contraction_Kepler<Float>::contractFixSink(QKXTM_Propagator_Kepler<Fl
 
   if(CorrSpace==POSITION_SPACE){
     for(int it = 0 ; it < GK_localL[3] ; it++)
-      run_fixSinkContractions(corrThp_local, corrThp_noether, corrThp_oneD, fwdTex, seqTex, gaugeTex, testParticle, partflag, it, isource, sizeof(Float), CorrSpace);
+      run_fixSinkContractions((void*)corrThp_local, (void*)corrThp_noether, (void*)corrThp_oneD, fwdTex, seqTex, gaugeTex, testParticle, partflag, it, isource, sizeof(Float), CorrSpace);
   }
   else if(CorrSpace==MOMENTUM_SPACE){
     Float *corrThp_local_local   = (Float*) calloc(GK_localL[3]*GK_Nmoms*16  *2,sizeof(Float));

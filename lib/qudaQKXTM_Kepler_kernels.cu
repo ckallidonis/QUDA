@@ -1283,8 +1283,11 @@ void quda::run_seqSourceFixSinkPart2(void* out, int timeslice, cudaTextureObject
 
 
 template<typename Float2,typename Float>
-static void fixSinkContractions_kernel(void* corrThp_local, void* corrThp_noether, void *corrThp_oneD, cudaTextureObject_t fwdTex, cudaTextureObject_t seqTex, cudaTextureObject_t gaugeTex,
+static void fixSinkContractions_kernel(void* corrThp_local, void* corrThp_noether, void* corrThp_oneD, cudaTextureObject_t fwdTex, cudaTextureObject_t seqTex, cudaTextureObject_t gaugeTex,
 				       WHICHPARTICLE PARTICLE, int partflag, int itime, int isource, CORR_SPACE CorrSpace){
+
+  int SpVol = GK_localVolume/GK_localL[3];
+  int lV = GK_localVolume;
 
   dim3 blockDim( THREADS_PER_BLOCK , 1, 1);
   dim3 gridDim( (GK_localVolume/GK_localL[3] + blockDim.x -1)/blockDim.x , 1 , 1); // spawn threads only for the spatial volume
@@ -1294,12 +1297,11 @@ static void fixSinkContractions_kernel(void* corrThp_local, void* corrThp_noethe
 
   if(CorrSpace==POSITION_SPACE){
     size_t alloc_buf;
+    size_t copy_buf;
 
     //- Ultra-local operators
     alloc_buf = blockDim.x * gridDim.x * 16 * 2 * sizeof(Float);
-
-    h_partial_block = (Float*) malloc(alloc_buf);
-    if(h_partial_block == NULL) errorQuda("fixSinkContractions_kernel: Cannot allocate ultra-local host block.\n");
+    copy_buf  = SpVol * 16 * 2 * sizeof(Float);
 
     cudaMalloc((void**)&d_partial_block, alloc_buf);
     checkCudaError();
@@ -1313,11 +1315,8 @@ static void fixSinkContractions_kernel(void* corrThp_local, void* corrThp_noethe
       fixSinkContractions_local_kernel_PosSpace_double<<<gridDim,blockDim>>>((double2*) d_partial_block, fwdTex, seqTex, PARTICLE, partflag, itime,
 									     GK_sourcePosition[isource][0] , GK_sourcePosition[isource][1], GK_sourcePosition[isource][2]);
 
-    cudaMemcpy(h_partial_block , d_partial_block , alloc_buf , cudaMemcpyDeviceToHost);
+    cudaMemcpy(&(((Float*)corrThp_local)[2*16*SpVol*itime]) , d_partial_block , copy_buf , cudaMemcpyDeviceToHost); //-C.K. Copy device block into corrThp_local
     checkCudaError();
-
-    //-C.K: - FIXME!!! Copy h_partial_block to corrThp_local
-
     //----------------------------------------------------------------------
 
     //- One-derivative operators
@@ -1332,25 +1331,18 @@ static void fixSinkContractions_kernel(void* corrThp_local, void* corrThp_noethe
 	fixSinkContractions_oneD_kernel_PosSpace_double<<<gridDim,blockDim>>>((double2*) d_partial_block, fwdTex, seqTex, gaugeTex, PARTICLE, partflag, itime, dir,
 									      GK_sourcePosition[isource][0] , GK_sourcePosition[isource][1], GK_sourcePosition[isource][2]);
 
-      cudaMemcpy(h_partial_block , d_partial_block , alloc_buf , cudaMemcpyDeviceToHost);
+      cudaMemcpy(&(((Float*)corrThp_oneD)[2*16*SpVol*itime + 2*16*lV*dir]), d_partial_block , copy_buf , cudaMemcpyDeviceToHost); //-C.K. Copy device block into corrThp_oneD for each dir
       checkCudaError();
-
-      //-C.K: - FIXME!!! Copy h_partial_block to corrThp_oneD for each dir
-
     }//-dir
     //----------------------------------------------------------------------
 
     //- Noether, conserved current
-    //- it's better to reallocate the host and device block buffers here
-    free(h_partial_block);
+    //- it's better to reallocate the device block buffer here
     cudaFree(d_partial_block);
     checkCudaError();
-    h_partial_block = NULL;
     d_partial_block = NULL;
     alloc_buf = blockDim.x * gridDim.x * 4 * 2 * sizeof(Float);
-
-    h_partial_block = (Float*) malloc(alloc_buf);
-    if(h_partial_block == NULL) errorQuda("fixSinkContractions_kernel: Cannot allocate noether host block.\n");
+    copy_buf  = SpVol * 4 * 2 * sizeof(Float);
 
     cudaMalloc((void**)&d_partial_block, alloc_buf);
     checkCudaError();
@@ -1364,12 +1356,9 @@ static void fixSinkContractions_kernel(void* corrThp_local, void* corrThp_noethe
       fixSinkContractions_noether_kernel_PosSpace_double<<<gridDim,blockDim>>>((double2*) d_partial_block, fwdTex, seqTex, gaugeTex, PARTICLE, partflag, itime,
 								      GK_sourcePosition[isource][0] , GK_sourcePosition[isource][1], GK_sourcePosition[isource][2]);
 
-    cudaMemcpy(h_partial_block , d_partial_block , alloc_buf , cudaMemcpyDeviceToHost);
+    cudaMemcpy(&(((Float*)corrThp_noether)[2*4*SpVol*itime]) , d_partial_block , copy_buf , cudaMemcpyDeviceToHost); //-C.K. Copy device block to corrThp_noether
     checkCudaError();
 
-    //-C.K: - FIXME!!! Copy h_partial_block to corrThp_noether
-
-    free(h_partial_block);
     cudaFree(d_partial_block);
     checkCudaError();
   }

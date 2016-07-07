@@ -1,6 +1,4 @@
 int sid = blockIdx.x*blockDim.x + threadIdx.x;
-int cacheIndex = threadIdx.x;
-__shared__ FLOAT2 shared_cache[16*THREADS_PER_BLOCK];
 int c_stride_spatial = c_stride/c_localL[3];
 register FLOAT2 accum[16];
 
@@ -69,14 +67,7 @@ if(c_dimBreak[3] == true){
     pointMinusG[3] = c_minusGhost[3]*c_nDim*c_nColor*c_nColor + LEXIC_ZYX(x_id[2],x_id[1],x_id[0],c_localL);
   }
  }
-
-///////////////////
-int x,y,z;
-x = x_id[0] + c_procPosition[0] * c_localL[0] - x0;
-y = x_id[1] + c_procPosition[1] * c_localL[1] - y0;
-z = x_id[2] + c_procPosition[2] * c_localL[2] - z0;
-FLOAT phase;
-FLOAT2 expon;
+//---------------------------------------------------------------------------------
 
 FLOAT2 gamma[4][4];
 
@@ -133,41 +124,13 @@ if (sid < c_threads/c_localL[3]){
 
   }
  }
-
-/*
-if(sid == 0 && it == 0){
-  for (int i = 0 ; i < 16 ; i++)
-    cuPrintf("%+e %+e\n",accum[i].x,accum[i].y);
- }
-*/
 __syncthreads();
-int i;
-for(int imom = 0 ; imom < c_Nmoms ; imom++){
-  phase = ( ((FLOAT) c_moms[imom][0]*x)/c_totalL[0] + ((FLOAT) c_moms[imom][1]*y)/c_totalL[1] + ((FLOAT) c_moms[imom][2]*z)/c_totalL[2] ) * 2. * PI;
-  expon.x = cos(phase);
-  expon.y = sin(phase);
-  for(int iop = 0 ; iop < 16 ; iop++){
-    shared_cache[iop*THREADS_PER_BLOCK + cacheIndex] = accum[iop] * expon; 
-  }
-  __syncthreads();
-  i = blockDim.x/2;
-  while (i != 0){
-    if(cacheIndex < i){
-      for(int iop = 0 ; iop < 16 ; iop++){
-	shared_cache[iop*THREADS_PER_BLOCK + cacheIndex].x += shared_cache[iop*THREADS_PER_BLOCK + cacheIndex + i].x;
-	shared_cache[iop*THREADS_PER_BLOCK + cacheIndex].y += shared_cache[iop*THREADS_PER_BLOCK + cacheIndex + i].y;
-      }
-    }
-    __syncthreads();
-    i /= 2;
-  }
-  
-  if(cacheIndex == 0){
-    for(int iop = 0 ; iop < 16 ; iop++)
-      block[imom*16*gridDim.x + iop*gridDim.x + blockIdx.x] = 0.25*shared_cache[iop*THREADS_PER_BLOCK + cacheIndex + 0];	
-  }
-  
- } // close momentum
+
+
+if (sid < c_threads/c_localL[3]){
+  for(int iop = 0 ; iop < 16 ; iop++) block[iop + 16*sid] = 0.25 * accum[iop];
+ }
+__syncthreads();
 
 
 #undef PROP
