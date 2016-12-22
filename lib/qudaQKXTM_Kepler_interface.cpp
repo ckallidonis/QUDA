@@ -3571,6 +3571,7 @@ void calcEigenVectors_loop_wOneD_FullOp(void **gaugeToPlaquette, QudaInvertParam
       dirac.reconstruct(*x,*b,param->solution_type);
 
       sol = new cudaColorSpinorField(*x);
+      printfQuda("cudaColorSpinorField sol = %p\n",sol);
     }
 
     for(int dstep=0;dstep<nDeflSteps;dstep++){
@@ -3630,6 +3631,8 @@ void calcEigenVectors_loop_wOneD_FullOp(void **gaugeToPlaquette, QudaInvertParam
 	printfQuda("Loops for %s = %04d FFT'ed and copied to write buffers in %f sec\n",msg_str,is+1,t2-t1);
       }//-if (is+1)
     }//-deflation steps
+
+    delete sol;
   }//-Nstoch
 
   //-Write the stochastic part of the loops
@@ -3800,6 +3803,10 @@ void calcEigenVectors_loop_wOneD_FullOp(void **gaugeToPlaquette, QudaInvertParam
 	  printfQuda("Loops for NHP = %04d FFT'ed and copied to write buffers in %f sec\n",is+1,t2-t1);
 	}//-if (is+1)
       }//-deflation step
+
+      delete sol;
+      delete sol_LP;
+
     }//-Nstoch
     
     //-Write the high-precision part
@@ -3936,7 +3943,6 @@ void calcEigenVectors_loop_wOneD_FullOp(void **gaugeToPlaquette, QudaInvertParam
   delete K_vector;
   delete K_gauge;
   delete x;
-  delete sol;
   delete b;
   delete tmp3;
   delete tmp4;
@@ -3944,7 +3950,6 @@ void calcEigenVectors_loop_wOneD_FullOp(void **gaugeToPlaquette, QudaInvertParam
   if(useTSM){
     delete solve_LP;
     delete x_LP;
-    delete sol_LP;
   }
 
   if(stochEO) delete deflationEO;
