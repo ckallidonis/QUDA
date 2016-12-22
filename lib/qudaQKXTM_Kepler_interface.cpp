@@ -3571,7 +3571,6 @@ void calcEigenVectors_loop_wOneD_FullOp(void **gaugeToPlaquette, QudaInvertParam
       dirac.reconstruct(*x,*b,param->solution_type);
 
       sol = new cudaColorSpinorField(*x);
-      printfQuda("cudaColorSpinorField sol = %p\n",sol);
     }
 
     for(int dstep=0;dstep<nDeflSteps;dstep++){
