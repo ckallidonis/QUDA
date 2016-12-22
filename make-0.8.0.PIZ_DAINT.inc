@@ -1,13 +1,13 @@
 ###### Local configuration:
 
-CUDA_INSTALL_PATH = /opt/nvidia/cudatoolkit7.0/7.0.28-1.0502.10742.5.1
+CUDA_INSTALL_PATH = /opt/nvidia/cudatoolkit8.0/8.0.44_GA_2.2.7_g4a6c213-2.1
 QDP_INSTALL_PATH = 
 QDPXX_CXXFLAGS = 
 QDPXX_LDFLAGS = 
 QDPXX_LIBS = 
 
 CPU_ARCH = x86_64  	  # x86 or x86_64
-GPU_ARCH = sm_35	  # sm_13, sm_20, sm_21, sm_30, or sm_35
+GPU_ARCH = sm_60	  # sm_13, sm_20, sm_21, sm_30, or sm_35
 OS       = linux	  # linux or osx
 GIT      = git
 
@@ -78,16 +78,16 @@ FECC = cc			# front-end CC
 FECXX = CC			# front-end CXX
 FEF90 = 			# front-end F90
 
-MPI_HOME=/opt/cray/mpt/7.2.2/gni/mpich2-intel/14.0
+MPI_HOME=/opt/cray/pe/mpt/7.5.0/gni/mpich-intel/16.0
 QMP_HOME=
 QIO_HOME=
 
 MAGMA_HOME=
 ATLAS_HOME=@ATLAS_HOME@
 LAPACK_HOME=@LAPACK_HOME@
-ARPACK_HOME =/users/kallidoc/install
-LIME_HOME =/users/kallidoc/install
-GSL_HOME = /users/kallidoc/install
+ARPACK_HOME = /users/kallidoc/install/PrgEnv_Intel
+LIME_HOME   = /users/kallidoc/install/PrgEnv_Intel
+GSL_HOME    = /users/kallidoc/install/PrgEnv_Intel
 NUMA_AFFINITY=yes   # enable NUMA affinity?
 
 ######
@@ -140,12 +140,12 @@ ifeq ($(strip $(BUILD_MPI)), yes)
   MPI_LIBS =
   INC += -DMPI_COMMS $(MPI_CFLAGS) -I$(MPI_HOME)/include
   INC += -I$(LIME_HOME)/include -I$(GSL_HOME)/include
-  INC += -I/opt/intel/14.0.1.106/composer_xe_2013_sp1.1.106/mkl/include
+  INC += -I/opt/intel/compilers_and_libraries_2017.0.098/linux/mkl/include
   LIB += $(MPI_LDFLAGS) $(MPI_LIBS)
   LIB += -L$(ARPACK_HOME)/lib -larpack -lparpack
   LIB += -L$(LIME_HOME)/lib -llime
   LIB += -L$(GSL_HOME)/lib -lgsl
-  LIB += -L/opt/intel/14.0.1.106/composer_xe_2013_sp1.1.106/mkl/lib/intel64/
+  LIB += -L/opt/intel/compilers_and_libraries_2017.0.098/linux/mkl/lib/intel64
   LIB += -lmkl_intel_lp64 -lmkl_intel_thread -lmkl_core -lpthread -lstdc++ -liomp5
   COMM_OBJS = comm_mpi.o
 endif
@@ -387,14 +387,14 @@ ifeq ($(strip $(USE_QDPJIT)), yes)
   LIB += $(QDPXX_LDFLAGS) $(QDPXX_LIBS)
   INC += -I$(QDP_INSTALL_PATH)/include
 
-  CFLAGS = -Wall -std=c99 $(COPT) $(INC)
-  CXXFLAGS = -Wall $(COPT) $(INC) $(QDPXX_CXXFLAGS)
+  CFLAGS = -Wall -std=c99 $(COPT) $(INC) -qoverride-limits
+  CXXFLAGS = -Wall $(COPT) $(INC) $(QDPXX_CXXFLAGS) -qoverride-limits
   NVCC = $(CUDA_INSTALL_PATH)/bin/nvcc 
   NVCCFLAGS = $(NVCCOPT) -arch=$(GPU_ARCH) $(INC)
   LDFLAGS = -fPIC $(LIB)
 else
-  CFLAGS = -Wall -O3 -std=c99 $(COPT) $(INC) -fopenmp
-  CXXFLAGS = -Wall -O3 $(COPT) $(INC) -fopenmp
+  CFLAGS = -Wall -O3 -std=c99 $(COPT) $(INC) -fopenmp -qoverride-limits
+  CXXFLAGS = -Wall -O3 $(COPT) $(INC) -fopenmp -qoverride-limits
   NVCC = $(CUDA_INSTALL_PATH)/bin/nvcc 
   NVCCFLAGS = -O3 $(NVCCOPT) -arch=$(GPU_ARCH) $(INC)
   LDFLAGS = -fPIC $(LIB)

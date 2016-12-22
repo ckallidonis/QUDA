@@ -1,5 +1,6 @@
 #include <qudaQKXTM_Kepler.cpp>
 #include <sys/stat.h>
+#include <unistd.h>
 #define TIMING_REPORT
 template  class QKXTM_Field_Kepler<double>;
 template  class QKXTM_Gauge_Kepler<double>;

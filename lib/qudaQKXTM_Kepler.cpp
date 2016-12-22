@@ -5214,7 +5214,7 @@ void doCudaFFT(void *cnRes_gv, void *cnRes_vv, void *cnResTmp_gv,void *cnResTmp_
   cudaStreamCreate(&streamCuFFT);
 
   if(cufftPlanMany(&fftPlan, 3, nRank, nRank, 1, Vol, nRank, 1, Vol, CUFFT_Z2Z, 16*GK_localL[3]) != CUFFT_SUCCESS) errorQuda("Error in the FFT!!!\n");
-  cufftSetCompatibilityMode       (fftPlan, CUFFT_COMPATIBILITY_NATIVE);
+  cufftSetCompatibilityMode       (fftPlan, CUFFT_COMPATIBILITY_FFTW_PADDING);
   cufftSetStream                  (fftPlan, streamCuFFT);
   checkCudaError();
   void* ctrnS;
@@ -5247,7 +5247,7 @@ void doCudaFFT_v2(void *cnIn, void *cnOut){
   cudaStreamCreate(&streamCuFFT);
 
   if(cufftPlanMany(&fftPlan, 3, nRank, nRank, 1, Vol, nRank, 1, Vol, CUFFT_Z2Z, 16*GK_localL[3]) != CUFFT_SUCCESS) errorQuda("Error in the FFT!!!\n");
-  cufftSetCompatibilityMode       (fftPlan, CUFFT_COMPATIBILITY_NATIVE);
+  cufftSetCompatibilityMode       (fftPlan, CUFFT_COMPATIBILITY_FFTW_PADDING);
   cufftSetStream                  (fftPlan, streamCuFFT);
   checkCudaError();
   void* ctrnS;
