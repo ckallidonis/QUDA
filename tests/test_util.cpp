@@ -1608,6 +1608,8 @@ char proj_list_file[257] = "default";
 
 char *corr_write_space = "MOMENTUM";
 
+bool HighMomForm = false;
+
 //-C.K. ARPACK Parameters
 int PolyDeg = 100;     // degree of the Chebysev polynomial
 int nEv = 100;         // Number of the eigenvectors we want
@@ -1768,6 +1770,7 @@ void usage(char** argv )
   printf("    --check_corr_files                        # check if 2pt-functions exist to avoid reproducing (default \"no\")\n");
   printf("    --proj_list                               # path to a file-list of projectors for 3pt function (default: only G4)\n");
   printf("    --corr_write_space                        # whether to write the correlation functions in position space (MOMENTUM/POSITION, default: MOMENTUM)\n");
+  printf("    --HighMomForm                             # whether to write the correlation functions in HighMomentum Format (only for HDF5) (yes/no, default: no)\n");
 
   //-C.K. Loop INPUT
   printf("    --Q_sqMax_loop                            # The maximum Q^2 momentum (loop) (default 0)\n");
@@ -2584,6 +2587,17 @@ int process_command_line_option(int argc, char** argv, int* idx)
     goto out;
   }
 
+  if( strcmp(argv[i], "--HighMomForm") ==0){
+    if(i+1 >= argc){
+      usage(argv);
+    }
+    if( strcmp(argv[i+1],"yes")==0 || strcmp(argv[i+1],"YES")==0 ) HighMomForm = true;
+    else if ( strcmp(argv[i+1],"no")==0 || strcmp(argv[i+1],"NO")==0 ) HighMomForm = false;
+    else usage(argv);
+    i++;
+    ret = 0;
+    goto out;
+  }
   //=============================================================================
 
   //-C.K. Loop INPUT

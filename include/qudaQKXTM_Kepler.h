@@ -59,6 +59,7 @@ namespace quda {
     FILE_WRITE_FORMAT CorrFileFormat;
     SOURCE_T source_type;
     CORR_SPACE CorrSpace;
+    bool HighMomForm;
   } qudaQKXTMinfo_Kepler;
 
 
@@ -333,8 +334,8 @@ template<typename Float>
    void writeTwopBaryons_ASCII(void *corrBaryons, char *filename_out, int isource, CORR_SPACE CorrSpace);
    void writeTwopMesons_ASCII (void *corrMesons , char *filename_out, int isource, CORR_SPACE CorrSpace);
 
-   void copyTwopBaryonsToHDF5_Buf(void *Twop_baryons_HDF5, void *corrBaryons, int isource, CORR_SPACE CorrSpace);
-   void copyTwopMesonsToHDF5_Buf (void *Twop_mesons_HDF5 , void *corrMesons , CORR_SPACE CorrSpace);
+   void copyTwopBaryonsToHDF5_Buf(void *Twop_baryons_HDF5, void *corrBaryons, int isource, CORR_SPACE CorrSpace, bool HighMomForm);
+   void copyTwopMesonsToHDF5_Buf (void *Twop_mesons_HDF5 , void *corrMesons , CORR_SPACE CorrSpace, bool HighMomForm);
 
    void writeTwopBaryonsHDF5(void *twopBaryons, char *filename, qudaQKXTMinfo_Kepler info, int isource);
    void writeTwopMesonsHDF5 (void *twopMesons , char *filename, qudaQKXTMinfo_Kepler info, int isource);
@@ -343,6 +344,9 @@ template<typename Float>
    void writeTwopBaryonsHDF5_PosSpace(void *twopBaryons, char *filename, qudaQKXTMinfo_Kepler info, int isource);
    void writeTwopMesonsHDF5_MomSpace (void *twopMesons , char *filename, qudaQKXTMinfo_Kepler info, int isource);
    void writeTwopMesonsHDF5_PosSpace (void *twopMesons , char *filename, qudaQKXTMinfo_Kepler info, int isource);
+
+   void writeTwopBaryonsHDF5_MomSpace_HighMomForm(void *twopBaryons, char *filename, qudaQKXTMinfo_Kepler info, int isource);
+   void writeTwopMesonsHDF5_MomSpace_HighMomForm (void *twopMesons , char *filename, qudaQKXTMinfo_Kepler info, int isource);
 
    void seqSourceFixSinkPart1(QKXTM_Vector_Kepler<Float> &vec, QKXTM_Propagator3D_Kepler<Float> &prop1, QKXTM_Propagator3D_Kepler<Float> &prop2, int timeslice,int nu,int c2, WHICHPROJECTOR typeProj, WHICHPARTICLE testParticle);
    void seqSourceFixSinkPart2(QKXTM_Vector_Kepler<Float> &vec, QKXTM_Propagator3D_Kepler<Float> &prop, int timeslice,int nu,int c2, WHICHPROJECTOR typeProj, WHICHPARTICLE testParticle);
@@ -353,12 +357,13 @@ template<typename Float>
 			void *corrThp_local, void *corrThp_noether, void *corrThp_oneD, WHICHPROJECTOR typeProj , WHICHPARTICLE testParticle, int partFlag, int isource, CORR_SPACE CorrSpace);
 
    void writeThrp_ASCII(void *corrThp_local, void *corrThp_noether, void *corrThp_oneD, WHICHPARTICLE testParticle, int partflag , char *filename_out, int isource, int tsinkMtsource, CORR_SPACE CorrSpace);
-   void copyThrpToHDF5_Buf(void *Thrp_HDF5, void *corrThp,  int mu, int uORd, int its, int Nsink, int pr, int thrp_sign, THRP_TYPE type, CORR_SPACE CorrSpace);
+   void copyThrpToHDF5_Buf(void *Thrp_HDF5, void *corrThp,  int mu, int uORd, int its, int Nsink, int pr, int thrp_sign, THRP_TYPE type, CORR_SPACE CorrSpace, bool HighMomForm);
    void writeThrpHDF5(void *Thrp_local_HDF5, void *Thrp_noether_HDF5, void **Thrp_oneD_HDF5, char *filename, qudaQKXTMinfo_Kepler info, int isource, WHICHPARTICLE NUCLEON);
    void writeThrpHDF5_MomSpace(void *Thrp_local_HDF5, void *Thrp_noether_HDF5, void **Thrp_oneD_HDF5, char *filename, qudaQKXTMinfo_Kepler info, int isource, WHICHPARTICLE NUCLEON);
+   void writeThrpHDF5_MomSpace_HighMomForm(void *Thrp_local_HDF5, void *Thrp_noether_HDF5, void **Thrp_oneD_HDF5, char *filename, qudaQKXTMinfo_Kepler info, int isource, WHICHPARTICLE NUCLEON);
    void writeThrpHDF5_PosSpace(void *Thrp_local_HDF5, void *Thrp_noether_HDF5, void **Thrp_oneD_HDF5, char *filename, qudaQKXTMinfo_Kepler info, int isource, WHICHPARTICLE NUCLEON);
 
-
+ 
  };
 }
 

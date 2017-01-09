@@ -80,6 +80,7 @@ extern int Nproj;
 extern char proj_list_file[];
 
 extern char *corr_write_space;
+extern bool HighMomForm;
 
 //-C.K. ARPACK Parameters
 extern int PolyDeg;
@@ -425,6 +426,7 @@ int main(int argc, char **argv)
   info.Nsources = numSourcePositions;
   info.Q_sq = Q_sq;
   info.traj = traj;
+  info.HighMomForm = HighMomForm;
 
   if(strcmp(check_file_exist,"yes")==0 || strcmp(check_file_exist,"YES")==0) info.check_files = true;
   else if(strcmp(check_file_exist,"no")==0 || strcmp(check_file_exist,"NO")==0) info.check_files = false;
