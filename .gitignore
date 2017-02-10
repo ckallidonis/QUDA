@@ -28,3 +28,4 @@ lib/#*
 tests/#*
 include/#*
 tunecache.tsv
+make-0.8.0.PIZ_DAINT.inc
