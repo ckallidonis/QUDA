@@ -1581,11 +1581,10 @@ static void fixSinkContractions_kernel(void* corrThp_local,
 	}
 
     for(int imom = 0 ; imom < GK_Nmoms ; imom++)
-      for(int iop = 0 ; iop < 16 ; iop++)
-	for(int i =0 ; i < gridDim.x ; i++){
-	  ((Float*) corrThp_local)[itime*GK_Nmoms*16*2 + imom*16*2 + iop*2 + 0] = reduction[imom*16*2 + iop*2 + 0];
-	  ((Float*) corrThp_local)[itime*GK_Nmoms*16*2 + imom*16*2 + iop*2 + 1] = reduction[imom*16*2 + iop*2 + 1];
-	}
+      for(int iop = 0 ; iop < 16 ; iop++){
+	((Float*) corrThp_local)[itime*GK_Nmoms*16*2 + imom*16*2 + iop*2 + 0] = reduction[imom*16*2 + iop*2 + 0];
+	((Float*) corrThp_local)[itime*GK_Nmoms*16*2 + imom*16*2 + iop*2 + 1] = reduction[imom*16*2 + iop*2 + 1];
+      }
     //---------------------------------------------------------------
 
     //- Noether, conserved current
@@ -1614,11 +1613,10 @@ static void fixSinkContractions_kernel(void* corrThp_local,
 	}
   
     for(int imom = 0 ; imom < GK_Nmoms ; imom++)
-      for(int dir = 0 ; dir < 4 ; dir++)
-	for(int i =0 ; i < gridDim.x ; i++){
-	  ((Float*) corrThp_noether)[itime*GK_Nmoms*4*2 + imom*4*2 + dir*2 + 0] = reduction[imom*4*2 + dir*2 + 0];
-	  ((Float*) corrThp_noether)[itime*GK_Nmoms*4*2 + imom*4*2 + dir*2 + 1] = reduction[imom*4*2 + dir*2 + 1];
-	}
+      for(int dir = 0 ; dir < 4 ; dir++){
+	((Float*) corrThp_noether)[itime*GK_Nmoms*4*2 + imom*4*2 + dir*2 + 0] = reduction[imom*4*2 + dir*2 + 0];
+	((Float*) corrThp_noether)[itime*GK_Nmoms*4*2 + imom*4*2 + dir*2 + 1] = reduction[imom*4*2 + dir*2 + 1];
+      }
     //---------------------------------------------------------------
 
     //- One-derivative operators
@@ -1648,11 +1646,10 @@ static void fixSinkContractions_kernel(void* corrThp_local,
 	  }
     
       for(int imom = 0 ; imom < GK_Nmoms ; imom++)
-	for(int iop = 0 ; iop < 16 ; iop++)
-	  for(int i =0 ; i < gridDim.x ; i++){
-	    ((Float*) corrThp_oneD)[itime*GK_Nmoms*4*16*2 + imom*4*16*2 + dir*16*2 + iop*2 + 0] = reduction[imom*16*2 + iop*2 + 0];
-	    ((Float*) corrThp_oneD)[itime*GK_Nmoms*4*16*2 + imom*4*16*2 + dir*16*2 + iop*2 + 1] = reduction[imom*16*2 + iop*2 + 1];
-	  }
+	for(int iop = 0 ; iop < 16 ; iop++){
+	  ((Float*) corrThp_oneD)[itime*GK_Nmoms*4*16*2 + imom*4*16*2 + dir*16*2 + iop*2 + 0] = reduction[imom*16*2 + iop*2 + 0];
+	  ((Float*) corrThp_oneD)[itime*GK_Nmoms*4*16*2 + imom*4*16*2 + dir*16*2 + iop*2 + 1] = reduction[imom*16*2 + iop*2 + 1];
+	}
     }//-dir
     //---------------------------------------------------------------
 
