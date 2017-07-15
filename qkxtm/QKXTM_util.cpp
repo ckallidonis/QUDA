@@ -1603,6 +1603,7 @@ char proj_list_file[257] = "default";
 char *corr_write_space = "MOMENTUM";
 
 bool HighMomForm = true;
+bool RUN_THRP_TWOD = true;
 
 //-C.K. loop Parameters
 int Nstoch = 100;     // Number of stochastic noise vectors
@@ -1827,6 +1828,7 @@ void usage(char** argv )
   printf("    --proj-list                               # path to a file-list of projectors for 3pt function (default: only G4)\n");
   printf("    --corr-write-space                        # write the correlation functions in position space (MOMENTUM/POSITION, default: MOMENTUM)\n");
   printf("    --HighMomForm                             # whether to write the correlation functions in HighMomentum Format (only for HDF5) (yes/no, default: yes)\n");
+  printf("    --thrp-twoD                               # whether to perform the two-derivative contractions for the three-point functions (yes/no, default: yes)\n");
 
   //-C.K. Loop INPUT
   printf("    --Q-sqMax-loop                            # The maximum Q^2 momentum (loop) (default 0)\n");
@@ -3063,6 +3065,18 @@ int process_command_line_option(int argc, char** argv, int* idx)
     }
     if( strcmp(argv[i+1],"yes")==0 || strcmp(argv[i+1],"YES")==0 ) HighMomForm = true;
     else if ( strcmp(argv[i+1],"no")==0 || strcmp(argv[i+1],"NO")==0 ) HighMomForm = false;
+    else usage(argv);
+    i++;
+    ret = 0;
+    goto out;
+  }
+
+  if( strcmp(argv[i], "--thrp-twoD") ==0){
+    if(i+1 >= argc){
+      usage(argv);
+    }
+    if( strcmp(argv[i+1],"yes")==0 || strcmp(argv[i+1],"YES")==0 ) RUN_THRP_TWOD = true;
+    else if ( strcmp(argv[i+1],"no")==0 || strcmp(argv[i+1],"NO")==0 ) RUN_THRP_TWOD = false;
     else usage(argv);
     i++;
     ret = 0;

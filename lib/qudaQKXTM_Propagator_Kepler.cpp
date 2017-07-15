@@ -46,6 +46,12 @@ extern int GK_nProc[QUDAQKXTM_DIM];
 extern int GK_plusGhost[QUDAQKXTM_DIM];
 extern int GK_minusGhost[QUDAQKXTM_DIM];
 extern int GK_surface3D[QUDAQKXTM_DIM];
+extern int GK_CSurf2D[QUDAQKXTM_DIM][QUDAQKXTM_DIM];
+extern int GK_SurfDir[QUDAQKXTM_DIM][QUDAQKXTM_DIM][2];
+extern int GK_procPP[QUDAQKXTM_DIM][QUDAQKXTM_DIM];
+extern int GK_procPM[QUDAQKXTM_DIM][QUDAQKXTM_DIM];
+extern int GK_procMP[QUDAQKXTM_DIM][QUDAQKXTM_DIM];
+extern int GK_procMM[QUDAQKXTM_DIM][QUDAQKXTM_DIM];
 extern bool GK_init_qudaQKXTM_Kepler_flag;
 extern int GK_Nsources;
 extern int GK_sourcePosition[MAX_NSOURCES][QUDAQKXTM_DIM];
@@ -85,6 +91,16 @@ absorbVectorToHost(QKXTM_Vector_Kepler<Float> &vec, int nu, int c2){
     }
   checkCudaError();
 }
+
+
+//-C.K. Additional function to copy device elements back to host elements
+template<typename Float>
+void QKXTM_Propagator_Kepler<Float>::unloadPropagator(){
+  cudaMemcpy(CC::h_elem, CC::d_elem, CC::bytes_total_length,
+             cudaMemcpyDeviceToHost);
+  checkCudaError();
+}
+
  
 template <typename Float>
 void QKXTM_Propagator_Kepler<Float>::absorbVectorToDevice(QKXTM_Vector_Kepler<Float> &vec, int nu, int c2){
@@ -570,4 +586,350 @@ void QKXTM_Propagator3D_Kepler<Float>::broadcast(int tsink){
   cudaMemcpy(CC::d_elem , CC::h_elem , CC::bytes_total_length, 
 	     cudaMemcpyHostToDevice);
   checkCudaError();
+}
+
+
+//-C.K. Allocate the host corner boundary buffers
+template<typename Float>
+void QKXTM_Propagator_Kepler<Float>::initHostCornerBufs(){
+
+  size_t buflgh = sizeof(Float)*GK_nSpin*GK_nColor*GK_nSpin*GK_nColor*2;
+
+  //-C.K. This is done on purpose, we want these to be empty!
+  for(int mu=0;mu<GK_nDim;mu++){
+    h_crnBufPP[mu][mu] = NULL;
+    h_crnBufPM[mu][mu] = NULL;
+    h_crnBufMP[mu][mu] = NULL;
+    h_crnBufMM[mu][mu] = NULL;
+  }
+  
+  double bytesUsed = 0;
+  for(int mu=0;mu<GK_nDim;mu++){
+    for(int nu=mu+1;nu<GK_nDim;nu++){
+      h_crnBufPP[mu][nu] = (Float*) malloc(buflgh*GK_CSurf2D[mu][nu]);
+      h_crnBufPM[mu][nu] = (Float*) malloc(buflgh*GK_CSurf2D[mu][nu]);
+      h_crnBufMP[mu][nu] = (Float*) malloc(buflgh*GK_CSurf2D[mu][nu]);
+      h_crnBufMM[mu][nu] = (Float*) malloc(buflgh*GK_CSurf2D[mu][nu]);
+
+      if(h_crnBufPP[mu][nu] == NULL) errorQuda("Cannot allocate Gauge field corner-buffer PP[%d][%d]\n",mu,nu);
+      if(h_crnBufPM[mu][nu] == NULL) errorQuda("Cannot allocate Gauge field corner-buffer PM[%d][%d]\n",mu,nu);
+      if(h_crnBufMP[mu][nu] == NULL) errorQuda("Cannot allocate Gauge field corner-buffer MP[%d][%d]\n",mu,nu);
+      if(h_crnBufMM[mu][nu] == NULL) errorQuda("Cannot allocate Gauge field corner-buffer MM[%d][%d]\n",mu,nu);
+
+      h_crnBufPP[nu][mu] = h_crnBufPP[mu][nu]; // These should contain
+      h_crnBufPM[nu][mu] = h_crnBufMP[mu][nu]; // the same information
+      h_crnBufMP[nu][mu] = h_crnBufPM[mu][nu]; // No need to
+      h_crnBufMM[nu][mu] = h_crnBufMM[mu][nu]; // allocate again
+
+      bytesUsed += 4 * buflgh*GK_CSurf2D[mu][nu];
+    }
+  }
+
+  zeroHostCornerBufs();
+  printfQuda("Host corner buffers for propagator initialized properly! Memory used: %6.1lf MB\n",bytesUsed/(1024*1024));
+}
+
+
+//-C.K. Allocate the device corner boundary buffers
+template<typename Float>
+void QKXTM_Propagator_Kepler<Float>::initDeviceCornerBufs(){
+
+  size_t buflgh = sizeof(Float)*GK_nSpin*GK_nColor*GK_nSpin*GK_nColor*2;
+
+  //-C.K. This is done on purpose, we want these to be empty!
+  for(int mu=0;mu<GK_nDim;mu++){
+    d_crnBufPP[mu][mu] = NULL;
+    d_crnBufPM[mu][mu] = NULL;
+    d_crnBufMP[mu][mu] = NULL;
+    d_crnBufMM[mu][mu] = NULL;
+  }
+  
+  double bytesUsed = 0;
+  for(int mu=0;mu<GK_nDim;mu++){
+    for(int nu=mu+1;nu<GK_nDim;nu++){
+      cudaMalloc((void**)&(d_crnBufPP[mu][nu]),buflgh*GK_CSurf2D[mu][nu]);
+      checkCudaError();
+      cudaMalloc((void**)&(d_crnBufPM[mu][nu]),buflgh*GK_CSurf2D[mu][nu]);
+      checkCudaError();
+      cudaMalloc((void**)&(d_crnBufMP[mu][nu]),buflgh*GK_CSurf2D[mu][nu]);
+      checkCudaError();
+      cudaMalloc((void**)&(d_crnBufMM[mu][nu]),buflgh*GK_CSurf2D[mu][nu]);
+      checkCudaError();
+      
+      d_crnBufPP[nu][mu] = d_crnBufPP[mu][nu]; // These should contain
+      d_crnBufPM[nu][mu] = d_crnBufMP[mu][nu]; // the same information
+      d_crnBufMP[nu][mu] = d_crnBufPM[mu][nu]; // No need to
+      d_crnBufMM[nu][mu] = d_crnBufMM[mu][nu]; // allocate again
+
+      bytesUsed += 4 * buflgh*GK_CSurf2D[mu][nu];
+    }
+  }
+
+  zeroDeviceCornerBufs();
+  printfQuda("Device corner buffers for propagator initialized properly! Memory used: %6.1lf MB\n",bytesUsed/(1024*1024));  
+}
+
+//-C.K. Set the host corner boundary buffers to zero
+template<typename Float>
+void QKXTM_Propagator_Kepler<Float>::zeroHostCornerBufs(){
+
+  size_t buflgh = sizeof(Float)*GK_nSpin*GK_nColor*GK_nSpin*GK_nColor*2;
+
+  for(int mu=0;mu<GK_nDim;mu++){
+    for(int nu=mu+1;nu<GK_nDim;nu++){
+      memset(h_crnBufPP[mu][nu], 0, buflgh*GK_CSurf2D[mu][nu]);
+      memset(h_crnBufPM[mu][nu], 0, buflgh*GK_CSurf2D[mu][nu]);
+      memset(h_crnBufMP[mu][nu], 0, buflgh*GK_CSurf2D[mu][nu]);
+      memset(h_crnBufMM[mu][nu], 0, buflgh*GK_CSurf2D[mu][nu]);
+    }
+  }
+}
+
+//-C.K. Set the device corner boundary buffers to zero
+template<typename Float>
+void QKXTM_Propagator_Kepler<Float>::zeroDeviceCornerBufs(){
+
+  size_t buflgh = sizeof(Float)*GK_nSpin*GK_nColor*GK_nSpin*GK_nColor*2;
+
+  for(int mu=0;mu<GK_nDim;mu++){
+    for(int nu=mu+1;nu<GK_nDim;nu++){
+      cudaMemset(d_crnBufPP[mu][nu], 0, buflgh*GK_CSurf2D[mu][nu]);
+      cudaMemset(d_crnBufPM[mu][nu], 0, buflgh*GK_CSurf2D[mu][nu]);
+      cudaMemset(d_crnBufMP[mu][nu], 0, buflgh*GK_CSurf2D[mu][nu]);
+      cudaMemset(d_crnBufMM[mu][nu], 0, buflgh*GK_CSurf2D[mu][nu]);
+    }
+  }
+  checkCudaError();
+}
+
+//-C.K. Free the host corner boundary buffers
+template<typename Float>
+void QKXTM_Propagator_Kepler<Float>::freeHostCornerBufs(){
+
+  for(int mu=0;mu<GK_nDim;mu++){
+    for(int nu=mu+1;nu<GK_nDim;nu++){
+      free(h_crnBufPP[mu][nu]); h_crnBufPP[mu][nu] = NULL;
+      free(h_crnBufPM[mu][nu]); h_crnBufPM[mu][nu] = NULL;
+      free(h_crnBufMP[mu][nu]); h_crnBufMP[mu][nu] = NULL;
+      free(h_crnBufMM[mu][nu]); h_crnBufMM[mu][nu] = NULL;
+    }
+  }
+
+}
+
+//-C.K. Free the device corner boundary buffers
+template<typename Float>
+void QKXTM_Propagator_Kepler<Float>::freeDeviceCornerBufs(){
+
+  for(int mu=0;mu<GK_nDim;mu++){
+    for(int nu=mu+1;nu<GK_nDim;nu++){
+      cudaFree(d_crnBufPP[mu][nu]);
+      cudaFree(d_crnBufPM[mu][nu]);
+      cudaFree(d_crnBufMP[mu][nu]);
+      cudaFree(d_crnBufMM[mu][nu]);
+      checkCudaError();
+
+      d_crnBufPP[mu][nu] = NULL;
+      d_crnBufPM[mu][nu] = NULL;
+      d_crnBufMP[mu][nu] = NULL;
+      d_crnBufMM[mu][nu] = NULL;
+    }
+  }
+
+}
+
+
+//-C.K. Communicate corner buffers on host (with MPI)
+template<typename Float>
+void QKXTM_Propagator_Kepler<Float>::commCornersHost(){
+
+  int Nc = GK_nColor;
+  int Ns = GK_nSpin;
+  int Nd = GK_nDim;
+  int buflgh = Ns*Ns*Nc*Nc*2;
+  int dr[2],Lgh[2];
+  int vecPP[Nd],vecPM[Nd],vecMP[Nd],vecMM[Nd];
+  int Lv = GK_localVolume;
+
+  Float *sendBufPP,*sendBufPM,*sendBufMP,*sendBufMM;
+
+  MPI_Datatype DATATYPE = -1;
+  if( typeid(Float) == typeid(float))  DATATYPE = MPI_FLOAT;
+  if( typeid(Float) == typeid(double)) DATATYPE = MPI_DOUBLE;
+
+  for(int mu=0;mu<Nd;mu++){
+    for(int nu=mu+1;nu<Nd;nu++){
+      double t1 = MPI_Wtime();
+      vecPP[mu] = GK_localL[mu]-1;
+      vecPP[nu] = GK_localL[nu]-1;
+      vecPM[mu] = GK_localL[mu]-1;
+      vecPM[nu] = 0;
+      vecMP[mu] = 0;
+      vecMP[nu] = GK_localL[nu]-1;
+      vecMM[mu] = 0;
+      vecMM[nu] = 0;
+      
+      for(int i=0;i<2;i++){
+        dr[i]  = GK_SurfDir[mu][nu][i];  //- Determine which
+        Lgh[i] = GK_localL[dr[i]];       //- directions will run!
+      }
+
+      sendBufPP = (Float*) malloc(sizeof(Float)*buflgh*GK_CSurf2D[mu][nu]);
+      sendBufPM = (Float*) malloc(sizeof(Float)*buflgh*GK_CSurf2D[mu][nu]);
+      sendBufMP = (Float*) malloc(sizeof(Float)*buflgh*GK_CSurf2D[mu][nu]);
+      sendBufMM = (Float*) malloc(sizeof(Float)*buflgh*GK_CSurf2D[mu][nu]);
+      if(sendBufPP == NULL || sendBufPM == NULL || sendBufMP == NULL || sendBufMM == NULL)
+        errorQuda("Gauge comms: Cannot allocate temporary corner buffers for mu = %d, nu = %d. Exiting.\n",mu,nu);
+
+      for(int d0=0;d0<Lgh[0];d0++){    //-Loop over
+        for(int d1=0;d1<Lgh[1];d1++){  //-the running directions
+          vecPP[dr[0]] = d0;
+          vecPP[dr[1]] = d1;
+          vecPM[dr[0]] = d0;
+          vecPM[dr[1]] = d1;
+          vecMP[dr[0]] = d0;
+          vecMP[dr[1]] = d1;
+          vecMM[dr[0]] = d0;
+          vecMM[dr[1]] = d1;
+          int ivPP = LEXIC(vecPP[3],vecPP[2],vecPP[1],vecPP[0],GK_localL);
+          int ivPM = LEXIC(vecPM[3],vecPM[2],vecPM[1],vecPM[0],GK_localL);
+          int ivMP = LEXIC(vecMP[3],vecMP[2],vecMP[1],vecMP[0],GK_localL);
+          int ivMM = LEXIC(vecMM[3],vecMM[2],vecMM[1],vecMM[0],GK_localL);
+
+          for(int al=0;al<Ns;al++){
+	    for(int be=0;be<Ns;be++){
+	      for(int c1=0;c1<Nc;c1++){
+		for(int c2=0;c2<Nc;c2++){
+		  for(int im=0;im<2;im++){
+		    sendBufPP[im + 2*d0 + 2*Lgh[0]*d1 + 2*Lgh[0]*Lgh[1]*c2 + 2*Lgh[0]*Lgh[1]*Nc*c1 + 2*Lgh[0]*Lgh[1]*Nc*Nc*be + 2*Lgh[0]*Lgh[1]*Nc*Nc*Ns*al] = 
+		      CC::h_elem[im + 2*ivPP + 2*Lv*c2 + 2*Lv*Nc*c1 + 2*Lv*Nc*Nc*be + 2*Lv*Nc*Nc*Ns*al];
+		    sendBufPM[im + 2*d0 + 2*Lgh[0]*d1 + 2*Lgh[0]*Lgh[1]*c2 + 2*Lgh[0]*Lgh[1]*Nc*c1 + 2*Lgh[0]*Lgh[1]*Nc*Nc*be + 2*Lgh[0]*Lgh[1]*Nc*Nc*Ns*al] = 
+		      CC::h_elem[im + 2*ivPM + 2*Lv*c2 + 2*Lv*Nc*c1 + 2*Lv*Nc*Nc*be + 2*Lv*Nc*Nc*Ns*al];
+		    sendBufMP[im + 2*d0 + 2*Lgh[0]*d1 + 2*Lgh[0]*Lgh[1]*c2 + 2*Lgh[0]*Lgh[1]*Nc*c1 + 2*Lgh[0]*Lgh[1]*Nc*Nc*be + 2*Lgh[0]*Lgh[1]*Nc*Nc*Ns*al] = 
+		      CC::h_elem[im + 2*ivMP + 2*Lv*c2 + 2*Lv*Nc*c1 + 2*Lv*Nc*Nc*be + 2*Lv*Nc*Nc*Ns*al];
+		    sendBufMM[im + 2*d0 + 2*Lgh[0]*d1 + 2*Lgh[0]*Lgh[1]*c2 + 2*Lgh[0]*Lgh[1]*Nc*c1 + 2*Lgh[0]*Lgh[1]*Nc*Nc*be + 2*Lgh[0]*Lgh[1]*Nc*Nc*Ns*al] = 
+		      CC::h_elem[im + 2*ivMM + 2*Lv*c2 + 2*Lv*Nc*c1 + 2*Lv*Nc*Nc*be + 2*Lv*Nc*Nc*Ns*al];
+		  }}}}
+	  }//-al
+        }//-d1
+      }//-d0
+      double t2 = MPI_Wtime();
+      printfQuda("Prop comms: Corner send-buffers filled, for mu = %d, nu = %d in %f sec\n",mu, nu, t2-t1);
+
+
+      //- Communicate plus-plus corners
+      int statPP =  MPI_Sendrecv((void*) sendBufPP , buflgh*GK_CSurf2D[mu][nu], DATATYPE, GK_procPP[mu][nu], 0,
+                                 h_crnBufMM[mu][nu], buflgh*GK_CSurf2D[mu][nu], DATATYPE, GK_procMM[mu][nu], 0,
+                                 MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+      if(statPP!=MPI_SUCCESS)
+        errorQuda("Prop comms: Communication plus-plus did not complete successfully for mu = %d, nu = %d. Exiting.\n",mu,nu);
+      
+
+      //- Communicate minus-minus corners
+      int statMM =  MPI_Sendrecv((void*) sendBufMM , buflgh*GK_CSurf2D[mu][nu], DATATYPE, GK_procMM[mu][nu], 1,
+                                 h_crnBufPP[mu][nu], buflgh*GK_CSurf2D[mu][nu], DATATYPE, GK_procPP[mu][nu], 1,
+                                 MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+      if(statMM!=MPI_SUCCESS)
+        errorQuda("Prop comms: Communication minus-minus did not complete successfully for mu = %d, nu = %d. Exiting.\n",mu,nu);
+
+
+      //- Communicate plus-minus corners
+      int statPM =  MPI_Sendrecv((void*) sendBufPM , buflgh*GK_CSurf2D[mu][nu], DATATYPE, GK_procPM[mu][nu], 2,
+                                 h_crnBufMP[mu][nu], buflgh*GK_CSurf2D[mu][nu], DATATYPE, GK_procMP[mu][nu], 2,
+                                 MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+      if(statPM!=MPI_SUCCESS)
+        errorQuda("Prop comms: Communication plus-minus did not complete successfully for mu = %d, nu = %d. Exiting.\n",mu,nu);
+      
+
+      //- Communicate minus-plus corners
+      int statMP =  MPI_Sendrecv((void*) sendBufMP , buflgh*GK_CSurf2D[mu][nu], DATATYPE, GK_procMP[mu][nu], 3,
+                                 h_crnBufPM[mu][nu], buflgh*GK_CSurf2D[mu][nu], DATATYPE, GK_procPM[mu][nu], 3,
+                                 MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+      if(statMP!=MPI_SUCCESS)
+        errorQuda("Prop comms: Communication minus-plus did not complete successfully for mu = %d, nu = %d. Exiting.\n",mu,nu);
+      
+      free(sendBufPP);
+      free(sendBufPM);
+      free(sendBufMP);
+      free(sendBufMM);
+
+      double t3 = MPI_Wtime();
+      printfQuda("Prop comms: Communication between host corner buffers completed successfully in %f sec.\n",t3-t1);
+    }//-nu
+  }//-mu
+
+}
+
+
+//-C.K. Copy host corner buffers to Device
+template<typename Float>
+void QKXTM_Propagator_Kepler<Float>::copyHostCornersToDevice(){
+
+  size_t buflgh = sizeof(Float)*GK_nSpin*GK_nColor*GK_nSpin*GK_nColor*2;
+  int Nd = GK_nDim;
+
+  double t1 = MPI_Wtime();
+  for(int mu=0;mu<Nd;mu++){
+    for(int nu=mu+1;nu<Nd;nu++){
+      cudaMemcpy(d_crnBufPP[mu][nu], h_crnBufPP[mu][nu],buflgh*GK_CSurf2D[mu][nu],cudaMemcpyHostToDevice);
+      checkCudaError();
+      cudaMemcpy(d_crnBufPM[mu][nu], h_crnBufPM[mu][nu],buflgh*GK_CSurf2D[mu][nu],cudaMemcpyHostToDevice);
+      checkCudaError();
+      cudaMemcpy(d_crnBufMP[mu][nu], h_crnBufMP[mu][nu],buflgh*GK_CSurf2D[mu][nu],cudaMemcpyHostToDevice);
+      checkCudaError();
+      cudaMemcpy(d_crnBufMM[mu][nu], h_crnBufMM[mu][nu],buflgh*GK_CSurf2D[mu][nu],cudaMemcpyHostToDevice);
+      checkCudaError();
+    }
+  }
+
+  double t2 = MPI_Wtime();
+  printfQuda("Prop comms: Host corner buffers copied to device successfully in %f sec.\n",t2-t1);
+}
+
+
+//-C.K.Function to create texture objects from the corner buffers
+template<typename Float>
+void QKXTM_Propagator_Kepler<Float>::createCornerTexObject(cudaTextureObject_t *tex, int mu, int nu, int dd){
+  cudaChannelFormatDesc desc;
+  memset(&desc, 0, sizeof(cudaChannelFormatDesc));
+  int precision = CC::Precision();
+  if(precision == 4) desc.f = cudaChannelFormatKindFloat;
+  else desc.f = cudaChannelFormatKindSigned;
+
+  if(precision == 4){
+    desc.x = 8*precision;
+    desc.y = 8*precision;
+    desc.z = 0;
+    desc.w = 0;
+  }
+  else if(precision == 8){
+    desc.x = 8*precision/2;
+    desc.y = 8*precision/2;
+    desc.z = 8*precision/2;
+    desc.w = 8*precision/2;
+  }
+
+  size_t buflgh = sizeof(Float)*GK_nSpin*GK_nColor*GK_nSpin*GK_nColor*2*GK_CSurf2D[mu][nu];
+
+  cudaResourceDesc resDesc;
+  memset(&resDesc, 0, sizeof(resDesc));
+  resDesc.resType = cudaResourceTypeLinear;
+  if(dd==0) resDesc.res.linear.devPtr = d_crnBufPP[mu][nu];
+  if(dd==1) resDesc.res.linear.devPtr = d_crnBufPM[mu][nu];
+  if(dd==2) resDesc.res.linear.devPtr = d_crnBufMP[mu][nu];
+  if(dd==3) resDesc.res.linear.devPtr = d_crnBufMM[mu][nu];
+  resDesc.res.linear.desc = desc;
+  resDesc.res.linear.sizeInBytes = buflgh;
+
+  cudaTextureDesc texDesc;
+  memset(&texDesc, 0, sizeof(texDesc));
+  texDesc.readMode = cudaReadModeElementType;
+
+  cudaCreateTextureObject(tex, &resDesc, &texDesc, NULL);
+  checkCudaError();
+}
+
+template<typename Float>
+void QKXTM_Propagator_Kepler<Float>::destroyCornerTexObject(cudaTextureObject_t tex){
+  cudaDestroyTextureObject(tex);
 }

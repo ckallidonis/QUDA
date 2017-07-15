@@ -6063,6 +6063,7 @@ void calcMG_threepTwop_EvenOdd(void **gauge_APE, void **gauge,
   info.thrp_type[0] = "ultra_local";
   info.thrp_type[1] = "noether";
   info.thrp_type[2] = "oneD";
+  info.thrp_type[3] = "twoD";
 
   info.thrp_proj_type[0] = "G4";
   info.thrp_proj_type[1] = "G5G123";
@@ -6092,6 +6093,9 @@ void calcMG_threepTwop_EvenOdd(void **gauge_APE, void **gauge,
   info.meson_type[8] = "g3";
   info.meson_type[9] = "g4";
 
+
+  bool RUN_THRP_TWOD = info.RUN_THRP_TWOD; //-C.K. Define boolean for 2-der three-point functions
+
   printfQuda("\nThe total number of source-positions is %d\n",info.Nsources);
 
   int nRun3pt = 0;
@@ -6111,6 +6115,21 @@ void calcMG_threepTwop_EvenOdd(void **gauge_APE, void **gauge,
   }
   else errorQuda("%s: Check your option for running the three-point function! Exiting.\n", fname);
 
+  //-C.K. Define the total combinations for 2-derivative three-point functions
+  int Nthrp2D = 0;
+  if(RUN_THRP_TWOD) printfQuda("Will perform the three-point function for two-derivative operators for the following combinations:\n");
+  else printfQuda("Will NOT perform the three-point function for two-derivative operators\n");
+  for(int id1=0;id1<4;id1++){
+    for(int id2=0;id2<4;id2++){
+      if(id1==id2) continue;
+      else{
+	Nthrp2D++;
+	if(RUN_THRP_TWOD) printfQuda(" %d: mu = %d  nu = %d\n",Nthrp2D,id1,id2);
+      }
+
+    }
+  }
+  info.Nthrp2D = Nthrp2D;
 
   //-C.K. Determine whether to write the correlation functions in position/momentum space, and
   //- determine whether to write the correlation functions in High-Momenta Form
@@ -6118,16 +6137,20 @@ void calcMG_threepTwop_EvenOdd(void **gauge_APE, void **gauge,
   bool HighMomForm = info.HighMomForm;   
 
   printfQuda("\n");
-  if(CorrSpace==POSITION_SPACE && HighMomForm){
+  if( CorrSpace==POSITION_SPACE && HighMomForm){
     warningQuda("High-Momenta Form not applicable when writing in position-space! Switching to standard form...\n");
     HighMomForm = false;
   }
 
+  //-C.K. This holds for now, though infrastructure exists...
+  if(CorrSpace==POSITION_SPACE && RUN_THRP_TWOD) errorQuda("Cannot write two-derivative three-point functions in position-space! Exiting.\n");
+
   //-C.K. We do these to switches so that the run does not go wasted.
   //-C.K. (ASCII format can be obtained with another third-party program, if desired)
-  if( (CorrSpace==POSITION_SPACE || HighMomForm) && info.CorrFileFormat==ASCII_FORM ){
+  if( (CorrSpace==POSITION_SPACE || HighMomForm || RUN_THRP_TWOD) && info.CorrFileFormat==ASCII_FORM ){
     if(CorrSpace==POSITION_SPACE) warningQuda("ASCII format not supported for writing the correlation functions in position-space!\n");
     if(HighMomForm) warningQuda("ASCII format not supported for High-Momenta Form!\n");
+    if(RUN_THRP_TWOD) warningQuda("ASCII format not supported for 2-derivative three-point functions!\n");
     printfQuda("Switching to HDF5 format...\n");
     info.CorrFileFormat = HDF5_FORM;
   }
@@ -6158,6 +6181,12 @@ void calcMG_threepTwop_EvenOdd(void **gauge_APE, void **gauge,
      corrThp_noether == NULL || 
      corrThp_oneD == NULL) 
     errorQuda("%s: Cannot allocate memory for Three-point function write Buffers.", fname);
+
+  double *corrThp_twoD = NULL;
+  if(RUN_THRP_TWOD){
+    corrThp_twoD = (double*)calloc(alloc_size*Nthrp2D*16*2,sizeof(double));
+    if(corrThp_twoD == NULL) errorQuda("%s: Cannot allocate memory for Two-derivative three-point function write Buffers.", fname);
+  }
   
   //-Two-point function
   double (*corrMesons)[2][N_MESONS] = 
@@ -6181,6 +6210,15 @@ void calcMG_threepTwop_EvenOdd(void **gauge_APE, void **gauge,
       (double*) malloc(2*16*alloc_size*2*info.Ntsink*NprojMax*sizeof(double));
   }   
 
+  double **Thrp_twoD_HDF5 = NULL;
+  if(RUN_THRP_TWOD){
+    Thrp_twoD_HDF5 = (double**) malloc(Nthrp2D*sizeof(double*));
+    for(int mu=0;mu<Nthrp2D;mu++){
+      Thrp_twoD_HDF5[mu] = (double*) malloc(2*16*alloc_size*2*info.Ntsink*NprojMax*sizeof(double));
+    }
+  }
+
+
   double *Twop_baryons_HDF5 = 
     (double*) malloc(2*16*alloc_size*2*N_BARYONS*sizeof(double));
   double *Twop_mesons_HDF5  = 
@@ -6202,6 +6240,14 @@ void calcMG_threepTwop_EvenOdd(void **gauge_APE, void **gauge,
       if( Thrp_oneD_HDF5[mu] == NULL ) 
 	errorQuda("%s: Cannot allocate memory for Thrp_oned_HDF5[%d].\n",fname,mu);      
       memset(Thrp_oneD_HDF5[mu], 0, 2*16*alloc_size*2*info.Ntsink*NprojMax*sizeof(double));
+    }
+
+    if(RUN_THRP_TWOD){
+      if( Thrp_twoD_HDF5 == NULL ) errorQuda("%s: Cannot allocate memory for Thrp_twoD_HDF5.\n",fname);
+      for(int mu=0;mu<Nthrp2D;mu++){
+	if( Thrp_twoD_HDF5[mu] == NULL ) errorQuda("%s: Cannot allocate memory for Thrp_twoD_HDF5[%d].\n",fname,mu);      
+	memset(Thrp_twoD_HDF5[mu], 0, 2*16*alloc_size*2*info.Ntsink*NprojMax*sizeof(double));
+      }
     }
     
     if( Twop_baryons_HDF5 == NULL ) 
@@ -6240,6 +6286,19 @@ void calcMG_threepTwop_EvenOdd(void **gauge_APE, void **gauge,
   QKXTM_Contraction_Kepler<float> *K_contract = 
     new QKXTM_Contraction_Kepler<float>();
 
+  //-C.K. Initialize the corner boundary buffers of the gauge field 
+  // and propagators if performing two-derivative three-point functions
+  if(RUN_THRP_TWOD){
+    K_gaugeContractions->initHostCornerBufs();
+    K_gaugeContractions->initDeviceCornerBufs();
+    K_prop_up->initHostCornerBufs();
+    K_prop_up->initDeviceCornerBufs();
+    K_prop_down->initHostCornerBufs();
+    K_prop_down->initDeviceCornerBufs();
+    K_seqProp->initHostCornerBufs();
+    K_seqProp->initDeviceCornerBufs();
+  }
+
   printfQuda("QKXTM memory allocation was successfull\n");
 
   //======================================================================//
@@ -6254,6 +6313,15 @@ void calcMG_threepTwop_EvenOdd(void **gauge_APE, void **gauge,
   K_gaugeContractions->loadGauge();
   printfQuda("Unsmeared:\n");
   K_gaugeContractions->calculatePlaq();
+
+
+  //- Communicate the gauge field (required only once)
+  //- Should be done AFTER calling packGauge !!
+  if(RUN_THRP_TWOD){
+    K_gaugeContractions->commCornersHost();
+    K_gaugeContractions->copyHostCornersToDevice();
+    K_gaugeContractions->freeHostCornerBufs();
+  }
   
   //Smeared gauge field used for source construction
   K_gaugeSmeared->packGauge(gauge_APE);
@@ -6720,14 +6788,14 @@ void calcMG_threepTwop_EvenOdd(void **gauge_APE, void **gauge,
 	    K_contract->contractFixSink(*K_seqProp, *K_prop_up, 
 					*K_gaugeContractions,
 					corrThp_local, corrThp_noether, 
-					corrThp_oneD, PID, NUCLEON, 1, 
-					isource, CorrSpace);
+					corrThp_oneD, corrThp_twoD, PID, NUCLEON, 1, 
+					isource, Nthrp2D, CorrSpace, RUN_THRP_TWOD);
 	  if(NUCLEON == NEUTRON) 
 	    K_contract->contractFixSink(*K_seqProp, *K_prop_down, 
 					*K_gaugeContractions, 
 					corrThp_local, corrThp_noether, 
-					corrThp_oneD, PID, NUCLEON, 1, 
-					isource, CorrSpace);
+					corrThp_oneD, corrThp_twoD, PID, NUCLEON, 1, 
+					isource, Nthrp2D, CorrSpace, RUN_THRP_TWOD);
 	  t2 = MPI_Wtime();
 	  printfQuda("TIME_REPORT - Three-point Contractions, flavor %s: %f sec\n",
 		     NUCLEON == NEUTRON ? "dn" : "up",t2-t1);
@@ -6751,19 +6819,26 @@ void calcMG_threepTwop_EvenOdd(void **gauge_APE, void **gauge,
 	    int thrp_sign = ( info.tsinkSource[its] + GK_sourcePosition[isource][3] ) >= GK_totalL[3] ? -1 : +1;
 	    
 	    K_contract->copyThrpToHDF5_Buf((void*)Thrp_local_HDF5, 
-					   (void*)corrThp_local, 0, 
+					   (void*)corrThp_local, 0, Nthrp2D,
 					   uOrd, its, info.Ntsink, proj, 
 					   thrp_sign, THRP_LOCAL, CorrSpace, HighMomForm);
 	    K_contract->copyThrpToHDF5_Buf((void*)Thrp_noether_HDF5, 
-					   (void*)corrThp_noether, 0, 
+					   (void*)corrThp_noether, 0, Nthrp2D,
 					   uOrd, its, info.Ntsink, proj, 
 					   thrp_sign, THRP_NOETHER, CorrSpace, HighMomForm);
 	    for(int mu = 0;mu<4;mu++)
 	      K_contract->copyThrpToHDF5_Buf((void*)Thrp_oneD_HDF5[mu],
-					     (void*)corrThp_oneD, mu, 
+					     (void*)corrThp_oneD, mu, Nthrp2D, 
 					     uOrd, its, info.Ntsink, proj, 
 					     thrp_sign, THRP_ONED, CorrSpace, HighMomForm);
-	    
+	    if(RUN_THRP_TWOD){
+	      for(int mu = 0;mu<Nthrp2D;mu++)
+		K_contract->copyThrpToHDF5_Buf((void*)Thrp_twoD_HDF5[mu],
+					       (void*)corrThp_twoD, mu, Nthrp2D,
+					       uOrd, its, info.Ntsink, proj, 
+					       thrp_sign, THRP_TWOD, CorrSpace, HighMomForm);
+	    }
+
 	    t2 = MPI_Wtime();
 	    printfQuda("TIME_REPORT - 3-point function for flavor %s copied to HDF5 write buffers in %f sec.\n", NUCLEON == NEUTRON ? "dn" : "up",t2-t1);
 	  }
@@ -6869,14 +6944,14 @@ void calcMG_threepTwop_EvenOdd(void **gauge_APE, void **gauge,
 					*K_prop_down, 
 					*K_gaugeContractions, 
 					corrThp_local, corrThp_noether, 
-					corrThp_oneD, PID, NUCLEON, 2, 
-					isource, CorrSpace);
+					corrThp_oneD, corrThp_twoD, PID, NUCLEON, 2, 
+					isource, Nthrp2D, CorrSpace, RUN_THRP_TWOD);
 	  if(NUCLEON == NEUTRON) 
 	    K_contract->contractFixSink(*K_seqProp, *K_prop_up, 
 					*K_gaugeContractions, 
 					corrThp_local, corrThp_noether, 
-					corrThp_oneD, PID, NUCLEON, 2, 
-					isource, CorrSpace);
+					corrThp_oneD, corrThp_twoD, PID, NUCLEON, 2, 
+					isource, Nthrp2D, CorrSpace, RUN_THRP_TWOD);
 	  t2 = MPI_Wtime();
 	  printfQuda("TIME_REPORT - Three-point Contractions, flavor %s: %f sec\n",NUCLEON == NEUTRON ? "up" : "dn",t2-t1);
 
@@ -6899,22 +6974,28 @@ void calcMG_threepTwop_EvenOdd(void **gauge_APE, void **gauge,
 	    int thrp_sign = (info.tsinkSource[its] + GK_sourcePosition[isource][3] ) >= GK_totalL[3] ? -1 : +1;
 
 	    K_contract->copyThrpToHDF5_Buf((void*)Thrp_local_HDF5, 
-					   (void*)corrThp_local, 0, 
+					   (void*)corrThp_local, 0, Nthrp2D, 
 					   uOrd, its, info.Ntsink, 
 					   proj, thrp_sign, THRP_LOCAL, 
 					   CorrSpace, HighMomForm);
 	    K_contract->copyThrpToHDF5_Buf((void*)Thrp_noether_HDF5, 
-					   (void*)corrThp_noether, 0, 
+					   (void*)corrThp_noether, 0, Nthrp2D,
 					   uOrd, its, info.Ntsink, 
 					   proj, thrp_sign, THRP_NOETHER, 
 					   CorrSpace, HighMomForm);
 	    for(int mu = 0;mu<4;mu++)
 	      K_contract->copyThrpToHDF5_Buf((void*)Thrp_oneD_HDF5[mu], 
-					     (void*)corrThp_oneD,mu, 
+					     (void*)corrThp_oneD, mu, Nthrp2D, 
 					     uOrd, its, info.Ntsink, 
 					     proj, thrp_sign, THRP_ONED, 
 					     CorrSpace, HighMomForm);
-	    
+	    if(RUN_THRP_TWOD){
+	      for(int mu = 0;mu<Nthrp2D;mu++)
+		K_contract->copyThrpToHDF5_Buf((void*)Thrp_twoD_HDF5[mu],
+					       (void*)corrThp_twoD, mu, Nthrp2D, 
+					       uOrd, its, info.Ntsink, proj, 
+					       thrp_sign, THRP_TWOD, CorrSpace, HighMomForm);
+	    }	    
 	    t2 = MPI_Wtime();
 	    printfQuda("TIME_REPORT - 3-point function for flavor %s copied to HDF5 write buffers in %f sec.\n", 
 		       NUCLEON == NEUTRON ? "up" : "dn",t2-t1);
@@ -6941,10 +7022,11 @@ void calcMG_threepTwop_EvenOdd(void **gauge_APE, void **gauge,
 	printfQuda("\nThe three-point function HDF5 filename is: %s\n",
 		   filename_threep_base);
 	
-	K_contract->writeThrpHDF5((void*) Thrp_local_HDF5, 
-				  (void*) Thrp_noether_HDF5, 
-				  (void**)Thrp_oneD_HDF5, 
-				  filename_threep_base, info, 
+	K_contract->writeThrpHDF5((void*) Thrp_local_HDF5,
+				  (void*) Thrp_noether_HDF5,
+				  (void**)Thrp_oneD_HDF5,
+				  (void**)Thrp_twoD_HDF5,
+				  filename_threep_base, info,
 				  isource, NUCLEON);
 	
 	t2 = MPI_Wtime();
@@ -7045,6 +7127,18 @@ void calcMG_threepTwop_EvenOdd(void **gauge_APE, void **gauge,
   free(corrMesons);
   free(corrBaryons);
 
+  if(RUN_THRP_TWOD){
+    free(corrThp_twoD);
+
+    K_gaugeContractions->freeDeviceCornerBufs();
+    K_prop_up->freeHostCornerBufs();
+    K_prop_up->freeDeviceCornerBufs();
+    K_prop_down->freeHostCornerBufs();
+    K_prop_down->freeDeviceCornerBufs();
+    K_seqProp->freeHostCornerBufs();
+    K_seqProp->freeDeviceCornerBufs();
+  }
+
   if( CorrFileFormat==HDF5_FORM ){
     free(Thrp_local_HDF5);
     free(Thrp_noether_HDF5);
@@ -7052,6 +7146,11 @@ void calcMG_threepTwop_EvenOdd(void **gauge_APE, void **gauge,
     free(Thrp_oneD_HDF5);
     free(Twop_baryons_HDF5);
     free(Twop_mesons_HDF5);
+
+    if(RUN_THRP_TWOD){
+      for(int mu=0;mu<Nthrp2D;mu++) free(Thrp_twoD_HDF5[mu]);
+      free(Thrp_twoD_HDF5);
+    }
   }
 
   free(input_vector);

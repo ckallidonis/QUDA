@@ -1695,6 +1695,7 @@ void QKXTM_Contraction_Kepler<Float>::
 writeThrpHDF5(void *Thrp_local_HDF5, 
 	      void *Thrp_noether_HDF5, 
 	      void **Thrp_oneD_HDF5, 
+	      void **Thrp_twoD_HDF5, 
 	      char *filename, 
 	      qudaQKXTMinfo_Kepler info, 
 	      int isource, 
@@ -1702,10 +1703,10 @@ writeThrpHDF5(void *Thrp_local_HDF5,
 
   if(info.CorrSpace==MOMENTUM_SPACE){
     if(info.HighMomForm){
-      writeThrpHDF5_MomSpace_HighMomForm((void*) Thrp_local_HDF5, (void*) Thrp_noether_HDF5, (void**)Thrp_oneD_HDF5, filename, info, isource, NUCLEON);
+      writeThrpHDF5_MomSpace_HighMomForm((void*) Thrp_local_HDF5, (void*) Thrp_noether_HDF5, (void**)Thrp_oneD_HDF5, (void**)Thrp_twoD_HDF5, filename, info, isource, NUCLEON);
     }
     else{
-      writeThrpHDF5_MomSpace((void*) Thrp_local_HDF5, (void*) Thrp_noether_HDF5, (void**)Thrp_oneD_HDF5, filename, info, isource, NUCLEON);
+      writeThrpHDF5_MomSpace((void*) Thrp_local_HDF5, (void*) Thrp_noether_HDF5, (void**)Thrp_oneD_HDF5, (void**)Thrp_twoD_HDF5, filename, info, isource, NUCLEON);
     }
   }
   else if(info.CorrSpace==POSITION_SPACE) writeThrpHDF5_PosSpace((void*) Thrp_local_HDF5, (void*) Thrp_noether_HDF5, (void**)Thrp_oneD_HDF5, filename, info, isource, NUCLEON);
@@ -1992,6 +1993,7 @@ void QKXTM_Contraction_Kepler<Float>::
 writeThrpHDF5_MomSpace(void *Thrp_local_HDF5, 
 		       void *Thrp_noether_HDF5, 
 		       void **Thrp_oneD_HDF5, 
+		       void **Thrp_twoD_HDF5, 
 		       char *filename, 
 		       qudaQKXTMinfo_Kepler info, 
 		       int isource, 
@@ -2106,16 +2108,18 @@ writeThrpHDF5_MomSpace(void *Thrp_local_HDF5,
 	  group5_id = H5Gcreate(group4_id, group5_tag, H5P_DEFAULT, 
 				H5P_DEFAULT, H5P_DEFAULT);
 	
-	  for(int thrp_int=0;thrp_int<3;thrp_int++){
+	  for(int thrp_int=0;thrp_int<4;thrp_int++){
 	    THRP_TYPE type = (THRP_TYPE) thrp_int;
 
 	    char *group6_tag;
 	    asprintf(&group6_tag,"%s", info.thrp_type[thrp_int]);
-	    group6_id = H5Gcreate(group5_id, group6_tag, H5P_DEFAULT, 
-				  H5P_DEFAULT, H5P_DEFAULT);
-	  
+	    if( (type!=THRP_TWOD) || (type==THRP_TWOD && info.RUN_THRP_TWOD) ){
+	      group6_id = H5Gcreate(group5_id, group6_tag, H5P_DEFAULT, 
+				    H5P_DEFAULT, H5P_DEFAULT);
+	    }
+
 	    //-Determine the global dimensions
-	    if(type==THRP_LOCAL || type==THRP_ONED) Mel = 16;
+	    if(type==THRP_LOCAL || type==THRP_ONED || type==THRP_TWOD) Mel = 16;
 	    else if (type==THRP_NOETHER) Mel = 4;
 	    else errorQuda("writeThrpHDF5_MomSpace: Undefined three-point function type.\n");
 	    dims[0] = tsink+1;
@@ -2150,9 +2154,12 @@ writeThrpHDF5_MomSpace(void *Thrp_local_HDF5,
 		       GK_moms[imom][0],
 		       GK_moms[imom][1],
 		       GK_moms[imom][2]);
-	      group7_id = H5Gcreate(group6_id, group7_tag, H5P_DEFAULT, 
-				    H5P_DEFAULT, H5P_DEFAULT);
-	    
+
+	      if( (type!=THRP_TWOD) || (type==THRP_TWOD && info.RUN_THRP_TWOD) ){
+		group7_id = H5Gcreate(group6_id, group7_tag, H5P_DEFAULT, 
+				      H5P_DEFAULT, H5P_DEFAULT);
+	      }
+
 	      if(type==THRP_ONED){
 		for(int mu=0;mu<4;mu++){
 		  char *group8_tag;
@@ -2187,7 +2194,46 @@ writeThrpHDF5_MomSpace(void *Thrp_local_HDF5,
 		  H5Gclose(group8_id);
 		}//-mu	      
 	      }//-if
-	      else{
+	      else if(type==THRP_TWOD && info.RUN_THRP_TWOD){
+		int didx = 0;
+		for(int mu=0;mu<4;mu++){
+		  for(int nu=0;nu<4;nu++){
+		    if(mu==nu) continue;
+		    char *group8_tag;
+		    asprintf(&group8_tag,"dir_%02d_%02d",mu,nu);
+		    group8_id = H5Gcreate(group7_id, group8_tag, H5P_DEFAULT, 
+					  H5P_DEFAULT, H5P_DEFAULT);
+		    
+		    hid_t filespace  = H5Screate_simple(3, dims, NULL);
+		    hid_t dataset_id = H5Dcreate(group8_id, "threep", 
+						 DATATYPE_H5, filespace, 
+						 H5P_DEFAULT, H5P_DEFAULT, 
+						 H5P_DEFAULT);
+		    hid_t subspace   = H5Screate_simple(3, ldims, NULL);
+		    filespace = H5Dget_space(dataset_id);
+		    H5Sselect_hyperslab(filespace, H5S_SELECT_SET, start, 
+					NULL, ldims, NULL);
+		    hid_t plist_id = H5Pcreate(H5P_DATASET_XFER);
+		    H5Pset_dxpl_mpio(plist_id, H5FD_MPIO_COLLECTIVE);
+		    
+		    if(GK_timeRank==src_rank) writeThrpBuf = &(((Float*)Thrp_twoD_HDF5[didx])[2*Mel*w + 2*Mel*Lt*imom + 2*Mel*Lt*GK_Nmoms*part + 2*Mel*Lt*GK_Nmoms*2*its + 2*Mel*Lt*GK_Nmoms*2*Nsink*ipr]);
+		    else writeThrpBuf = &(((Float*)Thrp_twoD_HDF5[didx])[2*Mel*Lt*imom + 2*Mel*Lt*GK_Nmoms*part + 2*Mel*Lt*GK_Nmoms*2*its + 2*Mel*Lt*GK_Nmoms*2*Nsink*ipr]);
+		    
+		    herr_t status = H5Dwrite(dataset_id, DATATYPE_H5, 
+					     subspace, filespace, 
+					     plist_id, writeThrpBuf);
+		    
+		    H5Sclose(subspace);
+		    H5Dclose(dataset_id);
+		    H5Sclose(filespace);
+		    H5Pclose(plist_id);
+		    H5Gclose(group8_id);
+		    
+		    didx++;
+		  }//-nu
+		}//-mu	      
+	      }//-if THRP_TWOD
+	      else if(type==THRP_LOCAL || type==THRP_NOETHER){
 		Float *thrpBuf;
 		if(type==THRP_LOCAL) thrpBuf = (Float*)Thrp_local_HDF5;
 		else if(type==THRP_NOETHER) 
@@ -2214,10 +2260,10 @@ writeThrpHDF5_MomSpace(void *Thrp_local_HDF5,
 		H5Dclose(dataset_id);
 		H5Sclose(filespace);
 		H5Pclose(plist_id);
-	      }//-else	  
-	      H5Gclose(group7_id);
+	      }//-else if
+	      if( (type!=THRP_TWOD) || (type==THRP_TWOD && info.RUN_THRP_TWOD) ) H5Gclose(group7_id);
 	    }//-imom	 
-	    H5Gclose(group6_id);
+	    if( (type!=THRP_TWOD) || (type==THRP_TWOD && info.RUN_THRP_TWOD) ) H5Gclose(group6_id);
 	  }//-thrp_int
 	  H5Gclose(group5_id);
 	}//-part
@@ -2251,11 +2297,11 @@ writeThrpHDF5_MomSpace(void *Thrp_local_HDF5,
 
 	for(int ipr=0;ipr<info.Nproj[its];ipr++){
 	  for(int part=0;part<2;part++){
-	    for(int thrp_int=0;thrp_int<3;thrp_int++){
+	    for(int thrp_int=0;thrp_int<4;thrp_int++){
 	      THRP_TYPE type = (THRP_TYPE) thrp_int;
 	    
 	      //-Determine the global dimensions
-	      if(type==THRP_LOCAL || type==THRP_ONED) Mel = 16;
+	      if(type==THRP_LOCAL || type==THRP_ONED || type==THRP_TWOD) Mel = 16;
 	      else if (type==THRP_NOETHER) Mel = 4;
 	      else errorQuda("writeThrp_HDF5: Undefined three-point function type.\n");
 	      dims[0] = tsink+1;
@@ -2305,8 +2351,51 @@ writeThrpHDF5_MomSpace(void *Thrp_local_HDF5,
 		    H5Sclose(dspace_id);
 		    H5Gclose(group_id);
 		  }//-mu
-		}
-		else{
+		}//-if THRP_ONED
+		else if(type==THRP_TWOD && info.RUN_THRP_TWOD){
+		  int didx=0;
+		  for(int mu=0;mu<4;mu++){
+		    for(int nu=0;nu<4;nu++){
+		      if(mu==nu) continue;
+		      char *group_tag;
+		      asprintf(&group_tag,"conf_%04d/sx%02dsy%02dsz%02dst%02d/tsink_%02d/proj_%s/%s/%s/mom_xyz_%+d_%+d_%+d/dir_%02d_%02d",
+			       info.traj,
+			       GK_sourcePosition[isource][0],
+			       GK_sourcePosition[isource][1],
+			       GK_sourcePosition[isource][2],
+			       GK_sourcePosition[isource][3],
+			       tsink, 
+			       info.thrp_proj_type[info.proj_list[its][ipr]], 
+			       (part==0) ? "up" : "down", 
+			       info.thrp_type[thrp_int], 
+			       GK_moms[imom][0], 
+			       GK_moms[imom][1], 
+			       GK_moms[imom][2], mu, nu);
+
+		      hid_t group_id  = H5Gopen(file_idt, group_tag, H5P_DEFAULT);		      
+		      hid_t dset_id   = H5Dopen(group_id, "threep", H5P_DEFAULT);
+		      hid_t mspace_id = H5Screate_simple(3, ldims, NULL);
+		      hid_t dspace_id = H5Dget_space(dset_id);
+		      
+		      H5Sselect_hyperslab(dspace_id, H5S_SELECT_SET, start, 
+					  NULL, ldims, NULL);
+		      
+		      tailBuf = &(((Float*)Thrp_twoD_HDF5[didx])[2*Mel*Lt*imom + 2*Mel*Lt*GK_Nmoms*part + 2*Mel*Lt*GK_Nmoms*2*its + 2*Mel*Lt*GK_Nmoms*2*Nsink*ipr]);
+		      
+		      herr_t status = H5Dwrite(dset_id, DATATYPE_H5, 
+					       mspace_id, dspace_id, 
+					       H5P_DEFAULT, tailBuf);
+		      
+		      H5Dclose(dset_id);
+		      H5Sclose(mspace_id);
+		      H5Sclose(dspace_id);
+		      H5Gclose(group_id);
+
+		      didx++;
+		    }//-nu
+		  }//-mu
+		}//-if THRP_TWOD
+		else if(type==THRP_LOCAL || type==THRP_NOETHER){
 		  Float *thrpBuf;
 		  if(type==THRP_LOCAL) thrpBuf = (Float*)Thrp_local_HDF5;
 		  else if(type==THRP_NOETHER) 
@@ -2360,7 +2449,8 @@ writeThrpHDF5_MomSpace(void *Thrp_local_HDF5,
 
 //-C.K. - New function to write the three-point function in HDF5 format, momentum-space, in High-Momenta Form
 template<typename Float>
-void QKXTM_Contraction_Kepler<Float>::writeThrpHDF5_MomSpace_HighMomForm(void *Thrp_local_HDF5, void *Thrp_noether_HDF5, void **Thrp_oneD_HDF5, char *filename, qudaQKXTMinfo_Kepler info, int isource, WHICHPARTICLE NUCLEON){
+void QKXTM_Contraction_Kepler<Float>::writeThrpHDF5_MomSpace_HighMomForm(void *Thrp_local_HDF5, void *Thrp_noether_HDF5, void **Thrp_oneD_HDF5, void **Thrp_twoD_HDF5,
+									 char *filename, qudaQKXTMinfo_Kepler info, int isource, WHICHPARTICLE NUCLEON){
 
   if(info.CorrSpace!=MOMENTUM_SPACE && !info.HighMomForm) errorQuda("writeThrpHDF5_MomSpace: Support for writing the three-point function only in momentum-space for high # of momenta!\n");
 
@@ -2369,11 +2459,11 @@ void QKXTM_Contraction_Kepler<Float>::writeThrpHDF5_MomSpace_HighMomForm(void *T
     hid_t DATATYPE_H5;
     if( typeid(Float) == typeid(float) ){
       DATATYPE_H5 = H5T_NATIVE_FLOAT;
-      printfQuda("writeThrpHDF5_MomSpace: Will write in single precision\n");
+      printfQuda("writeThrpHDF5_MomSpace_HighMomForm: Will write in single precision\n");
     }
     if( typeid(Float) == typeid(double)){
       DATATYPE_H5 = H5T_NATIVE_DOUBLE;
-      printfQuda("writeThrp_HDF5_MomSpace: Will write in double precision\n");
+      printfQuda("writeThrp_HDF5_MomSpace_HighMomForm: Will write in double precision\n");
     }
 
     Float *writeThrpBuf;
@@ -2460,15 +2550,17 @@ void QKXTM_Contraction_Kepler<Float>::writeThrpHDF5_MomSpace_HighMomForm(void *T
           asprintf(&group5_tag,"%s", (part==0) ? "up" : "down");
           group5_id = H5Gcreate(group4_id, group5_tag, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
         
-          for(int thrp_int=0;thrp_int<3;thrp_int++){
+          for(int thrp_int=0;thrp_int<4;thrp_int++){
             THRP_TYPE type = (THRP_TYPE) thrp_int;
 
             char *group6_tag;
             asprintf(&group6_tag,"%s", info.thrp_type[thrp_int]);
-            group6_id = H5Gcreate(group5_id, group6_tag, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
-          
+	    if( (type!=THRP_TWOD) || (type==THRP_TWOD && info.RUN_THRP_TWOD) ){
+	      group6_id = H5Gcreate(group5_id, group6_tag, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+	    }
+
             //-Determine the global dimensions
-            if(type==THRP_LOCAL || type==THRP_ONED) Mel = 16;
+            if(type==THRP_LOCAL || type==THRP_ONED || type==THRP_TWOD) Mel = 16;
             else if (type==THRP_NOETHER) Mel = 4;
             else errorQuda("writeThrpHDF5_MomSpace: Undefined three-point function type.\n");
             dims[0] = tsink+1;
@@ -2525,8 +2617,40 @@ void QKXTM_Contraction_Kepler<Float>::writeThrpHDF5_MomSpace_HighMomForm(void *T
 
                 H5Gclose(group7_id);
               }//-mu          
-            }//-if
-            else{
+            }//-if THRP_ONED
+            else if(type==THRP_TWOD && info.RUN_THRP_TWOD){
+	      int didx=0;
+              for(int mu=0;mu<4;mu++){
+		for(int nu=0;nu<4;nu++){
+		  if(mu==nu) continue;
+		  char *group7_tag;
+		  asprintf(&group7_tag,"dir_%02d_%02d",mu,nu);
+		  group7_id = H5Gcreate(group6_id, group7_tag, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+		  
+		  hid_t filespace  = H5Screate_simple(4, dims, NULL);
+		  hid_t dataset_id = H5Dcreate(group7_id, "threep", DATATYPE_H5, filespace, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+		  hid_t subspace   = H5Screate_simple(4, ldims, NULL);
+		  filespace = H5Dget_space(dataset_id);
+		  H5Sselect_hyperslab(filespace, H5S_SELECT_SET, start, NULL, ldims, NULL);
+		  hid_t plist_id = H5Pcreate(H5P_DATASET_XFER);
+		  H5Pset_dxpl_mpio(plist_id, H5FD_MPIO_COLLECTIVE);
+		  
+		  if(GK_timeRank==src_rank) writeThrpBuf = &(((Float*)Thrp_twoD_HDF5[didx])[2*Mel*Nmoms*w + 2*Mel*Nmoms*Lt*part + 2*Mel*Nmoms*Lt*2*its + 2*Mel*Nmoms*Lt*2*Nsink*ipr]);
+		  else writeThrpBuf = &(((Float*)Thrp_twoD_HDF5[didx])[2*Mel*Nmoms*Lt*part + 2*Mel*Nmoms*Lt*2*its + 2*Mel*Nmoms*Lt*2*Nsink*ipr]);
+		  
+		  herr_t status = H5Dwrite(dataset_id, DATATYPE_H5, subspace, filespace, plist_id, writeThrpBuf);
+		  
+		  H5Sclose(subspace);
+		  H5Dclose(dataset_id);
+		  H5Sclose(filespace);
+		  H5Pclose(plist_id);
+		  H5Gclose(group7_id);
+
+		  didx++;
+		}//-nu
+              }//-mu          
+            }//-if THRP_TWOD
+            else if(type==THRP_LOCAL || type==THRP_NOETHER){
               Float *thrpBuf;
               if(type==THRP_LOCAL) thrpBuf = (Float*)Thrp_local_HDF5;
               else if(type==THRP_NOETHER) thrpBuf = (Float*)Thrp_noether_HDF5;
@@ -2549,7 +2673,7 @@ void QKXTM_Contraction_Kepler<Float>::writeThrpHDF5_MomSpace_HighMomForm(void *T
               H5Sclose(filespace);
               H5Pclose(plist_id);
             }//-else      
-            H5Gclose(group6_id);
+            if( (type!=THRP_TWOD) || (type==THRP_TWOD && info.RUN_THRP_TWOD) ) H5Gclose(group6_id);
           }//-thrp_int
           H5Gclose(group5_id);
         }//-part
@@ -2583,11 +2707,11 @@ void QKXTM_Contraction_Kepler<Float>::writeThrpHDF5_MomSpace_HighMomForm(void *T
 
         for(int ipr=0;ipr<info.Nproj[its];ipr++){
           for(int part=0;part<2;part++){
-            for(int thrp_int=0;thrp_int<3;thrp_int++){
+            for(int thrp_int=0;thrp_int<4;thrp_int++){
               THRP_TYPE type = (THRP_TYPE) thrp_int;
             
               //-Determine the global dimensions
-              if(type==THRP_LOCAL || type==THRP_ONED) Mel = 16;
+              if(type==THRP_LOCAL || type==THRP_ONED || type==THRP_TWOD) Mel = 16;
               else if (type==THRP_NOETHER) Mel = 4;
               else errorQuda("writeThrp_HDF5: Undefined three-point function type.\n");
               dims[0] = tsink+1;
@@ -2624,8 +2748,38 @@ void QKXTM_Contraction_Kepler<Float>::writeThrpHDF5_MomSpace_HighMomForm(void *T
                     H5Sclose(dspace_id);
                     H5Gclose(group_id);
                   }//-mu
-                }
-                else{
+                }//-if THRP_ONED
+                else if(type==THRP_TWOD && info.RUN_THRP_TWOD){
+		  int didx=0;
+                  for(int mu=0;mu<4;mu++){
+		    for(int nu=0;nu<4;nu++){
+		      if(mu==nu) continue;
+		      char *group_tag;
+		      asprintf(&group_tag,"conf_%04d/sx%02dsy%02dsz%02dst%02d/tsink_%02d/proj_%s/%s/%s/dir_%02d_%02d",info.traj,
+			       GK_sourcePosition[isource][0],GK_sourcePosition[isource][1],GK_sourcePosition[isource][2],GK_sourcePosition[isource][3],
+			       tsink, info.thrp_proj_type[info.proj_list[its][ipr]], (part==0) ? "up" : "down", info.thrp_type[thrp_int], mu, nu);
+		      hid_t group_id = H5Gopen(file_idt, group_tag, H5P_DEFAULT);
+		      
+		      hid_t dset_id   = H5Dopen(group_id, "threep", H5P_DEFAULT);
+		      hid_t mspace_id = H5Screate_simple(4, ldims, NULL);
+		      hid_t dspace_id = H5Dget_space(dset_id);
+		      
+		      H5Sselect_hyperslab(dspace_id, H5S_SELECT_SET, start, NULL, ldims, NULL);
+		      
+		      tailBuf = &(((Float*)Thrp_twoD_HDF5[didx])[2*Mel*Nmoms*Lt*part + 2*Mel*Nmoms*Lt*2*its + 2*Mel*Nmoms*Lt*2*Nsink*ipr]);
+		      
+		      herr_t status = H5Dwrite(dset_id, DATATYPE_H5, mspace_id, dspace_id, H5P_DEFAULT, tailBuf);
+		      
+		      H5Dclose(dset_id);
+		      H5Sclose(mspace_id);
+		      H5Sclose(dspace_id);
+		      H5Gclose(group_id);
+
+		      didx++;
+		    }//-nu
+                  }//-mu
+                }//-if THRP_TWOD
+                else if(type==THRP_LOCAL || type==THRP_NOETHER){
                   Float *thrpBuf;
                   if(type==THRP_LOCAL) thrpBuf = (Float*)Thrp_local_HDF5;
                   else if(type==THRP_NOETHER) thrpBuf = (Float*)Thrp_noether_HDF5;
@@ -2663,26 +2817,28 @@ void QKXTM_Contraction_Kepler<Float>::writeThrpHDF5_MomSpace_HighMomForm(void *T
     if(GK_timeRank==src_rank){
       hid_t file_idt   = H5Fopen(filename, H5F_ACC_RDWR, H5P_DEFAULT);
 
-      char *operator_list,*ultra_local_info,*noether_info,*oneD_info;
+      char *operator_list,*ultra_local_info,*noether_info,*oneD_info,*twoD_info;
       asprintf(&operator_list,"0 = g5\n1 = gx\n2 = gy\n3 = gz\n4 = g0\n5 = Unity\n6 = g5gx\n7 = g5gy\n8 = g5gz\n9 = g5g0\n10 = g5sixy\n11 = g5sixz\n12 = g5siyz\n13 = g5si0x\n14 = g5si0y\n15 = g5si0z\0");
       asprintf(&ultra_local_info,"Index-order: [t, mom-index, optr-index, real/imag]\0");
       asprintf(&noether_info,"Index-order: [t, mom-index, direction: [0,1,2,3]=[x,y,z,t], real/imag]\0");
       asprintf(&oneD_info,"Direction: [0,1,2,3] = [x,y,z,t], Index-order: [t, mom-index, optr-index, real/imag]\0");
+      asprintf(&twoD_info,"Direction: [0,1,2,3] = [x,y,z,t], Index-order: [t, mom-index, optr-index, real/imag]\0");
 
-      char *thrp_str1,*thrp_str2,*thrp_str3,*thrp_str4,*thrp_str5,*thrp_str6,*thrp_str7,*thrp_str8;
+      char *thrp_str1,*thrp_str2,*thrp_str3,*thrp_str4,*thrp_str5,*thrp_str6,*thrp_str7,*thrp_str8,*thrp_str9;
       asprintf(&thrp_str1,"Momentum-space nucleon 3pt-correlator\nQuark field and operator basis: Physical\n");
-      asprintf(&thrp_str2,"Includes ultra-local and one-derivative operators, noether current\n");
+      asprintf(&thrp_str2,"Includes ultra-local operators, noether current, one-derivative and two-derivative operators\n");
       asprintf(&thrp_str3,"Precision: %s\n",(typeid(Float) == typeid(float)) ? "single" : "double");
       asprintf(&thrp_str4,"Inversion tolerance = %e\n",info.inv_tol);
       asprintf(&thrp_str5,"Operator list:\n%s\n\n",operator_list);
       asprintf(&thrp_str6,"Ultra-local correlators:\n  %s\n",ultra_local_info);
       asprintf(&thrp_str7,"Noether current correlators:\n  %s\n",noether_info);
-      asprintf(&thrp_str8,"One-dericative correlators:\n  %s\n",oneD_info);
+      asprintf(&thrp_str8,"One-derivative correlators:\n  %s\n",oneD_info);
+      asprintf(&thrp_str9,"Two-derivative correlators:\n  %s\n",twoD_info);
 
       char *cNmoms, *cQsq,*corr_info,*ens_info;
       asprintf(&cNmoms,"%d\0",GK_Nmoms);
       asprintf(&cQsq,"%d\0",info.Q_sq);
-      asprintf(&corr_info,"%s%s%s%s%s%s%s%s\0",thrp_str1,thrp_str2,thrp_str3,thrp_str4,thrp_str5,thrp_str6,thrp_str7,thrp_str8);
+      asprintf(&corr_info,"%s%s%s%s%s%s%s%s%s\0",thrp_str1,thrp_str2,thrp_str3,thrp_str4,thrp_str5,thrp_str6,thrp_str7,thrp_str8,thrp_str9);
       asprintf(&ens_info,"kappa = %10.8f\nmu = %8.6f\nCsw = %8.6f\0",info.kappa, info.mu, info.csw);
       hid_t attrdat_id1 = H5Screate(H5S_SCALAR);
       hid_t attrdat_id2 = H5Screate(H5S_SCALAR);
@@ -2751,8 +2907,8 @@ void QKXTM_Contraction_Kepler<Float>::writeThrpHDF5_MomSpace_HighMomForm(void *T
 template<typename Float>
 void QKXTM_Contraction_Kepler<Float>::
 copyThrpToHDF5_Buf(void *Thrp_HDF5, 
-		   void *corrThp,  
-		   int mu, int uORd, 
+		   void *corrThp, 
+		   int mu, int Nthrp2D, int uORd, 
 		   int its, int Nsink, 
 		   int pr, int sign, 
 		   THRP_TYPE type, 
@@ -2760,8 +2916,12 @@ copyThrpToHDF5_Buf(void *Thrp_HDF5,
 
   int Mel;
   if(type==THRP_LOCAL || type==THRP_ONED) Mel = 16;
-  else if(type==THRP_NOETHER) Mel = 4;
+  else if(type==THRP_NOETHER) Mel = GK_nDim;
   else errorQuda("Undefined THRP_TYPE passed to copyThrpToHDF5_Buf.\n");
+
+  int Ndim;
+  if(type==THRP_ONED) Ndim = GK_nDim;
+  else if(type==THRP_TWOD) Ndim = Nthrp2D;
 
   int Lt = GK_localL[3];
   int Nmoms = GK_Nmoms;
@@ -2780,12 +2940,12 @@ copyThrpToHDF5_Buf(void *Thrp_HDF5,
             }
           }
         }
-        else if(type==THRP_ONED){
+        else if(type==THRP_ONED || type==THRP_TWOD){
           for(int it = 0; it<Lt; it++){
             for(int imom = 0; imom<Nmoms; imom++){
               for(int im = 0; im<Mel; im++){
-                ((Float*)Thrp_HDF5)[0 + 2*im + 2*Mel*imom + 2*Mel*Nmoms*it + 2*Mel*Nmoms*Lt*uORd + 2*Mel*Nmoms*Lt*2*its + 2*Mel*Nmoms*Lt*2*Nsink*pr] = sign*((Float*)corrThp)[0 + 2*im + 2*Mel*mu + 2*Mel*4*imom + 2*Mel*4*Nmoms*it];
-                ((Float*)Thrp_HDF5)[1 + 2*im + 2*Mel*imom + 2*Mel*Nmoms*it + 2*Mel*Nmoms*Lt*uORd + 2*Mel*Nmoms*Lt*2*its + 2*Mel*Nmoms*Lt*2*Nsink*pr] = sign*((Float*)corrThp)[1 + 2*im + 2*Mel*mu + 2*Mel*4*imom + 2*Mel*4*Nmoms*it];
+                ((Float*)Thrp_HDF5)[0 + 2*im + 2*Mel*imom + 2*Mel*Nmoms*it + 2*Mel*Nmoms*Lt*uORd + 2*Mel*Nmoms*Lt*2*its + 2*Mel*Nmoms*Lt*2*Nsink*pr] = sign*((Float*)corrThp)[0 + 2*im + 2*Mel*mu + 2*Mel*Ndim*imom + 2*Mel*Ndim*Nmoms*it];
+                ((Float*)Thrp_HDF5)[1 + 2*im + 2*Mel*imom + 2*Mel*Nmoms*it + 2*Mel*Nmoms*Lt*uORd + 2*Mel*Nmoms*Lt*2*its + 2*Mel*Nmoms*Lt*2*Nsink*pr] = sign*((Float*)corrThp)[1 + 2*im + 2*Mel*mu + 2*Mel*Ndim*imom + 2*Mel*Ndim*Nmoms*it];
               }
             }
           }      
@@ -2805,12 +2965,12 @@ copyThrpToHDF5_Buf(void *Thrp_HDF5,
             }
           }
         }
-        else if(type==THRP_ONED){
+        else if(type==THRP_ONED || type==THRP_TWOD){
           for(int it = 0; it<Lt; it++){
             for(int imom = 0; imom<Nmoms; imom++){
               for(int im = 0; im<Mel; im++){
-                ((Float*)Thrp_HDF5)[0 + 2*im + 2*Mel*it + 2*Mel*Lt*imom + 2*Mel*Lt*Nmoms*uORd + 2*Mel*Lt*Nmoms*2*its + 2*Mel*Lt*Nmoms*2*Nsink*pr] = sign*((Float*)corrThp)[0 + 2*im + 2*Mel*mu + 2*Mel*4*imom + 2*Mel*4*Nmoms*it];
-                ((Float*)Thrp_HDF5)[1 + 2*im + 2*Mel*it + 2*Mel*Lt*imom + 2*Mel*Lt*Nmoms*uORd + 2*Mel*Lt*Nmoms*2*its + 2*Mel*Lt*Nmoms*2*Nsink*pr] = sign*((Float*)corrThp)[1 + 2*im + 2*Mel*mu + 2*Mel*4*imom + 2*Mel*4*Nmoms*it];
+                ((Float*)Thrp_HDF5)[0 + 2*im + 2*Mel*it + 2*Mel*Lt*imom + 2*Mel*Lt*Nmoms*uORd + 2*Mel*Lt*Nmoms*2*its + 2*Mel*Lt*Nmoms*2*Nsink*pr] = sign*((Float*)corrThp)[0 + 2*im + 2*Mel*mu + 2*Mel*Ndim*imom + 2*Mel*Ndim*Nmoms*it];
+                ((Float*)Thrp_HDF5)[1 + 2*im + 2*Mel*it + 2*Mel*Lt*imom + 2*Mel*Lt*Nmoms*uORd + 2*Mel*Lt*Nmoms*2*its + 2*Mel*Lt*Nmoms*2*Nsink*pr] = sign*((Float*)corrThp)[1 + 2*im + 2*Mel*mu + 2*Mel*Ndim*imom + 2*Mel*Ndim*Nmoms*it];
               }
             }
           }      
@@ -2823,7 +2983,7 @@ copyThrpToHDF5_Buf(void *Thrp_HDF5,
     int lV = GK_localVolume;
     Float *tmp3pt;
     if(type==THRP_LOCAL || type==THRP_NOETHER) tmp3pt = ((Float*)corrThp);
-    else if(type==THRP_ONED) tmp3pt = &(((Float*)corrThp)[2*16*lV*mu]);
+    else if(type==THRP_ONED || type==THRP_TWOD) tmp3pt = &(((Float*)corrThp)[2*16*lV*mu]);
 
     for(int v = 0; v<lV; v++){
       for(int im = 0; im<Mel; im++){
@@ -3010,11 +3170,11 @@ contractFixSink(QKXTM_Propagator_Kepler<Float> &seqProp,
 		QKXTM_Propagator_Kepler<Float> &prop, 
 		QKXTM_Gauge_Kepler<Float> &gauge, 
 		void *corrThp_local, void *corrThp_noether, 
-		void *corrThp_oneD, 
+		void *corrThp_oneD, void *corrThp_twoD, 
 		WHICHPROJECTOR typeProj , 
 		WHICHPARTICLE testParticle, 
-		int partflag, int isource, 
-		CORR_SPACE CorrSpace){
+		int partflag, int isource, int Nthrp2D,
+		CORR_SPACE CorrSpace, bool RUN_THRP_TWOD){
   
   if( typeid(Float) == typeid(float))  
     printfQuda("contractFixSink: Will perform in single precision\n");
@@ -3048,15 +3208,42 @@ contractFixSink(QKXTM_Propagator_Kepler<Float> &seqProp,
   prop.createTexObject(&fwdTex);
   gauge.createTexObject(&gaugeTex);
 
+
+  //-C.K. Communicate forward and sequential propagator
+  //- corner buffers, if running for two-derivative 3pt-functions
+  cudaTextureObject_t seqCrnTex[GK_nDim][GK_nDim][4], fwdCrnTex[GK_nDim][GK_nDim][4], gaugeCrnTex[GK_nDim][GK_nDim][4];
+  if(RUN_THRP_TWOD){
+    prop.unloadPropagator();
+    prop.commCornersHost();
+    prop.copyHostCornersToDevice();
+    seqProp.unloadPropagator();
+    seqProp.commCornersHost();
+    seqProp.copyHostCornersToDevice();
+    
+    for(int dd=0;dd<4;dd++){
+      for(int mu=0;mu<GK_nDim;mu++){
+	for(int nu=0;nu<GK_nDim;nu++){
+	  if(mu==nu) continue;
+	  else{
+	    seqProp.createCornerTexObject(&(seqCrnTex[mu][nu][dd])  , mu, nu, dd);
+	    prop.createCornerTexObject   (&(fwdCrnTex[mu][nu][dd])  , mu, nu, dd);
+	    gauge.createCornerTexObject  (&(gaugeCrnTex[mu][nu][dd]), mu, nu, dd);
+	  }}}
+    }//-dd
+  }//-if RUN_THRP_TWOD
+
+
   if(CorrSpace==POSITION_SPACE){
     for(int it = 0 ; it < GK_localL[3] ; it++)
       run_fixSinkContractions((void*)corrThp_local, 
 			      (void*)corrThp_noether, 
 			      (void*)corrThp_oneD, 
+			      (void*)corrThp_twoD, 
 			      fwdTex, seqTex, gaugeTex, 
+			      fwdCrnTex, seqCrnTex, gaugeCrnTex,
 			      testParticle, 
-			      partflag, it, isource, 
-			      sizeof(Float), CorrSpace);
+			      partflag, it, isource, Nthrp2D,
+			      sizeof(Float), CorrSpace, RUN_THRP_TWOD);
   }
   else if(CorrSpace==MOMENTUM_SPACE){
     Float *corrThp_local_local   = (Float*) calloc(GK_localL[3]*
@@ -3070,20 +3257,31 @@ contractFixSink(QKXTM_Propagator_Kepler<Float> &seqProp,
     Float *corrThp_oneD_local    = (Float*) calloc(GK_localL[3]*
 						   GK_Nmoms*16*4*2,
 						   sizeof(Float));
-    
+
     if(corrThp_local_local == NULL || 
        corrThp_noether_local == NULL || 
        corrThp_oneD_local == NULL) 
       errorQuda("contractFixSink: Cannot allocate memory for three-point function contract buffers.\n");
+
+    Float *corrThp_twoD_local = NULL;
+    if(RUN_THRP_TWOD){
+      corrThp_twoD_local = (Float*) calloc(GK_localL[3]*
+					   GK_Nmoms*16*Nthrp2D*2,
+					   sizeof(Float));
+      if(corrThp_twoD_local == NULL) 
+	errorQuda("contractFixSink: Cannot allocate memory for three-point function twoD contract buffers.\n");
+    }
     
     for(int it = 0 ; it < GK_localL[3] ; it++)
       run_fixSinkContractions(corrThp_local_local, 
 			      corrThp_noether_local, 
 			      corrThp_oneD_local, 
+			      corrThp_twoD_local, 
 			      fwdTex, seqTex, gaugeTex, 
+			      fwdCrnTex, seqCrnTex, gaugeCrnTex,
 			      testParticle, 
-			      partflag, it, isource, 
-			      sizeof(Float), CorrSpace);
+			      partflag, it, isource, Nthrp2D,
+			      sizeof(Float), CorrSpace, RUN_THRP_TWOD);
 
     MPI_Datatype DATATYPE = -1;
     if( typeid(Float) == typeid(float))  DATATYPE = MPI_FLOAT;
@@ -3100,10 +3298,18 @@ contractFixSink(QKXTM_Propagator_Kepler<Float> &seqProp,
     MPI_Reduce(corrThp_oneD_local, (Float*)corrThp_oneD, 
 	       GK_localL[3]*GK_Nmoms*16*4*2, DATATYPE, 
 	       MPI_SUM, 0, GK_spaceComm);
+
+    if(RUN_THRP_TWOD){
+      MPI_Reduce(corrThp_twoD_local, (Float*)corrThp_twoD, 
+		 GK_localL[3]*GK_Nmoms*16*Nthrp2D*2, DATATYPE, 
+		 MPI_SUM, 0, GK_spaceComm);
+    }
     
     free(corrThp_local_local);
     free(corrThp_noether_local);
     free(corrThp_oneD_local);
+    if(RUN_THRP_TWOD) free(corrThp_twoD_local);
+
   }
   else errorQuda("contractFixSink: Supports only POSITION_SPACE and MOMENTUM_SPACE!\n");
 
@@ -3111,298 +3317,318 @@ contractFixSink(QKXTM_Propagator_Kepler<Float> &seqProp,
   prop.destroyTexObject(fwdTex);
   gauge.destroyTexObject(gaugeTex);
 
+
+  if(RUN_THRP_TWOD){
+    for(int dd=0;dd<4;dd++){
+      for(int mu=0;mu<GK_nDim;mu++){
+  	for(int nu=0;nu<GK_nDim;nu++){
+  	  if(mu==nu) continue;
+  	  else{
+  	    seqProp.destroyCornerTexObject(seqCrnTex[mu][nu][dd]);
+  	    prop.destroyCornerTexObject   (fwdCrnTex[mu][nu][dd]);
+  	    gauge.destroyCornerTexObject  (gaugeCrnTex[mu][nu][dd]);
+  	  }
+  	}
+      }
+    }
+  }
+
+
 }
 
 //---------------------//
 
-template<typename Float>
-void QKXTM_Contraction_Kepler<Float>::
-contractFixSink(QKXTM_Propagator_Kepler<Float> &seqProp,
-		QKXTM_Propagator_Kepler<Float> &prop, 
-		QKXTM_Gauge_Kepler<Float> &gauge, 
-		WHICHPROJECTOR typeProj , 
-		WHICHPARTICLE testParticle, 
-		int partflag , 
-		char *filename_out, 
-		int isource, 
-		int tsinkMtsource){
+
+//-C.K. Deprecated function
+
+// template<typename Float>
+// void QKXTM_Contraction_Kepler<Float>::
+// contractFixSink(QKXTM_Propagator_Kepler<Float> &seqProp,
+// 		QKXTM_Propagator_Kepler<Float> &prop, 
+// 		QKXTM_Gauge_Kepler<Float> &gauge, 
+// 		WHICHPROJECTOR typeProj , 
+// 		WHICHPARTICLE testParticle, 
+// 		int partflag , 
+// 		char *filename_out, 
+// 		int isource, 
+// 		int tsinkMtsource){
   
-  errorQuda("contractFixSink: This version of the function is obsolete. Cannot guarantee correct results. Please call the overloaded-updated version of this function with the corresponding list of arguments.\n");
+//   errorQuda("contractFixSink: This version of the function is obsolete. Cannot guarantee correct results. Please call the overloaded-updated version of this function with the corresponding list of arguments.\n");
 
-  if( typeid(Float) == typeid(float))  
-    printfQuda("contractFixSink: Will perform in single precision\n");
-  if( typeid(Float) == typeid(double)) 
-    printfQuda("contractFixSink: Will perform in double precision\n");
+//   if( typeid(Float) == typeid(float))  
+//     printfQuda("contractFixSink: Will perform in single precision\n");
+//   if( typeid(Float) == typeid(double)) 
+//     printfQuda("contractFixSink: Will perform in double precision\n");
 
-  // seq prop apply gamma5 and conjugate
-  // do the communication for gauge, prop and seqProp
-  seqProp.apply_gamma5();
-  seqProp.conjugate();
+//   // seq prop apply gamma5 and conjugate
+//   // do the communication for gauge, prop and seqProp
+//   seqProp.apply_gamma5();
+//   seqProp.conjugate();
 
-  gauge.ghostToHost();
+//   gauge.ghostToHost();
 
-  // communicate gauge
-  gauge.cpuExchangeGhost();
-  gauge.ghostToDevice();
-  comm_barrier();
+//   // communicate gauge
+//   gauge.cpuExchangeGhost();
+//   gauge.ghostToDevice();
+//   comm_barrier();
 
-  prop.ghostToHost();
+//   prop.ghostToHost();
 
-  // communicate forward propagator
-  prop.cpuExchangeGhost(); 
-  prop.ghostToDevice();
-  comm_barrier();
+//   // communicate forward propagator
+//   prop.cpuExchangeGhost(); 
+//   prop.ghostToDevice();
+//   comm_barrier();
 
-  seqProp.ghostToHost();
+//   seqProp.ghostToHost();
 
-  // communicate sequential propagator
-  seqProp.cpuExchangeGhost(); 
-  seqProp.ghostToDevice();
-  comm_barrier();
+//   // communicate sequential propagator
+//   seqProp.cpuExchangeGhost(); 
+//   seqProp.ghostToDevice();
+//   comm_barrier();
 
-  cudaTextureObject_t seqTex, fwdTex, gaugeTex;
-  seqProp.createTexObject(&seqTex);
-  prop.createTexObject(&fwdTex);
-  gauge.createTexObject(&gaugeTex);
+//   cudaTextureObject_t seqTex, fwdTex, gaugeTex;
+//   seqProp.createTexObject(&seqTex);
+//   prop.createTexObject(&fwdTex);
+//   gauge.createTexObject(&gaugeTex);
 
-  Float *corrThp_local_local = 
-    (Float*) calloc(GK_localL[3]*GK_Nmoms*16*2,sizeof(Float));
-  Float *corrThp_noether_local = 
-    (Float*) calloc(GK_localL[3]*GK_Nmoms*4*2,sizeof(Float));
-  Float *corrThp_oneD_local = 
-    (Float*) calloc(GK_localL[3]*GK_Nmoms*4*16*2,sizeof(Float));
-  if(corrThp_local_local == NULL || 
-     corrThp_noether_local == NULL || 
-     corrThp_oneD_local == NULL) 
-    errorQuda("Error problem to allocate memory");
+//   Float *corrThp_local_local = 
+//     (Float*) calloc(GK_localL[3]*GK_Nmoms*16*2,sizeof(Float));
+//   Float *corrThp_noether_local = 
+//     (Float*) calloc(GK_localL[3]*GK_Nmoms*4*2,sizeof(Float));
+//   Float *corrThp_oneD_local = 
+//     (Float*) calloc(GK_localL[3]*GK_Nmoms*4*16*2,sizeof(Float));
+//   if(corrThp_local_local == NULL || 
+//      corrThp_noether_local == NULL || 
+//      corrThp_oneD_local == NULL) 
+//     errorQuda("Error problem to allocate memory");
 
-  Float *corrThp_local_reduced = 
-    (Float*) calloc(GK_localL[3]*GK_Nmoms*16*2,sizeof(Float));
-  Float *corrThp_noether_reduced = 
-    (Float*) calloc(GK_localL[3]*GK_Nmoms*4*2,sizeof(Float));
-  Float *corrThp_oneD_reduced = 
-    (Float*) calloc(GK_localL[3]*GK_Nmoms*4*16*2,sizeof(Float));
-  if(corrThp_local_reduced == NULL || 
-     corrThp_noether_reduced == NULL || 
-     corrThp_oneD_reduced == NULL) 
-    errorQuda("Error problem to allocate memory");
+//   Float *corrThp_local_reduced = 
+//     (Float*) calloc(GK_localL[3]*GK_Nmoms*16*2,sizeof(Float));
+//   Float *corrThp_noether_reduced = 
+//     (Float*) calloc(GK_localL[3]*GK_Nmoms*4*2,sizeof(Float));
+//   Float *corrThp_oneD_reduced = 
+//     (Float*) calloc(GK_localL[3]*GK_Nmoms*4*16*2,sizeof(Float));
+//   if(corrThp_local_reduced == NULL || 
+//      corrThp_noether_reduced == NULL || 
+//      corrThp_oneD_reduced == NULL) 
+//     errorQuda("Error problem to allocate memory");
 
-  Float *corrThp_local = 
-    (Float*) calloc(GK_totalL[3]*GK_Nmoms*16*2,sizeof(Float));
-  Float *corrThp_noether = 
-    (Float*) calloc(GK_totalL[3]*GK_Nmoms*4*2,sizeof(Float));
-  Float *corrThp_oneD = 
-    (Float*) calloc(GK_totalL[3]*GK_Nmoms*4*16*2,sizeof(Float));
-  if(corrThp_local == NULL || 
-     corrThp_noether == NULL || 
-     corrThp_oneD == NULL) 
-    errorQuda("Error problem to allocate memory");
+//   Float *corrThp_local = 
+//     (Float*) calloc(GK_totalL[3]*GK_Nmoms*16*2,sizeof(Float));
+//   Float *corrThp_noether = 
+//     (Float*) calloc(GK_totalL[3]*GK_Nmoms*4*2,sizeof(Float));
+//   Float *corrThp_oneD = 
+//     (Float*) calloc(GK_totalL[3]*GK_Nmoms*4*16*2,sizeof(Float));
+//   if(corrThp_local == NULL || 
+//      corrThp_noether == NULL || 
+//      corrThp_oneD == NULL) 
+//     errorQuda("Error problem to allocate memory");
 
-  for(int it = 0 ; it < GK_localL[3] ; it++)
-    run_fixSinkContractions(corrThp_local_local,
-			    corrThp_noether_local,
-			    corrThp_oneD_local,
-			    fwdTex,seqTex,gaugeTex,
-			    testParticle,partflag,it,
-			    isource,sizeof(Float),MOMENTUM_SPACE);
+//   for(int it = 0 ; it < GK_localL[3] ; it++)
+//     run_fixSinkContractions(corrThp_local_local,
+// 			    corrThp_noether_local,
+// 			    corrThp_oneD_local,
+// 			    fwdTex,seqTex,gaugeTex,
+// 			    testParticle,partflag,it,
+// 			    isource,sizeof(Float),MOMENTUM_SPACE);
   
-  int error;
-  if( typeid(Float) == typeid(float)){
-    MPI_Reduce(corrThp_local_local, 
-	       corrThp_local_reduced, 
-	       GK_localL[3]*GK_Nmoms*16*2, 
-	       MPI_FLOAT, MPI_SUM, 0, GK_spaceComm);
+//   int error;
+//   if( typeid(Float) == typeid(float)){
+//     MPI_Reduce(corrThp_local_local, 
+// 	       corrThp_local_reduced, 
+// 	       GK_localL[3]*GK_Nmoms*16*2, 
+// 	       MPI_FLOAT, MPI_SUM, 0, GK_spaceComm);
 
-    MPI_Reduce(corrThp_noether_local, 
-	       corrThp_noether_reduced, 
-	       GK_localL[3]*GK_Nmoms*4*2, 
-	       MPI_FLOAT, MPI_SUM, 0, GK_spaceComm);
+//     MPI_Reduce(corrThp_noether_local, 
+// 	       corrThp_noether_reduced, 
+// 	       GK_localL[3]*GK_Nmoms*4*2, 
+// 	       MPI_FLOAT, MPI_SUM, 0, GK_spaceComm);
 
-    MPI_Reduce(corrThp_oneD_local, 
-	       corrThp_oneD_reduced, 
-	       GK_localL[3]*GK_Nmoms*4*16*2, 
-	       MPI_FLOAT, MPI_SUM, 0, GK_spaceComm);
+//     MPI_Reduce(corrThp_oneD_local, 
+// 	       corrThp_oneD_reduced, 
+// 	       GK_localL[3]*GK_Nmoms*4*16*2, 
+// 	       MPI_FLOAT, MPI_SUM, 0, GK_spaceComm);
 
-    if(GK_timeRank >= 0 && GK_timeRank < GK_nProc[3] ){
-      error = MPI_Gather(corrThp_local_reduced,
-			 GK_localL[3]*GK_Nmoms*16*2, 
-			 MPI_FLOAT, corrThp_local, 
-			 GK_localL[3]*GK_Nmoms*16*2, 
-			 MPI_FLOAT, 0, GK_timeComm);
-      if(error != MPI_SUCCESS) 
-	errorQuda("Error in MPI_gather");
+//     if(GK_timeRank >= 0 && GK_timeRank < GK_nProc[3] ){
+//       error = MPI_Gather(corrThp_local_reduced,
+// 			 GK_localL[3]*GK_Nmoms*16*2, 
+// 			 MPI_FLOAT, corrThp_local, 
+// 			 GK_localL[3]*GK_Nmoms*16*2, 
+// 			 MPI_FLOAT, 0, GK_timeComm);
+//       if(error != MPI_SUCCESS) 
+// 	errorQuda("Error in MPI_gather");
 
-      error = MPI_Gather(corrThp_noether_reduced,
-			 GK_localL[3]*GK_Nmoms*4*2, 
-			 MPI_FLOAT, corrThp_noether, 
-			 GK_localL[3]*GK_Nmoms*4*2, 
-			 MPI_FLOAT, 0, GK_timeComm);
-      if(error != MPI_SUCCESS) 
-	errorQuda("Error in MPI_gather");
+//       error = MPI_Gather(corrThp_noether_reduced,
+// 			 GK_localL[3]*GK_Nmoms*4*2, 
+// 			 MPI_FLOAT, corrThp_noether, 
+// 			 GK_localL[3]*GK_Nmoms*4*2, 
+// 			 MPI_FLOAT, 0, GK_timeComm);
+//       if(error != MPI_SUCCESS) 
+// 	errorQuda("Error in MPI_gather");
 
-      error = MPI_Gather(corrThp_oneD_reduced,
-			 GK_localL[3]*GK_Nmoms*4*16*2, 
-			 MPI_FLOAT, corrThp_oneD, 
-			 GK_localL[3]*GK_Nmoms*4*16*2, 
-			 MPI_FLOAT, 0, GK_timeComm);
-      if(error != MPI_SUCCESS) 
-	errorQuda("Error in MPI_gather");
-    }
-  }
-  else{
-    MPI_Reduce(corrThp_local_local, corrThp_local_reduced, 
-	       GK_localL[3]*GK_Nmoms*16*2, 
-	       MPI_DOUBLE, MPI_SUM, 0, GK_spaceComm);
-    MPI_Reduce(corrThp_noether_local, corrThp_noether_reduced, 
-	       GK_localL[3]*GK_Nmoms*4*2, 
-	       MPI_DOUBLE, MPI_SUM, 0, GK_spaceComm);
-    MPI_Reduce(corrThp_oneD_local, corrThp_oneD_reduced, 
-	       GK_localL[3]*GK_Nmoms*4*16*2, 
-	       MPI_DOUBLE, MPI_SUM, 0, GK_spaceComm);
+//       error = MPI_Gather(corrThp_oneD_reduced,
+// 			 GK_localL[3]*GK_Nmoms*4*16*2, 
+// 			 MPI_FLOAT, corrThp_oneD, 
+// 			 GK_localL[3]*GK_Nmoms*4*16*2, 
+// 			 MPI_FLOAT, 0, GK_timeComm);
+//       if(error != MPI_SUCCESS) 
+// 	errorQuda("Error in MPI_gather");
+//     }
+//   }
+//   else{
+//     MPI_Reduce(corrThp_local_local, corrThp_local_reduced, 
+// 	       GK_localL[3]*GK_Nmoms*16*2, 
+// 	       MPI_DOUBLE, MPI_SUM, 0, GK_spaceComm);
+//     MPI_Reduce(corrThp_noether_local, corrThp_noether_reduced, 
+// 	       GK_localL[3]*GK_Nmoms*4*2, 
+// 	       MPI_DOUBLE, MPI_SUM, 0, GK_spaceComm);
+//     MPI_Reduce(corrThp_oneD_local, corrThp_oneD_reduced, 
+// 	       GK_localL[3]*GK_Nmoms*4*16*2, 
+// 	       MPI_DOUBLE, MPI_SUM, 0, GK_spaceComm);
 
-    if(GK_timeRank >= 0 && GK_timeRank < GK_nProc[3] ){
-      error = MPI_Gather(corrThp_local_reduced,
-			 GK_localL[3]*GK_Nmoms*16*2, 
-			 MPI_DOUBLE, corrThp_local, 
-			 GK_localL[3]*GK_Nmoms*16*2, 
-			 MPI_DOUBLE, 0, GK_timeComm);
-      if(error != MPI_SUCCESS) 
-	errorQuda("Error in MPI_gather");
+//     if(GK_timeRank >= 0 && GK_timeRank < GK_nProc[3] ){
+//       error = MPI_Gather(corrThp_local_reduced,
+// 			 GK_localL[3]*GK_Nmoms*16*2, 
+// 			 MPI_DOUBLE, corrThp_local, 
+// 			 GK_localL[3]*GK_Nmoms*16*2, 
+// 			 MPI_DOUBLE, 0, GK_timeComm);
+//       if(error != MPI_SUCCESS) 
+// 	errorQuda("Error in MPI_gather");
 
-      error = MPI_Gather(corrThp_noether_reduced,
-			 GK_localL[3]*GK_Nmoms*4*2, 
-			 MPI_DOUBLE, corrThp_noether, 
-			 GK_localL[3]*GK_Nmoms*4*2, 
-			 MPI_DOUBLE, 0, GK_timeComm);
-      if(error != MPI_SUCCESS) 
-	errorQuda("Error in MPI_gather");
+//       error = MPI_Gather(corrThp_noether_reduced,
+// 			 GK_localL[3]*GK_Nmoms*4*2, 
+// 			 MPI_DOUBLE, corrThp_noether, 
+// 			 GK_localL[3]*GK_Nmoms*4*2, 
+// 			 MPI_DOUBLE, 0, GK_timeComm);
+//       if(error != MPI_SUCCESS) 
+// 	errorQuda("Error in MPI_gather");
 
-      error = MPI_Gather(corrThp_oneD_reduced,
-			 GK_localL[3]*GK_Nmoms*4*16*2, 
-			 MPI_DOUBLE, corrThp_oneD, 
-			 GK_localL[3]*GK_Nmoms*4*16*2, 
-			 MPI_DOUBLE, 0, GK_timeComm);
-      if(error != MPI_SUCCESS) 
-	errorQuda("Error in MPI_gather");
-    }
-  }
-  char fname_local[257];
-  char fname_noether[257];
-  char fname_oneD[257];
-  char fname_particle[257];
-  char fname_upORdown[257];
+//       error = MPI_Gather(corrThp_oneD_reduced,
+// 			 GK_localL[3]*GK_Nmoms*4*16*2, 
+// 			 MPI_DOUBLE, corrThp_oneD, 
+// 			 GK_localL[3]*GK_Nmoms*4*16*2, 
+// 			 MPI_DOUBLE, 0, GK_timeComm);
+//       if(error != MPI_SUCCESS) 
+// 	errorQuda("Error in MPI_gather");
+//     }
+//   }
+//   char fname_local[257];
+//   char fname_noether[257];
+//   char fname_oneD[257];
+//   char fname_particle[257];
+//   char fname_upORdown[257];
 
-  if(testParticle == PROTON){
-    strcpy(fname_particle,"proton");
-    if(partflag == 1)strcpy(fname_upORdown,"up");
-    else if(partflag == 2)strcpy(fname_upORdown,"down");
-    else errorQuda("Error wrong part got");
-  }
-  else{
-    strcpy(fname_particle,"neutron");
-    if(partflag == 1)strcpy(fname_upORdown,"down");
-    else if(partflag == 2)strcpy(fname_upORdown,"up");
-    else errorQuda("Error wrong part got");
-  }
+//   if(testParticle == PROTON){
+//     strcpy(fname_particle,"proton");
+//     if(partflag == 1)strcpy(fname_upORdown,"up");
+//     else if(partflag == 2)strcpy(fname_upORdown,"down");
+//     else errorQuda("Error wrong part got");
+//   }
+//   else{
+//     strcpy(fname_particle,"neutron");
+//     if(partflag == 1)strcpy(fname_upORdown,"down");
+//     else if(partflag == 2)strcpy(fname_upORdown,"up");
+//     else errorQuda("Error wrong part got");
+//   }
 
-  sprintf(fname_local,"%s.%s.%s.%s.SS.%02d.%02d.%02d.%02d.dat",
-	  filename_out,fname_particle,fname_upORdown,"ultra_local",
-	  GK_sourcePosition[isource][0],
-	  GK_sourcePosition[isource][1],
-	  GK_sourcePosition[isource][2],
-	  GK_sourcePosition[isource][3]);
-  sprintf(fname_noether,"%s.%s.%s.%s.SS.%02d.%02d.%02d.%02d.dat",
-	  filename_out,fname_particle,fname_upORdown,"noether",
-	  GK_sourcePosition[isource][0],
-	  GK_sourcePosition[isource][1],
-	  GK_sourcePosition[isource][2],
-	  GK_sourcePosition[isource][3]);
-  sprintf(fname_oneD,"%s.%s.%s.%s.SS.%02d.%02d.%02d.%02d.dat",
-	  filename_out,fname_particle,fname_upORdown,"oneD",
-	  GK_sourcePosition[isource][0],
-	  GK_sourcePosition[isource][1],
-	  GK_sourcePosition[isource][2],
-	  GK_sourcePosition[isource][3]);
+//   sprintf(fname_local,"%s.%s.%s.%s.SS.%02d.%02d.%02d.%02d.dat",
+// 	  filename_out,fname_particle,fname_upORdown,"ultra_local",
+// 	  GK_sourcePosition[isource][0],
+// 	  GK_sourcePosition[isource][1],
+// 	  GK_sourcePosition[isource][2],
+// 	  GK_sourcePosition[isource][3]);
+//   sprintf(fname_noether,"%s.%s.%s.%s.SS.%02d.%02d.%02d.%02d.dat",
+// 	  filename_out,fname_particle,fname_upORdown,"noether",
+// 	  GK_sourcePosition[isource][0],
+// 	  GK_sourcePosition[isource][1],
+// 	  GK_sourcePosition[isource][2],
+// 	  GK_sourcePosition[isource][3]);
+//   sprintf(fname_oneD,"%s.%s.%s.%s.SS.%02d.%02d.%02d.%02d.dat",
+// 	  filename_out,fname_particle,fname_upORdown,"oneD",
+// 	  GK_sourcePosition[isource][0],
+// 	  GK_sourcePosition[isource][1],
+// 	  GK_sourcePosition[isource][2],
+// 	  GK_sourcePosition[isource][3]);
   
-  FILE *ptr_local = NULL;
-  FILE *ptr_noether = NULL;
-  FILE *ptr_oneD = NULL;
+//   FILE *ptr_local = NULL;
+//   FILE *ptr_noether = NULL;
+//   FILE *ptr_oneD = NULL;
 
-  if( comm_rank() == 0 ){
-    ptr_local = fopen(fname_local,"w");
-    ptr_noether = fopen(fname_noether,"w");
-    ptr_oneD = fopen(fname_oneD,"w");
-    // local //
-    for(int iop = 0 ; iop < 16 ; iop++)
-      for(int it = 0 ; it < GK_totalL[3] ; it++)
-	for(int imom = 0 ; imom < GK_Nmoms ; imom++){
-	  int it_shift = (it+GK_sourcePosition[isource][3])%GK_totalL[3];
-	  int sign = (tsinkMtsource+GK_sourcePosition[isource][3]) 
-	    >= GK_totalL[3] ? -1 : +1;
-	  fprintf(ptr_local,"%d \t %d \t %+d %+d %+d \t %+e %+e\n", 
-		  iop, it, 
-		  GK_moms[imom][0],
-		  GK_moms[imom][1],
-		  GK_moms[imom][2],
-		  sign*corrThp_local[it_shift*GK_Nmoms*16*2 + 
-				     imom*16*2 + iop*2 + 0], 
-		  sign*corrThp_local[it_shift*GK_Nmoms*16*2 + 
-				     imom*16*2 + iop*2 + 1]);
-	}
-    // noether //
-    for(int iop = 0 ; iop < 4 ; iop++)
-      for(int it = 0 ; it < GK_totalL[3] ; it++)
-	for(int imom = 0 ; imom < GK_Nmoms ; imom++){
-	  int it_shift = (it+GK_sourcePosition[isource][3])%GK_totalL[3];
-	  int sign = (tsinkMtsource+GK_sourcePosition[isource][3]) 
-	    >= GK_totalL[3] ? -1 : +1;
-	  fprintf(ptr_noether,"%d \t %d \t %+d %+d %+d \t %+e %+e\n", 
-		  iop, it, 
-		  GK_moms[imom][0],
-		  GK_moms[imom][1],
-		  GK_moms[imom][2],
-		  sign*corrThp_noether[it_shift*GK_Nmoms*4*2 + 
-				       imom*4*2 + iop*2 + 0], 
-		  sign*corrThp_noether[it_shift*GK_Nmoms*4*2 + 
-				       imom*4*2 + iop*2 + 1]);
-	}
-    // oneD //
-    for(int iop = 0 ; iop < 16 ; iop++)
-      for(int dir = 0 ; dir < 4 ; dir++)
-	for(int it = 0 ; it < GK_totalL[3] ; it++)
-	  for(int imom = 0 ; imom < GK_Nmoms ; imom++){
-	    int it_shift = (it+GK_sourcePosition[isource][3])%GK_totalL[3];
-	    int sign = (tsinkMtsource+GK_sourcePosition[isource][3]) 
-	      >= GK_totalL[3] ? -1 : +1;
-	    fprintf(ptr_oneD,"%d \t %d \t %d \t %+d %+d %+d \t %+e %+e\n", 
-		    iop, dir, it, 
-		    GK_moms[imom][0],
-		    GK_moms[imom][1],
-		    GK_moms[imom][2],
-		    sign*corrThp_oneD[it_shift*GK_Nmoms*4*16*2 + 
-				      imom*4*16*2 + dir*16*2 + iop*2 + 0], 
-		    sign*corrThp_oneD[it_shift*GK_Nmoms*4*16*2 + 
-				      imom*4*16*2 + dir*16*2 + iop*2 + 1]);
-	  }
-    fclose(ptr_local);
-    fclose(ptr_noether);
-    fclose(ptr_oneD);
-  }
+//   if( comm_rank() == 0 ){
+//     ptr_local = fopen(fname_local,"w");
+//     ptr_noether = fopen(fname_noether,"w");
+//     ptr_oneD = fopen(fname_oneD,"w");
+//     // local //
+//     for(int iop = 0 ; iop < 16 ; iop++)
+//       for(int it = 0 ; it < GK_totalL[3] ; it++)
+// 	for(int imom = 0 ; imom < GK_Nmoms ; imom++){
+// 	  int it_shift = (it+GK_sourcePosition[isource][3])%GK_totalL[3];
+// 	  int sign = (tsinkMtsource+GK_sourcePosition[isource][3]) 
+// 	    >= GK_totalL[3] ? -1 : +1;
+// 	  fprintf(ptr_local,"%d \t %d \t %+d %+d %+d \t %+e %+e\n", 
+// 		  iop, it, 
+// 		  GK_moms[imom][0],
+// 		  GK_moms[imom][1],
+// 		  GK_moms[imom][2],
+// 		  sign*corrThp_local[it_shift*GK_Nmoms*16*2 + 
+// 				     imom*16*2 + iop*2 + 0], 
+// 		  sign*corrThp_local[it_shift*GK_Nmoms*16*2 + 
+// 				     imom*16*2 + iop*2 + 1]);
+// 	}
+//     // noether //
+//     for(int iop = 0 ; iop < 4 ; iop++)
+//       for(int it = 0 ; it < GK_totalL[3] ; it++)
+// 	for(int imom = 0 ; imom < GK_Nmoms ; imom++){
+// 	  int it_shift = (it+GK_sourcePosition[isource][3])%GK_totalL[3];
+// 	  int sign = (tsinkMtsource+GK_sourcePosition[isource][3]) 
+// 	    >= GK_totalL[3] ? -1 : +1;
+// 	  fprintf(ptr_noether,"%d \t %d \t %+d %+d %+d \t %+e %+e\n", 
+// 		  iop, it, 
+// 		  GK_moms[imom][0],
+// 		  GK_moms[imom][1],
+// 		  GK_moms[imom][2],
+// 		  sign*corrThp_noether[it_shift*GK_Nmoms*4*2 + 
+// 				       imom*4*2 + iop*2 + 0], 
+// 		  sign*corrThp_noether[it_shift*GK_Nmoms*4*2 + 
+// 				       imom*4*2 + iop*2 + 1]);
+// 	}
+//     // oneD //
+//     for(int iop = 0 ; iop < 16 ; iop++)
+//       for(int dir = 0 ; dir < 4 ; dir++)
+// 	for(int it = 0 ; it < GK_totalL[3] ; it++)
+// 	  for(int imom = 0 ; imom < GK_Nmoms ; imom++){
+// 	    int it_shift = (it+GK_sourcePosition[isource][3])%GK_totalL[3];
+// 	    int sign = (tsinkMtsource+GK_sourcePosition[isource][3]) 
+// 	      >= GK_totalL[3] ? -1 : +1;
+// 	    fprintf(ptr_oneD,"%d \t %d \t %d \t %+d %+d %+d \t %+e %+e\n", 
+// 		    iop, dir, it, 
+// 		    GK_moms[imom][0],
+// 		    GK_moms[imom][1],
+// 		    GK_moms[imom][2],
+// 		    sign*corrThp_oneD[it_shift*GK_Nmoms*4*16*2 + 
+// 				      imom*4*16*2 + dir*16*2 + iop*2 + 0], 
+// 		    sign*corrThp_oneD[it_shift*GK_Nmoms*4*16*2 + 
+// 				      imom*4*16*2 + dir*16*2 + iop*2 + 1]);
+// 	  }
+//     fclose(ptr_local);
+//     fclose(ptr_noether);
+//     fclose(ptr_oneD);
+//   }
 
-  free(corrThp_local_local);
-  free(corrThp_local_reduced);
-  free(corrThp_local);
+//   free(corrThp_local_local);
+//   free(corrThp_local_reduced);
+//   free(corrThp_local);
 
-  free(corrThp_noether_local);
-  free(corrThp_noether_reduced);
-  free(corrThp_noether);
+//   free(corrThp_noether_local);
+//   free(corrThp_noether_reduced);
+//   free(corrThp_noether);
 
-  free(corrThp_oneD_local);
-  free(corrThp_oneD_reduced);
-  free(corrThp_oneD);
+//   free(corrThp_oneD_local);
+//   free(corrThp_oneD_reduced);
+//   free(corrThp_oneD);
 
-  seqProp.destroyTexObject(seqTex);
-  prop.destroyTexObject(fwdTex);
-  gauge.destroyTexObject(gaugeTex);
+//   seqProp.destroyTexObject(seqTex);
+//   prop.destroyTexObject(fwdTex);
+//   gauge.destroyTexObject(gaugeTex);
 
-}
+// }

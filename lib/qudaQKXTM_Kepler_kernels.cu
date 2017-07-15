@@ -25,6 +25,7 @@ __constant__ int c_plusGhost[4];
 __constant__ int c_minusGhost[4];
 __constant__ int c_stride;
 __constant__ int c_surface[4];
+__constant__ int c_CSurf2D[QUDAQKXTM_DIM][QUDAQKXTM_DIM];
 __constant__ int c_nSpin;
 __constant__ double c_alphaAPE;
 __constant__ double c_alphaGauss;
@@ -69,6 +70,12 @@ int GK_nProc[QUDAQKXTM_DIM];
 int GK_plusGhost[QUDAQKXTM_DIM];
 int GK_minusGhost[QUDAQKXTM_DIM];
 int GK_surface3D[QUDAQKXTM_DIM];
+int GK_CSurf2D[QUDAQKXTM_DIM][QUDAQKXTM_DIM];
+int GK_SurfDir[QUDAQKXTM_DIM][QUDAQKXTM_DIM][2];
+int GK_procPP[QUDAQKXTM_DIM][QUDAQKXTM_DIM];
+int GK_procPM[QUDAQKXTM_DIM][QUDAQKXTM_DIM];
+int GK_procMP[QUDAQKXTM_DIM][QUDAQKXTM_DIM];
+int GK_procMM[QUDAQKXTM_DIM][QUDAQKXTM_DIM];
 bool GK_init_qudaQKXTM_Kepler_flag = false;
 int GK_Nsources;
 int GK_sourcePosition[MAX_NSOURCES][QUDAQKXTM_DIM];
@@ -129,20 +136,20 @@ void quda::init_qudaQKXTM_Kepler(qudaQKXTMinfo_Kepler *info){
     for(int i = 0 ; i < GK_nDim ; i++)
       GK_nProc[i] = comm_dim(i);
     
-        for(int i = 0 ; i < GK_nDim ; i++){   // take local and total lattice
+    for(int i = 0 ; i < GK_nDim ; i++){   // take local and total lattice
       GK_localL[i] = info->lL[i];
       GK_totalL[i] = GK_nProc[i] * GK_localL[i];
     }
-  
+    
     GK_localVolume = 1;
     GK_totalVolume = 1;
     for(int i = 0 ; i < GK_nDim ; i++){
       GK_localVolume *= GK_localL[i];
       GK_totalVolume *= GK_totalL[i];
     }
-
+    
     GK_strideFull = GK_localVolume;
-
+    
     for (int i=0; i<GK_nDim; i++) {
       GK_surface3D[i] = 1;
       for (int j=0; j<GK_nDim; j++) {
@@ -150,15 +157,37 @@ void quda::init_qudaQKXTM_Kepler(qudaQKXTMinfo_Kepler *info){
 	GK_surface3D[i] *= GK_localL[j];
       }
     }
-
-  for(int i = 0 ; i < GK_nDim ; i++)
-    if( GK_localL[i] == GK_totalL[i] )
-      GK_surface3D[i] = 0;
+    
+    for(int i = 0 ; i < GK_nDim ; i++)
+      if( GK_localL[i] == GK_totalL[i] )
+	GK_surface3D[i] = 0;
     
     for(int i = 0 ; i < GK_nDim ; i++){
       GK_plusGhost[i] =0;
       GK_minusGhost[i] = 0;
     }
+       
+    //-C.K. Surface sizes on the corners of the boundaries
+    for(int mu=0;mu<GK_nDim;mu++){
+      for(int nu=0;nu<GK_nDim;nu++){
+	if(mu==nu) GK_CSurf2D[mu][nu] = 0; // Diagonals MUST be zero!
+	else{
+	  for(int ku=0;ku<GK_nDim;ku++){
+	    if(ku==mu || ku==nu) continue;
+	    else{
+	      for(int lu=0;lu<GK_nDim;lu++){
+		if(lu==mu || lu==nu || lu==ku) continue;
+		else{
+		  GK_CSurf2D[mu][nu] = GK_localL[ku]*GK_localL[lu];
+		  GK_SurfDir[mu][nu][0] = ku;
+		  GK_SurfDir[mu][nu][1] = lu;
+		}
+	      }//-lu
+	    }
+	    break;
+	  }}}
+    }//-mu
+
     
 #ifdef MULTI_GPU
     int lastIndex = GK_localVolume;
@@ -170,7 +199,7 @@ void quda::init_qudaQKXTM_Kepler(qudaQKXTMinfo_Kepler *info){
       }
 #endif
     
-
+    
     for(int i = 0 ; i < GK_nDim ; i++){
       if( GK_localL[i] < GK_totalL[i])
 	GK_dimBreak[i] = true;
@@ -207,6 +236,61 @@ void quda::init_qudaQKXTM_Kepler(qudaQKXTMinfo_Kepler *info){
       for(int i = 0 ; i < 4 ; i++)
 	GK_sourcePosition[is][i] = info->sourcePosition[is][i];
 
+
+    //-C.K. Put something invalid for diagonals of GK_proc,
+    // they are not under consideration
+    int pCRD[QUDAQKXTM_DIM];
+    for(int mu=0;mu<GK_nDim;mu++){
+      GK_procPP[mu][mu] = -1;
+      GK_procPM[mu][mu] = -1;
+      GK_procMP[mu][mu] = -1;
+      GK_procMM[mu][mu] = -1;
+      pCRD[mu] = comm_coords(default_topo)[mu];
+    }    
+
+    //-C.K. Define corner-neighbours
+    int pCRD_def1;
+    int pCRD_def2;
+    for(int mu=0;mu<GK_nDim;mu++){
+      for(int nu=mu+1;nu<GK_nDim;nu++){
+	pCRD_def1 = pCRD[mu];
+	pCRD_def2 = pCRD[nu];
+
+	// +mu +nu direction
+	pCRD[mu] = (pCRD[mu] + 1)%GK_nProc[mu];
+	pCRD[nu] = (pCRD[nu] + 1)%GK_nProc[nu];
+	GK_procPP[mu][nu] = getProcID(pCRD,GK_nProc);
+	pCRD[mu] = pCRD_def1; //-Restore original position in mu direction 
+	pCRD[nu] = pCRD_def2; //-Restore original position in nu direction
+
+	// +mu -nu direction
+	pCRD[mu] = (pCRD[mu] + 1)%GK_nProc[mu];
+	pCRD[nu] = (GK_nProc[nu] + pCRD[nu] - 1)%GK_nProc[nu];
+	GK_procPM[mu][nu] = getProcID(pCRD,GK_nProc);
+	pCRD[mu] = pCRD_def1; //-Restore original position in mu direction 
+	pCRD[nu] = pCRD_def2; //-Restore original position in nu direction
+
+	// -mu +nu direction
+	pCRD[mu] = (GK_nProc[mu] + pCRD[mu] - 1)%GK_nProc[mu];
+	pCRD[nu] = (pCRD[nu] + 1)%GK_nProc[nu];
+	GK_procMP[mu][nu] = getProcID(pCRD,GK_nProc);
+	pCRD[mu] = pCRD_def1; //-Restore original position in mu direction 
+	pCRD[nu] = pCRD_def2; //-Restore original position in nu direction
+
+	// -mu -nu direction
+	pCRD[mu] = (GK_nProc[mu] + pCRD[mu] - 1)%GK_nProc[mu];
+	pCRD[nu] = (GK_nProc[nu] + pCRD[nu] - 1)%GK_nProc[nu];
+	GK_procMM[mu][nu] = getProcID(pCRD,GK_nProc);
+	pCRD[mu] = pCRD_def1; //-Restore original position in mu direction 
+	pCRD[nu] = pCRD_def2; //-Restore original position in nu direction
+
+	// Define symmetric points
+	GK_procPP[nu][mu] = GK_procPP[mu][nu];
+	GK_procPM[nu][mu] = GK_procMP[mu][nu];
+	GK_procMP[nu][mu] = GK_procPM[mu][nu];
+	GK_procMM[nu][mu] = GK_procMM[mu][nu];
+      }
+    }
     
     // initialization consist also from define device constants
     cudaMemcpyToSymbol(c_nColor, &GK_nColor, sizeof(int) );
@@ -223,6 +307,7 @@ void quda::init_qudaQKXTM_Kepler(qudaQKXTMinfo_Kepler *info){
     cudaMemcpyToSymbol(c_plusGhost , GK_plusGhost , QUDAQKXTM_DIM*sizeof(int) );
     cudaMemcpyToSymbol(c_minusGhost , GK_minusGhost , QUDAQKXTM_DIM*sizeof(int) );
     cudaMemcpyToSymbol(c_surface , GK_surface3D , QUDAQKXTM_DIM*sizeof(int) );
+    cudaMemcpyToSymbol(c_CSurf2D , GK_CSurf2D , QUDAQKXTM_DIM*QUDAQKXTM_DIM*sizeof(int) );
     
     cudaMemcpyToSymbol(c_eps, &(eps[0][0]) , 6*3*sizeof(int) );
     cudaMemcpyToSymbol(c_sgn_eps, sgn_eps , 6*sizeof(int) );
@@ -305,6 +390,12 @@ void quda::printf_qudaQKXTM_Kepler(){
   printfQuda("Total volume is %d\n",GK_totalVolume);
   printfQuda("Local volume is %d\n",GK_localVolume);
   printfQuda("Surface is (x,y,z,t) ( %d , %d , %d , %d)\n",GK_surface3D[0],GK_surface3D[1],GK_surface3D[2],GK_surface3D[3]);
+  printfQuda("2-d surfaces for corner boundaries are:\n");
+  for(int mu=0;mu<GK_nDim;mu++)
+    for(int nu=0;nu<GK_nDim;nu++)
+      printfQuda(" (%d,%d) = %d\n",mu,nu,GK_CSurf2D[mu][nu]);
+  printfQuda("\n");
+
   printfQuda("The plus Ghost points in directions (x,y,z,t) ( %d , %d , %d , %d )\n",GK_plusGhost[0],GK_plusGhost[1],GK_plusGhost[2],GK_plusGhost[3]);
   printfQuda("The Minus Ghost points in directixons (x,y,z,t) ( %d , %d , %d , %d )\n",GK_minusGhost[0],GK_minusGhost[1],GK_minusGhost[2],GK_minusGhost[3]);
   printfQuda("For APE smearing we use nsmear = %d , alpha = %lf\n",GK_nsmearAPE,GK_alphaAPE);
@@ -799,6 +890,46 @@ __global__ void fixSinkContractions_oneD_kernel_PosSpace_double(double2* block,
 #define FLOAT double
 #define FETCH_FLOAT2 fetch_double2
 #include <fixSinkContractions_oneD_core_Kepler_PosSpace.h>
+#undef FETCH_FLOAT2
+#undef FLOAT2
+#undef FLOAT
+}
+//-----------------------------------------------
+
+//- Fix Sink kernels, two-derivative
+__global__ void fixSinkContractions_twoD_kernel_float (float2* block,  
+						       cudaTextureObject_t fwdTex, 
+						       cudaTextureObject_t seqTex, 
+						       cudaTextureObject_t gaugeTex, 
+						       cudaTextureObject_t fwdCrnTex[4],
+						       cudaTextureObject_t seqCrnTex[4],
+						       cudaTextureObject_t gaugeCrnTex[4],
+						       WHICHPARTICLE TESTPARTICLE, 
+						       int partflag, int it, int mu, int nu,
+						       int x0, int y0, int z0){
+#define FLOAT2 float2
+#define FLOAT float
+#define FETCH_FLOAT2 fetch_float2
+#include <fixSinkContractions_twoD_core_Kepler.h>
+#undef FETCH_FLOAT2
+#undef FLOAT2
+#undef FLOAT
+}
+
+__global__ void fixSinkContractions_twoD_kernel_double(double2* block,  
+						       cudaTextureObject_t fwdTex, 
+						       cudaTextureObject_t seqTex, 
+						       cudaTextureObject_t gaugeTex, 
+						       cudaTextureObject_t fwdCrnTex[4],
+						       cudaTextureObject_t seqCrnTex[4],
+						       cudaTextureObject_t gaugeCrnTex[4],
+						       WHICHPARTICLE TESTPARTICLE, 
+						       int partflag, int it, int mu, int nu,
+						       int x0, int y0, int z0){
+#define FLOAT2 double2
+#define FLOAT double
+#define FETCH_FLOAT2 fetch_double2
+#include <fixSinkContractions_twoD_core_Kepler.h>
 #undef FETCH_FLOAT2
 #undef FLOAT2
 #undef FLOAT
@@ -1446,12 +1577,16 @@ template<typename Float2,typename Float>
 static void fixSinkContractions_kernel(void* corrThp_local, 
 				       void* corrThp_noether, 
 				       void* corrThp_oneD, 
+				       void* corrThp_twoD, 
 				       cudaTextureObject_t fwdTex, 
 				       cudaTextureObject_t seqTex, 
 				       cudaTextureObject_t gaugeTex,
+				       cudaTextureObject_t fwdCrnTex[4][4][4],
+				       cudaTextureObject_t seqCrnTex[4][4][4],
+				       cudaTextureObject_t gaugeCrnTex[4][4][4],
 				       WHICHPARTICLE PARTICLE, 
 				       int partflag, int itime, 
-				       int isource, CORR_SPACE CorrSpace){
+				       int isource, int Nthrp2D, CORR_SPACE CorrSpace, bool RUN_THRP_TWOD){
 
   int SpVol = GK_localVolume/GK_localL[3];
   int lV = GK_localVolume;
@@ -1513,6 +1648,9 @@ static void fixSinkContractions_kernel(void* corrThp_local,
       cudaMemcpy(&(((Float*)corrThp_oneD)[2*16*SpVol*itime + 2*16*lV*dir]), d_partial_block , copy_buf , cudaMemcpyDeviceToHost); 
       checkCudaError();
     }//-dir
+    //----------------------------------------------------------------------
+
+    //-C.K. Need to add the two-derivative kernel calls here at some point
     //----------------------------------------------------------------------
 
     //- Noether, conserved current
@@ -1653,6 +1791,53 @@ static void fixSinkContractions_kernel(void* corrThp_local,
     }//-dir
     //---------------------------------------------------------------
 
+    //-C.K. Two-derivative operators
+    if(RUN_THRP_TWOD){
+      int didx = 0;
+      for(int mu = 0 ; mu < 4 ; mu++){
+	for(int nu = 0 ; nu < 4 ; nu++){
+	  if(mu==nu) continue;
+	  else{
+	    
+	    if( typeid(Float2) == typeid(float2) )
+	      fixSinkContractions_twoD_kernel_float<<<gridDim,blockDim>>> ((float2*) d_partial_block, fwdTex, seqTex, gaugeTex, 
+									   fwdCrnTex[mu][nu], seqCrnTex[mu][nu], gaugeCrnTex[mu][nu],
+									   PARTICLE, partflag, itime, mu, nu, 
+									   GK_sourcePosition[isource][0], 
+									   GK_sourcePosition[isource][1], 
+									   GK_sourcePosition[isource][2]);
+	    else if( typeid(Float2) == typeid(double2) )
+	      fixSinkContractions_twoD_kernel_double<<<gridDim,blockDim>>>((double2*) d_partial_block, fwdTex, seqTex, gaugeTex,
+									   fwdCrnTex[mu][nu], seqCrnTex[mu][nu], gaugeCrnTex[mu][nu],
+									   PARTICLE, partflag, itime, mu, nu, 
+									   GK_sourcePosition[isource][0], 
+									   GK_sourcePosition[isource][1], 
+									   GK_sourcePosition[isource][2]);
+	  
+	    cudaMemcpy(h_partial_block , d_partial_block , GK_Nmoms*16*gridDim.x*2 * sizeof(Float) , cudaMemcpyDeviceToHost);
+	    checkCudaError();
+	    memset(reduction,0,GK_Nmoms*16*2*sizeof(Float));
+	  
+	    for(int imom = 0 ; imom < GK_Nmoms ; imom++)
+	      for(int iop = 0 ; iop < 16 ; iop++)
+		for(int i =0 ; i < gridDim.x ; i++){
+		  reduction[imom*16*2 + iop*2 + 0] += h_partial_block[imom*16*gridDim.x*2 + iop*gridDim.x*2 + i*2 + 0];
+		  reduction[imom*16*2 + iop*2 + 1] += h_partial_block[imom*16*gridDim.x*2 + iop*gridDim.x*2 + i*2 + 1];
+		}
+	  
+	    for(int imom = 0 ; imom < GK_Nmoms ; imom++)
+	      for(int iop = 0 ; iop < 16 ; iop++){
+		((Float*) corrThp_twoD)[itime*GK_Nmoms*Nthrp2D*16*2 + imom*Nthrp2D*16*2 + didx*16*2 + iop*2 + 0] = reduction[imom*16*2 + iop*2 + 0];
+		((Float*) corrThp_twoD)[itime*GK_Nmoms*Nthrp2D*16*2 + imom*Nthrp2D*16*2 + didx*16*2 + iop*2 + 1] = reduction[imom*16*2 + iop*2 + 1];
+	      }
+
+	    didx++;
+	  }//-else if mu==nu
+	}//-nu
+      }//-mu
+    }//-if RUN_THRP_TWOD
+    //---------------------------------------------------------------
+
     free(h_partial_block);
     cudaFree(d_partial_block);
     checkCudaError();
@@ -1664,21 +1849,26 @@ static void fixSinkContractions_kernel(void* corrThp_local,
 
 
 void quda::run_fixSinkContractions(void* corrThp_local, void* corrThp_noether, 
-				   void* corrThp_oneD, cudaTextureObject_t fwdTex, 
-				   cudaTextureObject_t seqTex, cudaTextureObject_t gaugeTex,
+				   void* corrThp_oneD, void* corrThp_twoD,
+				   cudaTextureObject_t fwdTex, cudaTextureObject_t seqTex, cudaTextureObject_t gaugeTex,
+				   cudaTextureObject_t fwdCrnTex[4][4][4],
+				   cudaTextureObject_t seqCrnTex[4][4][4],
+				   cudaTextureObject_t gaugeCrnTex[4][4][4],
 				   WHICHPARTICLE PARTICLE, int partflag, int it, 
-				   int isource, int precision, CORR_SPACE CorrSpace){
+				   int isource, int Nthrp2D, int precision, CORR_SPACE CorrSpace, bool RUN_THRP_TWOD){
   
   if(precision == 4) 
-    fixSinkContractions_kernel<float2,float>  (corrThp_local, corrThp_noether, 
-					       corrThp_oneD, fwdTex, seqTex, 
-					       gaugeTex, PARTICLE, partflag, 
-					       it, isource, CorrSpace);
+    fixSinkContractions_kernel<float2,float>  (corrThp_local, corrThp_noether, corrThp_oneD, corrThp_twoD,
+					       fwdTex, seqTex, gaugeTex, 
+					       fwdCrnTex, seqCrnTex, gaugeCrnTex,
+					       PARTICLE, partflag, 
+					       it, isource, Nthrp2D, CorrSpace, RUN_THRP_TWOD);
   else if(precision == 8) 
-    fixSinkContractions_kernel<double2,double>(corrThp_local, corrThp_noether, 
-					       corrThp_oneD, fwdTex, seqTex, 
-					       gaugeTex, PARTICLE, partflag, 
-					       it, isource, CorrSpace);
+    fixSinkContractions_kernel<double2,double>(corrThp_local, corrThp_noether, corrThp_oneD, corrThp_twoD,
+					       fwdTex, seqTex, gaugeTex,
+					       fwdCrnTex, seqCrnTex, gaugeCrnTex,
+					       PARTICLE, partflag, 
+					       it, isource, Nthrp2D, CorrSpace, RUN_THRP_TWOD);
   else  errorQuda("run_fixSinkContractions: Precision %d not supported\n",precision);
   
 }

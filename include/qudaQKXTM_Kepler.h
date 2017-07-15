@@ -71,6 +71,13 @@ static int qcd_isBigEndian()
   return -1;
 }
 
+
+static int getProcID(int pCRD[],int pDIM[]){
+
+  return pCRD[3] + pDIM[3]*pCRD[2] + pDIM[3]*pDIM[2]*pCRD[1] + pDIM[3]*pDIM[2]*pCRD[1]*pCRD[0]; 
+}
+
+
 static char* qcd_getParam(char token[],char* params,int len)
 {
   int i,token_len=strlen(token);
@@ -107,6 +114,7 @@ namespace quda {
   protected:
     
     int field_length;
+    int field_length2;
     int total_length;        
     int ghost_length;
     int total_plus_ghost_length;
@@ -164,9 +172,35 @@ namespace quda {
   
   template<typename Float>
     class QKXTM_Gauge_Kepler : public QKXTM_Field_Kepler<Float> {
+
+    //-C.K. Corner buffers for all possible directions
+  protected:
+    Float *h_crnBufPP[QUDAQKXTM_DIM][QUDAQKXTM_DIM];
+    Float *h_crnBufPM[QUDAQKXTM_DIM][QUDAQKXTM_DIM];
+    Float *h_crnBufMP[QUDAQKXTM_DIM][QUDAQKXTM_DIM];
+    Float *h_crnBufMM[QUDAQKXTM_DIM][QUDAQKXTM_DIM];
+    Float *d_crnBufPP[QUDAQKXTM_DIM][QUDAQKXTM_DIM];
+    Float *d_crnBufPM[QUDAQKXTM_DIM][QUDAQKXTM_DIM];
+    Float *d_crnBufMP[QUDAQKXTM_DIM][QUDAQKXTM_DIM];
+    Float *d_crnBufMM[QUDAQKXTM_DIM][QUDAQKXTM_DIM];
+
+    bool gaugePacked = false;
+
   public:
     QKXTM_Gauge_Kepler(ALLOCATION_FLAG alloc_flag, CLASS_ENUM classT);
     ~QKXTM_Gauge_Kepler(){;}
+
+    //-C.K. Functions for allocating and freeing corner boundary buffers
+    void initHostCornerBufs();
+    void zeroHostCornerBufs();
+    void freeHostCornerBufs();
+    void initDeviceCornerBufs();
+    void zeroDeviceCornerBufs();
+    void freeDeviceCornerBufs();
+    void commCornersHost();
+    void copyHostCornersToDevice();
+    void createCornerTexObject(cudaTextureObject_t *tex, int mu, int nu, int dd);
+    void destroyCornerTexObject(cudaTextureObject_t tex);
     
     void packGauge(void **gauge);
     void packGaugeToBackup(void **gauge);
@@ -178,6 +212,15 @@ namespace quda {
     void cpuExchangeGhost();
     void ghostToDevice();
     void calculatePlaq();
+
+    int Precision() const{
+      if( typeid(Float) == typeid(float) )
+        return 4;
+      else if( typeid(Float) == typeid(double) )
+        return 8;
+      else
+        return 0;
+    }
     
   };
   
@@ -236,11 +279,36 @@ namespace quda {
   
   template<typename Float>
     class QKXTM_Propagator_Kepler : public QKXTM_Field_Kepler<Float> {
+
+    //-C.K. Corner buffers for all possible directions
+  protected:
+    Float *h_crnBufPP[QUDAQKXTM_DIM][QUDAQKXTM_DIM];
+    Float *h_crnBufPM[QUDAQKXTM_DIM][QUDAQKXTM_DIM];
+    Float *h_crnBufMP[QUDAQKXTM_DIM][QUDAQKXTM_DIM];
+    Float *h_crnBufMM[QUDAQKXTM_DIM][QUDAQKXTM_DIM];
+    Float *d_crnBufPP[QUDAQKXTM_DIM][QUDAQKXTM_DIM];
+    Float *d_crnBufPM[QUDAQKXTM_DIM][QUDAQKXTM_DIM];
+    Float *d_crnBufMP[QUDAQKXTM_DIM][QUDAQKXTM_DIM];
+    Float *d_crnBufMM[QUDAQKXTM_DIM][QUDAQKXTM_DIM];
+
     
   public:
     QKXTM_Propagator_Kepler(ALLOCATION_FLAG alloc_flag, CLASS_ENUM classT);
     ~QKXTM_Propagator_Kepler(){;}
     
+    //-C.K. Functions for allocating and freeing corner boundary buffers
+    void initHostCornerBufs();
+    void zeroHostCornerBufs();
+    void freeHostCornerBufs();
+    void initDeviceCornerBufs();
+    void zeroDeviceCornerBufs();
+    void freeDeviceCornerBufs();
+    void commCornersHost();
+    void copyHostCornersToDevice();
+    void createCornerTexObject(cudaTextureObject_t *tex, int mu, int nu, int dd);
+    void destroyCornerTexObject(cudaTextureObject_t tex);
+
+    void unloadPropagator();
     void ghostToHost();
     void cpuExchangeGhost();
     void ghostToDevice();
@@ -254,6 +322,16 @@ namespace quda {
 			      int nu, int c2);
     void rotateToPhysicalBase_host(int sign);
     void rotateToPhysicalBase_device(int sign);
+
+    int Precision() const{
+      if( typeid(Float) == typeid(float) )
+        return 4;
+      else if( typeid(Float) == typeid(double) )
+        return 8;
+      else
+        return 0;
+    }
+
   };
   
   ///////////////////////////////
@@ -350,25 +428,25 @@ namespace quda {
 			QKXTM_Propagator_Kepler<Float> &prop,
 			QKXTM_Gauge_Kepler<Float> &gauge, 
 			void *corrThp_local, void *corrThp_noether, 
-			void *corrThp_oneD, 
+			void *corrThp_oneD, void *corrThp_twoD,
 			WHICHPROJECTOR typeProj, 
 			WHICHPARTICLE testParticle, 
-			int partFlag, int isource, CORR_SPACE CorrSpace);
+			int partFlag, int isource, int Nthrp2D, CORR_SPACE CorrSpace, bool THRP_TWOD);
 
    void writeThrp_ASCII(void *corrThp_local, void *corrThp_noether, 
 			void *corrThp_oneD, WHICHPARTICLE testParticle, 
 			int partflag , char *filename_out, int isource, 
 			int tsinkMtsource, CORR_SPACE CorrSpace);
-   void copyThrpToHDF5_Buf(void *Thrp_HDF5, void *corrThp,  int mu, int uORd,
+   void copyThrpToHDF5_Buf(void *Thrp_HDF5, void *corrThp,  int mu, int Nthrp2D, int uORd,
 			   int its, int Nsink, int pr, int thrp_sign, 
 			   THRP_TYPE type, CORR_SPACE CorrSpace, bool HighMomForm);
    void writeThrpHDF5(void *Thrp_local_HDF5, void *Thrp_noether_HDF5, 
-		      void **Thrp_oneD_HDF5, char *filename, 
+		      void **Thrp_oneD_HDF5, void **Thrp_twoD_HDF5, char *filename, 
 		      qudaQKXTMinfo_Kepler info, int isource, 
 		      WHICHPARTICLE NUCLEON);
    void writeThrpHDF5_MomSpace(void *Thrp_local_HDF5, 
 			       void *Thrp_noether_HDF5, 
-			       void **Thrp_oneD_HDF5, char *filename, 
+			       void **Thrp_oneD_HDF5, void **Thrp_twoD_HDF5, char *filename, 
 			       qudaQKXTMinfo_Kepler info, int isource, 
 			       WHICHPARTICLE NUCLEON);
    void writeThrpHDF5_PosSpace(void *Thrp_local_HDF5, 
@@ -378,7 +456,7 @@ namespace quda {
 			       WHICHPARTICLE NUCLEON);
    void writeThrpHDF5_MomSpace_HighMomForm(void *Thrp_local_HDF5,
                                            void *Thrp_noether_HDF5,
-                                           void **Thrp_oneD_HDF5, char *filename,
+                                           void **Thrp_oneD_HDF5, void **Thrp_twoD_HDF5, char *filename,
                                            qudaQKXTMinfo_Kepler info, int isource,
                                            WHICHPARTICLE NUCLEON);
   };

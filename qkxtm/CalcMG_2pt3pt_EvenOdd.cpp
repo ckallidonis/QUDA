@@ -126,6 +126,7 @@ extern char proj_list_file[];
 
 extern char *corr_write_space;
 extern bool HighMomForm;
+extern bool RUN_THRP_TWOD;
 
 namespace quda {
   extern void setTransferGPU(bool);
@@ -510,6 +511,7 @@ int main(int argc, char **argv)
   info.Q_sq = Q_sq;
   info.traj = traj;
   info.HighMomForm = HighMomForm;
+  info.RUN_THRP_TWOD = RUN_THRP_TWOD;
   info.kappa = kappa;
   info.csw = csw;
   info.mu = mu;

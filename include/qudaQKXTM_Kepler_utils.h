@@ -56,7 +56,7 @@ namespace quda {
     int Nproj[MAX_TSINK];
     int traj;
     bool check_files;
-    char *thrp_type[3];
+    char *thrp_type[4];
     char *thrp_proj_type[5];
     char *baryon_type[10];
     char *meson_type[10];
@@ -68,10 +68,12 @@ namespace quda {
     CORR_SPACE CorrSpace;
     bool HighMomForm;
     bool isEven;
+    bool RUN_THRP_TWOD;
     double kappa;
     double mu;
     double csw;
     double inv_tol;
+    int Nthrp2D;
   } qudaQKXTMinfo_Kepler;
   
   
@@ -132,7 +134,7 @@ namespace quda {
   enum CLASS_ENUM{FIELD,GAUGE,VECTOR,PROPAGATOR,PROPAGATOR3D,VECTOR3D};
   enum WHICHPARTICLE{PROTON,NEUTRON};
   enum WHICHPROJECTOR{G4,G5G123,G5G1,G5G2,G5G3};
-  enum THRP_TYPE{THRP_LOCAL,THRP_NOETHER,THRP_ONED};
+  enum THRP_TYPE{THRP_LOCAL,THRP_NOETHER,THRP_ONED,THRP_TWOD};
   
   enum APEDIM{D3,D4};
   
@@ -174,12 +176,17 @@ namespace quda {
 				 WHICHPROJECTOR PID, WHICHPARTICLE PARTICLE, 
 				 int precision);
   void run_fixSinkContractions(void* corrThp_local, void* corrThp_noether, 
-			       void* corrThp_oneD,cudaTextureObject_t fwdTex,
+			       void* corrThp_oneD,  void* corrThp_twoD,
+			       cudaTextureObject_t fwdTex,
 			       cudaTextureObject_t seqTex, 
 			       cudaTextureObject_t gaugeTex,
+			       cudaTextureObject_t fwdCrnTex[4][4][4],
+			       cudaTextureObject_t seqCrnTex[4][4][4],
+			       cudaTextureObject_t gaugeCrnTex[4][4][4],
 			       WHICHPARTICLE PARTICLE, int partflag, int it, 
-			       int isource, int precision, 
-			       CORR_SPACE CorrSpace);
+			       int isource, int Nthrp2D, int precision, 
+			       CORR_SPACE CorrSpace, bool RUN_THRP_TWOD);
+
 
 } //End namespace quda
 
