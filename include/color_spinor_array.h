@@ -170,6 +170,75 @@ namespace quda {
     friend class ColorSpinorParam;
   };
 
+  //--------------------------------------------------------------------------------------------------------
+  //--------------------------------------------------------------------------------------------------------
+
+  // CPU implementation
+  class cpuColorSpinorArray : public ColorSpinorArray {
+
+    friend class cudaColorSpinorArray;
+
+  public:
+    static void* fwdGhostFaceBuffer[QUDA_MAX_DIM]; //cpu memory
+    static void* backGhostFaceBuffer[QUDA_MAX_DIM]; //cpu memory
+    static void* fwdGhostFaceSendBuffer[QUDA_MAX_DIM]; //cpu memory
+    static void* backGhostFaceSendBuffer[QUDA_MAX_DIM]; //cpu memory
+    static int initGhostFaceBuffer;
+    static size_t ghostFaceBytes[QUDA_MAX_DIM];
+
+  private:
+    bool init;
+    bool reference; // whether the field is a reference or not
+
+    void create(const QudaFieldCreate);
+    void destroy();
+
+  public:
+    cpuColorSpinorArray(const cpuColorSpinorArray&);
+    cpuColorSpinorArray(const ColorSpinorArray&);
+    cpuColorSpinorArray(const ColorSpinorArray&, const ColorSpinorParam&);
+    cpuColorSpinorArray(const ColorSpinorParam&);
+    virtual ~cpuColorSpinorArray();
+
+    ColorSpinorArray& operator=(const ColorSpinorArray &);
+    cpuColorSpinorArray& operator=(const cpuColorSpinorArray&);
+    cpuColorSpinorArray& operator=(const cudaColorSpinorArray&);
+
+    /**
+       @brief Allocate the ghost buffers
+       @param[in] nFace Depth of each halo
+    */
+    void allocateGhostBuffer(int nFace) const;
+    static void freeGhostBuffer(void);
+
+    void packGhost(void **ghost, const QudaParity parity, const int nFace, const int dagger) const;
+    void unpackGhost(void* ghost_spinor, const int dim,
+                     const QudaDirection dir, const int dagger);
+
+    void zero();
+
+    /**
+       @brieff This is a unified ghost exchange function for doing a complete
+       halo exchange regardless of the type of field.  All dimensions
+       are exchanged and no spin projection is done in the case of
+       Wilson fermions.
+       @param[in] parity Field parity
+       @param[in] nFace Depth of halo exchange
+       @param[in] dagger Is this for a dagger operator (only relevant for spin projected Wilson)
+       @param[in] pack_destination Destination of the packing buffer
+       @param[in] halo_location Destination of the halo reading buffer
+       @param[in] gdr_send Dummy for CPU
+       @param[in] gdr_recv Dummy for GPU
+    */
+    void exchangeGhost(QudaParity parity, int nFace, int dagger, const MemoryLocation *pack_destination=nullptr,
+                       const MemoryLocation *halo_location=nullptr, bool gdr_send=false, bool gdr_recv=false) const;
+  };
+
+  //--------------------------------------------------------------------------------------------------------
+  //--------------------------------------------------------------------------------------------------------
+
+
+
 
 } // namespace quda
 
