@@ -219,7 +219,7 @@ namespace quda {
 
   void cpuColorSpinorArray::packGhost(void **ghost, const QudaParity parity, const int nFace, const int dagger) const
   {
-    genericPackGhost(ghost, *this, parity, nFace, dagger);
+    genericPackGhost<ColorSpinorArray>(ghost, *this, parity, nFace, dagger); //-C.K. CHECK: Might need to pass cpuColorSpinorArray as template
     return;
   }
 

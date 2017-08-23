@@ -152,29 +152,29 @@ namespace quda {
 
     template<typename ReduceType, typename Float> struct square { __host__ __device__ ReduceType operator()(quda::complex<Float> x) { return static_cast<ReduceType>(norm(x)); } };
 
-    template<typename Float, int nSpin, int nColor, int nVec, QudaFieldOrder order> struct AccessorCB { 
-      AccessorCB(const ColorSpinorField &) { errorQuda("Not implemented"); }
+    template<typename TColSpin, typename Float, int nSpin, int nColor, int nVec, QudaFieldOrder order> struct AccessorCB { 
+      AccessorCB(const TColSpin &) { errorQuda("Not implemented"); }
       __device__ __host__ inline int index(int parity, int x_cb, int s, int c, int v) const { return 0; }
     };
 
-    template<typename Float, int nSpin, int nColor, int nVec, QudaFieldOrder order> struct GhostAccessorCB {
-      GhostAccessorCB(const ColorSpinorField &) { errorQuda("Not implemented"); }
+    template<typename TColSpin, typename Float, int nSpin, int nColor, int nVec, QudaFieldOrder order> struct GhostAccessorCB {
+      GhostAccessorCB(const TColSpin &) { errorQuda("Not implemented"); }
       __device__ __host__ inline int index(int dim, int dir, int parity, int x_cb, int s, int c, int v) const
       { return 0; }
     };
 
-    template<typename Float, int nSpin, int nColor, int nVec> 
-      struct AccessorCB<Float,nSpin,nColor,nVec,QUDA_SPACE_SPIN_COLOR_FIELD_ORDER> { 
+    template<typename TColSpin, typename Float, int nSpin, int nColor, int nVec> 
+      struct AccessorCB<TColSpin,Float,nSpin,nColor,nVec,QUDA_SPACE_SPIN_COLOR_FIELD_ORDER> { 
       const int offset_cb;
-    AccessorCB(const ColorSpinorField &field) : offset_cb((field.Bytes()>>1) / sizeof(complex<Float>)) { }
+    AccessorCB(const TColSpin &field) : offset_cb((field.Bytes()>>1) / sizeof(complex<Float>)) { }
       __device__ __host__ inline int index(int parity, int x_cb, int s, int c, int v) const 
       { return parity*offset_cb + ((x_cb*nSpin+s)*nColor+c)*nVec+v; }
     };
 
-    template<typename Float, int nSpin, int nColor, int nVec>
-      struct GhostAccessorCB<Float,nSpin,nColor,nVec,QUDA_SPACE_SPIN_COLOR_FIELD_ORDER> {
+    template<typename TColSpin, typename Float, int nSpin, int nColor, int nVec>
+      struct GhostAccessorCB<TColSpin,Float,nSpin,nColor,nVec,QUDA_SPACE_SPIN_COLOR_FIELD_ORDER> {
       int ghostOffset[4];
-      GhostAccessorCB(const ColorSpinorField &a, int nFace = 1) {
+      GhostAccessorCB(const TColSpin &a, int nFace = 1) {
 	for (int d=0; d<4; d++) {
 	  ghostOffset[d] = nFace*a.SurfaceCB(d)*nColor*nSpin*nVec;
 	}
@@ -192,21 +192,21 @@ namespace quda {
       return index;
     };
 
-    template<typename Float, int nSpin, int nColor, int nVec> 
-      struct AccessorCB<Float,nSpin,nColor,nVec,QUDA_FLOAT2_FIELD_ORDER> { 
+    template<typename TColSpin, typename Float, int nSpin, int nColor, int nVec> 
+      struct AccessorCB<TColSpin,Float,nSpin,nColor,nVec,QUDA_FLOAT2_FIELD_ORDER> { 
       const int stride;
       const int offset_cb;
-    AccessorCB(const ColorSpinorField &field): stride(field.Stride()), 
+    AccessorCB(const TColSpin &field): stride(field.Stride()), 
 	offset_cb((field.Bytes()>>1) / sizeof(complex<Float>)) { }
       __device__ __host__ inline int index(int parity, int x_cb, int s, int c, int v) const 
       { return parity*offset_cb + ((s*nColor+c)*nVec+v)*stride+x_cb; }
     };
 
-    template<typename Float, int nSpin, int nColor, int nVec>
-      struct GhostAccessorCB<Float,nSpin,nColor,nVec,QUDA_FLOAT2_FIELD_ORDER> {
+    template<typename TColSpin, typename Float, int nSpin, int nColor, int nVec>
+      struct GhostAccessorCB<TColSpin,Float,nSpin,nColor,nVec,QUDA_FLOAT2_FIELD_ORDER> {
       int faceVolumeCB[4];
       int ghostOffset[4];
-      GhostAccessorCB(const ColorSpinorField &a, int nFace = 1) {
+      GhostAccessorCB(const TColSpin &a, int nFace = 1) {
 	for (int d=0; d<4; d++) {
 	  faceVolumeCB[d] = nFace*a.SurfaceCB(d);
 	  ghostOffset[d] = faceVolumeCB[d]*nColor*nSpin*nVec;
@@ -217,7 +217,7 @@ namespace quda {
     };
 
 
-    template <typename Float, int nSpin, int nColor, int nVec, QudaFieldOrder order>
+    template <typename TColSpin, Float, int nSpin, int nColor, int nVec, QudaFieldOrder order>
       class FieldOrderCB {
 
     protected:
@@ -227,8 +227,8 @@ namespace quda {
       const int volumeCB;
       const int nDim;
       const QudaGammaBasis gammaBasis;
-      const AccessorCB<Float,nSpin,nColor,nVec,order> accessor;
-      const GhostAccessorCB<Float,nSpin,nColor,nVec,order> ghostAccessor;
+      const AccessorCB<TColSpin,Float,nSpin,nColor,nVec,order> accessor;
+      const GhostAccessorCB<TColSpin,Float,nSpin,nColor,nVec,order> ghostAccessor;
       const int siteSubset;
       const int nParity;
       const QudaFieldLocation location;
@@ -238,11 +238,12 @@ namespace quda {
        * Constructor for the FieldOrderCB class
        * @param field The field that we are accessing
        */
-    FieldOrderCB(const ColorSpinorField &field, int nFace=1, void *v_=0, void **ghost_=0)
+    FieldOrderCB(const TColSpin &field, int nFace=1, void *v_=0, void **ghost_=0)
       : v(v_? static_cast<complex<Float>*>(const_cast<void*>(v_))
 	  : static_cast<complex<Float>*>(const_cast<void*>(field.V()))),
 	volumeCB(field.VolumeCB()),
-	nDim(field.Ndim()), gammaBasis(field.GammaBasis()),
+	nDim(field.Ndim()),
+	gammaBasis( (typeid(TColSpin) == typeid(ColorSpinorArray)) ? QUDA_INVALID_GAMMA_BASIS : field.GammaBasis()),
 	siteSubset(field.SiteSubset()), nParity(field.SiteSubset()),
 	location(field.Location()), accessor(field), ghostAccessor(field,nFace)
       { 

@@ -262,7 +262,7 @@ namespace quda {
 
   void cpuColorSpinorField::packGhost(void **ghost, const QudaParity parity, const int nFace, const int dagger) const
   {
-    genericPackGhost(ghost, *this, parity, nFace, dagger);
+    genericPackGhost<ColorSpinorField>(ghost, *this, parity, nFace, dagger);  //-C.K. CHECK: Might need to pass cpuColorSpinorField as template
     return;
   }
 

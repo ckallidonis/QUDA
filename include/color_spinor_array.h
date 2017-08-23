@@ -237,7 +237,20 @@ namespace quda {
   //--------------------------------------------------------------------------------------------------------
   //--------------------------------------------------------------------------------------------------------
 
+  /**
+     @brief Generic ghost packing routine
 
+     @param[out] ghost Array of packed ghosts with array ordering [2*dim+dir]
+     @param[in] a Input field that is being packed
+     @param[in] parity Which parity are we packing
+     @param[in] dagger Is for a dagger operator (presently ignored)
+     @param[in[ location Array specifiying the memory location of each resulting ghost [2*dim+dir]
+  */
+
+  //-C.K. Overloaded: Added a template to accommodate both ColorSpinorField and ColorSpinorArray when calling the function
+  template <typename TColSpin>
+  void genericPackGhost(void **ghost, const TColSpin &a, QudaParity parity,
+                        int nFace, int dagger, MemoryLocation *destination=nullptr);
 
 
 } // namespace quda
