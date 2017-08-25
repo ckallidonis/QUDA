@@ -721,7 +721,7 @@ namespace quda {
       }
     }
 
-    packFace(packBuffer, *this, location, nFace, dagger, parity, dim, face_num, *stream, a, b);
+    packFace<cudaColorSpinorField>(packBuffer, *this, location, nFace, dagger, parity, dim, face_num, *stream, a, b);
 #else
     errorQuda("packGhost not built on single-GPU build");
 #endif
@@ -882,7 +882,7 @@ namespace quda {
       }
     }
 
-    packFaceExtended(packBuffer, *this, location, nFace, R, dagger, parity, dim, face_num, *stream);
+    packFaceExtended<cudaColorSpinorField>(packBuffer, *this, location, nFace, R, dagger, parity, dim, face_num, *stream);
 #else
     errorQuda("packGhostExtended not built on single-GPU build");
 #endif
@@ -929,7 +929,7 @@ namespace quda {
       }
     }
 
-    packFaceExtended(packBuffer, *this, location, nFace, R, dagger, parity, dim, face_num, *stream, unpack);
+    packFaceExtended<cudaColorSpinorField>(packBuffer, *this, location, nFace, R, dagger, parity, dim, face_num, *stream, unpack);
 #else
     errorQuda("unpackGhostExtended not built on single-GPU build");
 #endif

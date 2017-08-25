@@ -38,6 +38,8 @@ namespace quda {
     int pad;
     int stride;
 
+    const QudaTwistFlavorType twistFlavor = QUDA_TWIST_INVALID;
+
     size_t real_length; // physical length only
     size_t length; // length including pads, but not ghost zone - used for BLAS
 
@@ -168,6 +170,172 @@ namespace quda {
 
     friend std::ostream& operator<<(std::ostream &out, const ColorSpinorArray &);
     friend class ColorSpinorParam;
+  };
+
+  //--------------------------------------------------------------------------------------------------------
+  //--------------------------------------------------------------------------------------------------------
+
+  // CUDA implementation
+  class cudaColorSpinorArray : public ColorSpinorArray {
+
+    friend class cpuColorSpinorArray;
+
+  private:
+    bool alloc; // whether we allocated memory
+    bool init;
+
+    bool reference; // whether the field is a reference or not
+
+    static size_t ghostFaceBytes;
+    static bool initGhostFaceBuffer;
+
+    mutable void *ghost_field_tex[4]; // instance pointer to GPU halo buffer (used to check if static allocation has changed)
+
+    void create(const QudaFieldCreate);
+    void destroy();
+
+    /** Keep track of which pinned-memory buffer we used for creating message handlers */
+    size_t bufferMessageHandler;
+
+  public:
+    cudaColorSpinorArray(const ColorSpinorParam&);
+    virtual ~cudaColorSpinorArray();
+
+    ColorSpinorArray& operator=(const ColorSpinorArray &);
+    cudaColorSpinorArray& operator=(const cpuColorSpinorArray&);
+
+    void switchBufferPinned();
+
+    /**
+       @brief Create the communication handlers and buffers
+       @param[in] nFace Depth of each halo
+       @param[in] spin_project Whether the halos are spin projected (Wilson-type fermions only)
+    */
+    void createComms(int nFace, bool spin_project=true);
+
+    /**
+       @brief Destroy the communication handlers and buffers
+    */
+    void destroyComms();
+
+    /**
+       @brief Allocate the ghost buffers
+       @param[in] nFace Depth of each halo
+       @param[in] spin_project Whether the halos are spin projected (Wilson-type fermions only)
+    */
+    void allocateGhostBuffer(int nFace, bool spin_project=true) const;
+
+    /**
+       @brief Free statically allocated ghost buffers
+    */
+    static void freeGhostBuffer(void);
+
+    /**
+       @brief Packs the cudaColorSpinorField's ghost zone
+       @param[in] nFace How many faces to pack (depth)
+       @param[in] parity Parity of the field
+       @param[in] dim Labels space-time dimensions
+       @param[in] dir Pack data to send in forward of backward directions, or both
+       @param[in] dagger Whether the operator is the Hermitian conjugate or not
+       @param[in] stream Which stream to use for the kernel
+       @param[out] buffer Optional parameter where the ghost should be
+       stored (default is to use cudaColorSpinorField::ghostFaceBuffer)
+       @param[in] location Are we packing directly into local device memory, zero-copy memory or remote memory
+       @param[in] a Twisted mass parameter (default=0)
+       @param[in] b Twisted mass parameter (default=0)
+    */
+    void packGhost(const int nFace, const QudaParity parity, const int dim, const QudaDirection dir, const int dagger,
+                   cudaStream_t* stream, MemoryLocation location[2*QUDA_MAX_DIM], double a=0, double b=0);
+
+
+    void packGhostExtended(const int nFace, const int R[], const QudaParity parity, const int dim, const QudaDirection dir,
+                           const int dagger,cudaStream_t* stream, bool zero_copy=false);
+
+
+    void packGhost(FullClover &clov, FullClover &clovInv, const int nFace, const QudaParity parity, const int dim,
+                   const QudaDirection dir, const int dagger, cudaStream_t* stream, void *buffer=0, double a=0);
+
+    /**
+      Initiate the gpu to cpu send of the ghost zone (halo)
+      @param ghost_spinor Where to send the ghost zone
+      @param nFace Number of face to send
+      @param dim The lattice dimension we are sending
+      @param dir The direction (QUDA_BACKWARDS or QUDA_FORWARDS)
+      @param dagger Whether the operator is daggerer or not
+      @param stream The array of streams to use
+    */
+    void sendGhost(void *ghost_spinor, const int nFace, const int dim, const QudaDirection dir,
+		   const int dagger, cudaStream_t *stream);
+
+    /**
+      Initiate the cpu to gpu send of the ghost zone (halo)
+      @param ghost_spinor Source of the ghost zone
+      @param nFace Number of face to send
+      @param dim The lattice dimension we are sending
+      @param dir The direction (QUDA_BACKWARDS or QUDA_FORWARDS)
+      @param dagger Whether the operator is daggerer or not
+      @param stream The array of streams to use
+    */
+    void unpackGhost(const void* ghost_spinor, const int nFace, const int dim,
+		     const QudaDirection dir, const int dagger, cudaStream_t* stream);
+
+    /**
+      Initiate the cpu to gpu copy of the extended border region
+      @param ghost_spinor Source of the ghost zone
+      @param parity Parity of the field
+      @param nFace Number of face to send
+      @param dim The lattice dimension we are sending
+      @param dir The direction (QUDA_BACKWARDS or QUDA_FORWARDS)
+      @param dagger Whether the operator is daggered or not
+      @param stream The array of streams to use
+      @param zero_copy Whether we are unpacking from zero_copy memory
+    */
+    void unpackGhostExtended(const void* ghost_spinor, const int nFace, const QudaParity parity,
+                             const int dim, const QudaDirection dir, const int dagger, cudaStream_t* stream, bool zero_copy);
+
+
+    void streamInit(cudaStream_t *stream_p);
+
+    void pack(int nFace, int parity, int dagger, int stream_idx,
+              MemoryLocation location[], double a=0, double b=0);
+
+    void packExtended(const int nFace, const int R[], const int parity, const int dagger,
+		      const int dim,  cudaStream_t *stream_p, const bool zeroCopyPack=false);
+
+    void gather(int nFace, int dagger, int dir, cudaStream_t *stream_p=NULL);
+
+    void recvStart(int nFace, int dir, int dagger=0, cudaStream_t *stream_p=NULL, bool gdr=false);
+    void sendStart(int nFace, int dir, int dagger=0, cudaStream_t *stream_p=NULL, bool gdr=false);
+    void commsStart(int nFace, int dir, int dagger=0, cudaStream_t *stream_p=NULL, bool gdr=false);
+    int commsQuery(int nFace, int dir, int dagger=0, cudaStream_t *stream_p=NULL, bool gdr=false);
+    void commsWait(int nFace, int dir, int dagger=0, cudaStream_t *stream_p=NULL, bool gdr=false);
+
+    void scatter(int nFace, int dagger, int dir, cudaStream_t *stream_p);
+    void scatter(int nFace, int dagger, int dir);
+
+    void scatterExtended(int nFace, int parity, int dagger, int dir);
+
+    const void* Ghost2() const { return ghost_field_tex[bufferIndex]; }
+
+    /**
+       @brief This is a unified ghost exchange function for doing a complete
+       halo exchange regardless of the type of field.  All dimensions
+       are exchanged and no spin projection is done in the case of
+       Wilson fermions.
+       @param[in] parity Field parity
+       @param[in] nFace Depth of halo exchange
+       @param[in] dagger Is this for a dagger operator (only relevant for spin projected Wilson)
+       @param[in] pack_destination Destination of the packing buffer
+       @param[in] halo_location Destination of the halo reading buffer
+       @param[in] gdr_send Are we using GDR for sending
+       @param[in] gdr_recv Are we using GDR for receiving
+    */
+    void exchangeGhost(QudaParity parity, int nFace, int dagger, const MemoryLocation *pack_destination=nullptr,
+                       const MemoryLocation *halo_location=nullptr, bool gdr_send=false, bool gdr_recv=false) const;
+
+    void zero();
+
+    friend std::ostream& operator<<(std::ostream &out, const cudaColorSpinorField &);
   };
 
   //--------------------------------------------------------------------------------------------------------

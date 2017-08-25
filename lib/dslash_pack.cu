@@ -675,6 +675,222 @@ namespace quda {
 
 #endif // GPU_TWISTED_MASS_DIRAC
 
+  //-C.K. Overload this class with an additional typename to accommodate both cudaColorSpinorFields and cudaColorSpinorArrays
+  template <typename TColSpin, typename FloatN, typename Float>
+    class PackFace : public Tunable {
+
+  protected:
+    void *faces[2*QUDA_MAX_DIM];
+    const TColSpin *in;
+    const int dagger;
+    const int parity;
+    const int nFace;
+    const int dim;
+    const int face_num;
+    MemoryLocation location[2*QUDA_MAX_DIM];
+
+    // compute how many threads we need in total for the face packing
+    unsigned int threads() const {
+      unsigned int threads = 0;
+      if(dim < 0){ // if dim is negative, pack all dimensions
+        for (int i=0; i<4; i++) {
+          if (!commDim[i]) continue;
+          if ( i==3 && !getKernelPackT() ) continue;
+          threads += 2*nFace*in->GhostFace()[i]; // 2 for forwards and backwards faces
+        }
+      }else{ // pack only in dim dimension
+        if( commDim[dim] && (dim!=3 || getKernelPackT() )){
+          threads = nFace*in->GhostFace()[dim];
+          if(face_num==2) threads *= 2; // sending data forwards and backwards
+        }
+      }
+      return threads;
+    }
+
+    virtual int inputPerSite() const = 0;
+    virtual int outputPerSite() const = 0;
+
+    // prepare the param struct with kernel arguments
+    void prepareParam(PackParam<FloatN> &param, TuneParam &tp, int dim=-1, int face_num=2) {
+      param.in = (FloatN*)in->V();
+      param.inNorm = (float*)in->Norm();
+      param.dim = dim;
+      param.face_num = face_num;
+      param.parity = parity;
+      for(int d=0; d<in->Ndim(); d++) param.X[d] = in->X()[d];
+      for(int d=in->Ndim(); d<QUDA_MAX_DIM; d++) param.X[d] = 1;
+      param.X[0] *= 2;
+
+#ifdef USE_TEXTURE_OBJECTS
+      if(typeid(TColCpin) != typeid(cudaColorSpinorArray)){
+	param.inTex = in->Tex();
+	param.inTexNorm = in->TexNorm();
+      }
+#endif
+
+      param.threads = threads();
+      param.sp_stride = in->Stride();
+
+      int prev = -1; // previous dimension that was partitioned
+      for (int i=0; i<4; i++) {
+        param.threadDimMapLower[i] = 0;
+        param.threadDimMapUpper[i] = 0;
+        if (!commDim[i]) continue;
+        param.threadDimMapLower[i] = (prev>=0 ? param.threadDimMapUpper[prev] : 0);
+        param.threadDimMapUpper[i] = param.threadDimMapLower[i] + 2*nFace*in->GhostFace()[i];
+
+	param.out[2*i+0] = static_cast<FloatN*>(faces[2*i+0]);
+	param.out[2*i+1] = static_cast<FloatN*>(faces[2*i+1]);
+
+	param.outNorm[2*i+0] = reinterpret_cast<float*>(static_cast<char*>(faces[2*i+0]) + nFace*outputPerSite()*in->GhostFace()[i]*QUDA_HALF_PRECISION);
+	param.outNorm[2*i+1] = reinterpret_cast<float*>(static_cast<char*>(faces[2*i+1]) + nFace*outputPerSite()*in->GhostFace()[i]*QUDA_HALF_PRECISION);
+
+        prev=i;
+      }
+
+      param.volume_4d = in->VolumeCB()*2 / (in->Ndim() == 5 ? in->X(4) : 1);
+      param.ghostFace[0] = param.X[1]*param.X[2]*param.X[3]/2;
+      param.ghostFace[1] = param.X[0]*param.X[2]*param.X[3]/2;
+      param.ghostFace[2] = param.X[0]*param.X[1]*param.X[3]/2;
+      param.ghostFace[3] = param.X[0]*param.X[1]*param.X[2]/2;
+
+      param.dims[0][0]=param.X[1];
+      param.dims[0][1]=param.X[2];
+      param.dims[0][2]=param.X[3];
+
+      param.dims[1][0]=param.X[0];
+      param.dims[1][1]=param.X[2];
+      param.dims[1][2]=param.X[3];
+
+      param.dims[2][0]=param.X[0];
+      param.dims[2][1]=param.X[1];
+      param.dims[2][2]=param.X[3];
+
+      param.dims[3][0]=param.X[0];
+      param.dims[3][1]=param.X[1];
+      param.dims[3][2]=param.X[2];
+
+      int face[4];
+      for (int dim=0; dim<4; dim++) {
+	for (int j=0; j<4; j++) face[j] = param.X[j];
+	face[dim] = nFace;
+
+	param.face_X[dim] = face[0];
+	param.face_Y[dim] = face[1];
+	param.face_Z[dim] = face[2];
+	param.face_T[dim] = face[3];
+	param.face_XY[dim] = param.face_X[dim] * face[1];
+	param.face_XYZ[dim] = param.face_XY[dim] * face[2];
+	param.face_XYZT[dim] = param.face_XYZ[dim] * face[3];
+      }
+
+      param.swizzle = tp.aux.x;
+    }
+
+    unsigned int sharedBytesPerThread() const { return 0; }
+    unsigned int sharedBytesPerBlock(const TuneParam &param) const { return 0; }
+
+    bool tuneGridDim() const { return false; } // Don't tune the grid dimensions.
+    bool tuneAuxDim() const { return true; } // Do tune the aux dimensions.
+    unsigned int minThreads() const { return threads(); }
+
+    void fillAux() {
+      strcpy(aux, in->AuxString());
+      char comm[5];
+      comm[0] = (commDim[0] ? '1' : '0');
+      comm[1] = (commDim[1] ? '1' : '0');
+      comm[2] = (commDim[2] ? '1' : '0');
+      comm[3] = (commDim[3] ? '1' : '0');
+      comm[4] = '\0'; strcat(aux,",comm=");
+      strcat(aux,comm);
+      if (getKernelPackT()) { strcat(aux,",kernelPackT"); }
+      switch (nFace) {
+      case 1:
+	strcat(aux,",nFace=1,location=");
+	break;
+      case 3:
+	strcat(aux,",nFace=3,location=");
+	break;
+      default:
+	errorQuda("Number of faces not supported");
+      }
+#if 0  // FIXME need to support process divergent tuning for different PCIe topologies per GPU
+      // record the location of where each pack buffer is in [2*dim+dir] ordering
+      // 0 - no packing
+      // 1 - pack to local GPU memory
+      // 2 - pack to local mapped CPU memory
+      // 3 - pack to remote mapped GPU memory
+      char pack_location[9];
+      for (int dim=0; dim<4; dim++) {
+	for (int dir=0; dir<2; dir++) {
+	  pack_location[2*dim+dir] = !commDim[dim] ? '0' : location[2*dim+dir] == Device ? '1' : location[2*dim+dir] == Host ? '2' : '3';
+	}
+      }
+      pack_location[8] = '\0';
+      strcat(aux,pack_location);
+#endif
+    }
+
+  public:
+    PackFace(void *faces_[], const TColSpin *in, MemoryLocation location_[],
+	     const int dagger, const int parity, const int nFace, const int dim=-1, const int face_num=2)
+      : in(in), dagger(dagger),
+	parity(parity), nFace(nFace), dim(dim), face_num(face_num) 
+    { 
+      for (int d=0; d<2*QUDA_MAX_DIM; d++) {
+	faces[d] = faces_[d];
+	location[d] = location_[d];
+      }
+      fillAux(); 
+      bindSpinorTex<FloatN>(in);
+    }
+
+    virtual ~PackFace() { 
+      unbindSpinorTex<FloatN>(in);
+    }
+
+    bool advanceAux(TuneParam &param) const
+    {
+#ifdef SWIZZLE
+      if (param.aux.x < 2*deviceProp.multiProcessorCount) {
+        param.aux.x++;
+	return true;
+      } else {
+        param.aux.x = 1;
+	return false;
+      }
+#else
+      return false;
+#endif
+    }
+
+    void initTuneParam(TuneParam &param) const {
+      Tunable::initTuneParam(param);
+      param.aux.x = 1; // swizzle factor
+    }
+
+    void defaultTuneParam(TuneParam &param) const {
+      Tunable::defaultTuneParam(param);
+      param.aux.x = 1; // swizzle factor
+    }
+
+    long long flops() const { return outputPerSite()*this->threads(); }
+
+    virtual int tuningIter() const { return 3; }
+
+    virtual TuneKey tuneKey() const { return TuneKey(in->VolString(), typeid(*this).name(), aux); }
+
+    virtual void apply(const cudaStream_t &stream) = 0;
+
+    long long bytes() const { 
+      size_t faceBytes = (inputPerSite() + outputPerSite())*this->threads()*sizeof(((FloatN*)0)->x);
+      if (sizeof(((FloatN*)0)->x) == QUDA_HALF_PRECISION) 
+        faceBytes += 2*this->threads()*sizeof(float); // 2 is from input and output
+      return faceBytes;
+    }
+  };
+
+
   template <typename FloatN, typename Float>
     class PackFace : public Tunable {
 
@@ -887,8 +1103,8 @@ namespace quda {
     }
   };
 
-  template <typename FloatN, typename Float>
-    class PackFaceWilson : public PackFace<FloatN, Float> {
+  template <typename TColSpin, typename FloatN, typename Float>
+    class PackFaceWilson : public PackFace<TColSpin, FloatN, Float> {
 
   private:
 
@@ -896,9 +1112,9 @@ namespace quda {
     int outputPerSite() const { return 12; } // output is spin projected
 
   public:
-    PackFaceWilson(void *faces[], const cudaColorSpinorField *in, MemoryLocation location[],
+    PackFaceWilson(void *faces[], const TColSpin *in, MemoryLocation location[],
 		   const int dagger, const int parity)
-      : PackFace<FloatN, Float>(faces, in, location, dagger, parity, 1) { }
+      : PackFace<TcolSpin, FloatN, Float>(faces, in, location, dagger, parity, 1) { }
     virtual ~PackFaceWilson() { }
 
     void apply(const cudaStream_t &stream) {
@@ -919,25 +1135,26 @@ namespace quda {
 
   };
 
-  void packFaceWilson(void *ghost_buf[], cudaColorSpinorField &in, MemoryLocation location[],
+  template <typename TColSpin>
+  void packFaceWilson(void *ghost_buf[], TColSpin &in, MemoryLocation location[],
 		      const int dagger, const int parity, const cudaStream_t &stream) {
 
     switch(in.Precision()) {
     case QUDA_DOUBLE_PRECISION:
       {
-        PackFaceWilson<double2, double> pack(ghost_buf, &in, location, dagger, parity);
+        PackFaceWilson<TColSpin, double2, double> pack(ghost_buf, &in, location, dagger, parity);
         pack.apply(stream);
       }
       break;
     case QUDA_SINGLE_PRECISION:
       {
-        PackFaceWilson<float4, float> pack(ghost_buf, &in, location, dagger, parity);
+        PackFaceWilson<TColSpin, float4, float> pack(ghost_buf, &in, location, dagger, parity);
         pack.apply(stream);
       }
       break;
     case QUDA_HALF_PRECISION:
       {
-        PackFaceWilson<short4, float> pack(ghost_buf, &in, location, dagger, parity);
+        PackFaceWilson<TColSpin, short4, float> pack(ghost_buf, &in, location, dagger, parity);
         pack.apply(stream);
       }
       break;
@@ -1846,7 +2063,8 @@ namespace quda {
     } 
   }
 
-  void packFace(void *ghost_buf[2*QUDA_MAX_DIM], cudaColorSpinorField &in,
+  template <typename TColSpin>
+  void packFace(void *ghost_buf[2*QUDA_MAX_DIM], TColSpin &in,
 		MemoryLocation location[], const int nFace,
 		const int dagger, const int parity, 
 		const int dim, const int face_num, 
@@ -1886,13 +2104,13 @@ namespace quda {
 	packFaceNdegTM(ghost_buf, in, location, dagger, parity, stream);
       }
     } else {
-      packFaceWilson(ghost_buf, in, location, dagger, parity, stream);
+      packFaceWilson<TColSpin>(ghost_buf, in, location, dagger, parity, stream);
     }
   }
 
 
-
-  void packFaceExtended(void* buffer[2*QUDA_MAX_DIM], cudaColorSpinorField &field,
+  template <typename TColSpin>
+  void packFaceExtended(void* buffer[2*QUDA_MAX_DIM], TColSpin &field,
 			MemoryLocation location[], const int nFace, const int R[],
 			const int dagger, const int parity, const int dim, const int face_num, 
 			const cudaStream_t &stream, const bool unpack)
