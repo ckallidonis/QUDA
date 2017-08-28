@@ -968,7 +968,7 @@ namespace quda {
     }
 
     //-C.K. CHECK: Might need to pass cudaColorSpinorField as template
-    genericPackGhost<ColorSpinorField>(send, *this, parity, nFace, dagger, pack_destination); // FIXME - need support for asymmetric topologies
+    genericPackGhost<ColorSpinorArray>(send, *this, parity, nFace, dagger, pack_destination); // FIXME - need support for asymmetric topologies
 
     size_t total_bytes = 0;
     for (int i=0; i<nDimComms; i++) if (comm_dim_partitioned(i)) total_bytes += 2*ghost_face_bytes[i]; // 2 for fwd/bwd
