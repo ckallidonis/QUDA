@@ -78,7 +78,6 @@ namespace quda {
 #else
           LAUNCH_KERNEL_MG_BLOCK_SIZE(RestrictKernel,tp,stream,arg,Float,fineSpin,fineColor,
                                       coarseSpin,coarseColor,coarse_colors_per_thread,Arg);
->>>>>>> develop
 #endif
         } else {
 	  errorQuda("Unsupported field order %d", out.FieldOrder());
