@@ -18,6 +18,12 @@
 #include <mpi.h>
 #endif
 
+#ifdef HAVE_LIME
+extern "C" {
+#include <lime.h>
+}
+#endif
+
 #include <qio_field.h>
 
 #define MAX(a,b) ((a)>(b)?(a):(b))
@@ -618,8 +624,13 @@ int main(int argc, char **argv)
   }
 
   if (strcmp(latfile,"")) {  // load in the command line supplied gauge field
+#ifdef HAVE_LIME
+    readLimeGauge(gauge, latfile, &gauge_param, &inv_param, gridsize_from_cmdline);
+    applyBoundaryCondition(gauge, V/2 ,&gauge_param);
+#else
     read_gauge_field(latfile, gauge, gauge_param.cpu_prec, gauge_param.X, argc, argv);
     construct_gauge_field(gauge, 2, gauge_param.cpu_prec, &gauge_param);
+#endif
   } else { // else generate a random SU(3) field
     //generate a random SU(3) field
     //construct_gauge_field(gauge, 1, gauge_param.cpu_prec, &gauge_param);
