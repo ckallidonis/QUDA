@@ -219,7 +219,8 @@ namespace
                                                                   {"nondeg-doublet", QUDA_TWIST_NONDEG_DOUBLET},
                                                                   {"no", QUDA_TWIST_NO}};
 
-  CLI::TransformPairs<QudaInverterType> inverter_type_map {{"cg", QUDA_CG_INVERTER},
+  CLI::TransformPairs<QudaInverterType> inverter_type_map {{"none", QUDA_INVALID_INVERTER},
+                                                           {"cg", QUDA_CG_INVERTER},
                                                            {"bicgstab", QUDA_BICGSTAB_INVERTER},
                                                            {"gcr", QUDA_GCR_INVERTER},
                                                            {"pcg", QUDA_PCG_INVERTER},
@@ -256,9 +257,8 @@ namespace
                                                            {"mat-pc-dag", QUDA_MATPC_DAG_SOLUTION},
                                                            {"mat-pc-dag-mat-pc", QUDA_MATPCDAG_MATPC_SOLUTION}};
 
-  CLI::TransformPairs<QudaEigType> eig_type_map {
-     {"trlm", QUDA_EIG_TR_LANCZOS}, {"irlm", QUDA_EIG_IR_LANCZOS}, {"iram", QUDA_EIG_IR_ARNOLDI},
-     {"primme", QUDA_EIG_PRIMME}};						 
+  CLI::TransformPairs<QudaEigType> eig_type_map {{"trlm", QUDA_EIG_TR_LANCZOS}, {"irlm", QUDA_EIG_IR_LANCZOS}, {"iram", QUDA_EIG_IR_ARNOLDI},
+						 {"primme", QUDA_EIG_PRIMME}};
 
   CLI::TransformPairs<QudaSolveType> solve_type_map {
     {"direct", QUDA_DIRECT_SOLVE},       {"direct-pc", QUDA_DIRECT_PC_SOLVE}, {"normop", QUDA_NORMOP_SOLVE},
