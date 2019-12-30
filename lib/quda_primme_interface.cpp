@@ -134,7 +134,7 @@ namespace quda
     }
 
     // Auxiliary function for the matvec
-    template<typename evecs_type, bool use_inv> struct primmeMatvec {
+    template<typename evecs_type, bool use_inv, bool isHermitian> struct primmeMatvec {
       static void fun(void *x0, PRIMME_INT *ldx, void *y0, PRIMME_INT *ldy,
           int *blockSize, primme_params *primme, int *ierr)
       {
@@ -182,7 +182,8 @@ namespace quda
           }
 
           // Do y = gamma * y
-          gamma5(*y, *y);
+	   // g5 application should be done only when the operator is not Hermitian, i.e. it is either M or Mdag
+          if(!isHermitian) gamma5(*y, *y);
 
           // Clean up
           delete x;
@@ -283,7 +284,11 @@ namespace quda
       primme.numTargetShifts = 1;
 
       // Set operator
-      primme.matrixMatvec = use_inv ? primmeMatvec<evecs_type, true>::fun : primmeMatvec<evecs_type, false>::fun;
+      if(eig_param->use_norm_op)
+        primme.matrixMatvec = use_inv ? primmeMatvec<evecs_type, true, true>::fun : primmeMatvec<evecs_type, false, true>::fun;
+      else
+        primme.matrixMatvec = use_inv ? primmeMatvec<evecs_type, true, false>::fun : primmeMatvec<evecs_type, false, false>::fun;
+      
       ColorSpinorParam invParam0(invParam);
       primme.commInfo = &invParam0;
       primme.matrix = eigensolver;
