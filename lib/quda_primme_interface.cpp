@@ -149,13 +149,13 @@ namespace quda
 
         for (int i=0; i<*blockSize; i++) {
           // Wrap the raw pointers into ColorSpinorField
-          ColorSpinorParam *invParam = (ColorSpinorParam *)primme->commInfo;
-          invParam->nVec = 1;
-          invParam->create = QUDA_REFERENCE_FIELD_CREATE;
-          invParam->v = (evecs_type*)x0 + *ldx*i;
-          ColorSpinorField *x = ColorSpinorField::Create(*invParam);
-          invParam->v = (evecs_type*)y0 + *ldy*i;
-          ColorSpinorField *y = ColorSpinorField::Create(*invParam);
+          ColorSpinorParam *csParam = (ColorSpinorParam *)primme->commInfo;
+          csParam->nVec = 1;
+          csParam->create = QUDA_REFERENCE_FIELD_CREATE;
+          csParam->v = (evecs_type*)x0 + *ldx*i;
+          ColorSpinorField *x = ColorSpinorField::Create(*csParam);
+          csParam->v = (evecs_type*)y0 + *ldy*i;
+          ColorSpinorField *y = ColorSpinorField::Create(*csParam);
 
           // Initialize y, for instance y = x
           blas::zero(*y);
@@ -168,11 +168,11 @@ namespace quda
             (*solve)(*y, *x);
 
             // Check residual
-            //ColorSpinorParam *invParam = (ColorSpinorParam *)primme->commInfo;
-            //invParam->nVec = 1;
-            //invParam->create = QUDA_ZERO_FIELD_CREATE;
-            //invParam->v = NULL;
-            //ColorSpinorField *tmp1 = ColorSpinorField::Create(*invParam);
+            //ColorSpinorParam *csParam = (ColorSpinorParam *)primme->commInfo;
+            //csParam->nVec = 1;
+            //csParam->create = QUDA_ZERO_FIELD_CREATE;
+            //csParam->v = NULL;
+            //ColorSpinorField *tmp1 = ColorSpinorField::Create(*csParam);
             //blas::zero(*tmp1);
             //eigensolver->matVec(eigensolver->mat, *tmp1, *y);
             ////MatQuda(tmp1->V(), y0, eigensolver->get_eig_param()->invert_param);
@@ -200,10 +200,10 @@ namespace quda
     {
       const QudaEigParam *eig_param = eigensolver->get_eig_param();
 
-      ColorSpinorParam invParam(*kSpace[0]);
+      ColorSpinorParam csParam(*kSpace[0]);
 
       // Place eigenvectors where kSpace is located
-      QudaFieldLocation location = invParam.location;
+      QudaFieldLocation location = csParam.location;
 
       // Set the inverter's location and tolerance
       if (use_inv) {
@@ -258,13 +258,13 @@ namespace quda
       } else {
         evecs_ptr = (evecs_type *)pool_device_malloc(eig_param->nEv * nLocal * sizeof(evecs_type));
       }
-      invParam.v = evecs_ptr;
-      invParam.nVec = eig_param->nEv;
-      invParam.create = QUDA_REFERENCE_FIELD_CREATE;
-      ColorSpinorField *evecs = ColorSpinorField::Create(invParam);
-      invParam.nVec = 1;
-      invParam.create = QUDA_NULL_FIELD_CREATE;
-      invParam.v = nullptr;
+      csParam.v = evecs_ptr;
+      csParam.nVec = eig_param->nEv;
+      csParam.create = QUDA_REFERENCE_FIELD_CREATE;
+      ColorSpinorField *evecs = ColorSpinorField::Create(csParam);
+      csParam.nVec = 1;
+      csParam.create = QUDA_NULL_FIELD_CREATE;
+      csParam.v = nullptr;
 
       // Copy initial guess to evecs
       int initSize = 0;
@@ -289,8 +289,8 @@ namespace quda
       else
         primme.matrixMatvec = use_inv ? primmeMatvec<evecs_type, true, false>::fun : primmeMatvec<evecs_type, false, false>::fun;
       
-      ColorSpinorParam invParam0(invParam);
-      primme.commInfo = &invParam0;
+      ColorSpinorParam csParam0(csParam);
+      primme.commInfo = &csParam0;
       primme.matrix = eigensolver;
 
       // Enforce leading dimension of matvec's input/output vectors to be aligned for textures
@@ -377,12 +377,6 @@ namespace quda
 
       // Compute eigenvalues and residuals
       eigensolver->computeEvals(eigensolver->mat, kSpace, evals_out, primme.initSize);
-      // if (getVerbosity() >= QUDA_SUMMARIZE) {
-      //   for (int i = 0; i < eig_param->nEv; i++) {
-      //     printfQuda("EigValue[%04d]: (%+.16e, %+.16e) residual %.16e\n", i, evals_out[i].real(), evals_out[i].imag(),
-      //                eigensolver->residua[i]);
-      //   }
-      // }
 
       if (getVerbosity() >= QUDA_SUMMARIZE) {
         printfQuda("PRIMME computed the requested %d vectors in %g restart steps and %g OP*x operations.\n", primme.initSize,
@@ -420,7 +414,7 @@ namespace quda
         printfQuda("***** END PRIMME SOLUTION *****\n");
         printfQuda("*******************************\n");
       }
-    }
+    }//-call
 
   } // auxiliary namespace
 
@@ -441,7 +435,8 @@ namespace quda
     QudaPrecision prec = kSpace[0]->Precision();
 
     // Pass precision and twisted as template arguments, because the types of vectors and values depend on them
-    bool twisted = eig_param->invert_param->dslash_type == QUDA_TWISTED_CLOVER_DSLASH ? true : false;
+    bool twisted = (eig_param->invert_param->dslash_type == QUDA_TWISTED_CLOVER_DSLASH ||
+		    eig_param->invert_param->dslash_type == QUDA_TWISTED_MASS_DSLASH) ? true : false;
     bool called = false;
     if (prec == QUDA_DOUBLE_PRECISION && !twisted) { call<QUDA_DOUBLE_PRECISION, false>(kSpace, evals, this); called = true; }
     if (prec == QUDA_SINGLE_PRECISION && !twisted) { call<QUDA_SINGLE_PRECISION, false>(kSpace, evals, this); called = true; }
