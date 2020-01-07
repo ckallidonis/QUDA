@@ -35,36 +35,42 @@ namespace quda {
 */
 static int tprimme(float *evals, PRIMME_COMPLEX_HALF *evecs, float *resNorms, primme_params *primme, QudaFieldLocation location)
 {
+  fprintf(stderr,"CHKPT - Got into tprimme # 1\n");
   if (location == QUDA_CPU_FIELD_LOCATION ) return       ksprimme       (evals, evecs, resNorms, primme);
   if (location == QUDA_CUDA_FIELD_LOCATION) return magma_ksprimme       (evals, evecs, resNorms, primme);
   errorQuda("Invalid location %d", location); return -1;
 }
 static int tprimme(float *evals, std::complex<float> *evecs, float *resNorms, primme_params *primme, QudaFieldLocation location)
 {
+  fprintf(stderr,"CHKPT - Got into tprimme # 2\n");
   if (location == QUDA_CPU_FIELD_LOCATION ) return       cprimme        (evals, evecs, resNorms, primme);
   if (location == QUDA_CUDA_FIELD_LOCATION) return magma_cprimme        (evals, evecs, resNorms, primme);
   errorQuda("Invalid location %d", location); return -1;
 }
 static int tprimme(double *evals, std::complex<double> *evecs, double *resNorms, primme_params *primme, QudaFieldLocation location)
 {
+  fprintf(stderr,"CHKPT - Got into tprimme # 3\n");
   if (location == QUDA_CPU_FIELD_LOCATION ) return       zprimme        (evals, evecs, resNorms, primme);
   if (location == QUDA_CUDA_FIELD_LOCATION) return magma_zprimme        (evals, evecs, resNorms, primme);
   errorQuda("Invalid location %d", location); return -1;
 }
 static int tprimme(std::complex<float> *evals, PRIMME_COMPLEX_HALF *evecs, float *resNorms, primme_params *primme, QudaFieldLocation location)
 {
+  fprintf(stderr,"CHKPT - Got into tprimme # 4\n");
   if (location == QUDA_CPU_FIELD_LOCATION ) return       kcprimme_normal(evals, evecs, resNorms, primme);
   if (location == QUDA_CUDA_FIELD_LOCATION) return magma_kcprimme_normal(evals, evecs, resNorms, primme);
   errorQuda("Invalid location %d", location); return -1;
 }
 static int tprimme(std::complex<float> *evals, std::complex<float> *evecs, float *resNorms, primme_params *primme, QudaFieldLocation location)
 {
+  fprintf(stderr,"CHKPT - Got into tprimme # 5\n");
   if (location == QUDA_CPU_FIELD_LOCATION ) return       cprimme_normal (evals, evecs, resNorms, primme);
   if (location == QUDA_CUDA_FIELD_LOCATION) return magma_cprimme_normal (evals, evecs, resNorms, primme);
   errorQuda("Invalid location %d", location); return -1;
 }
 static int tprimme(std::complex<double> *evals, std::complex<double> *evecs, double *resNorms, primme_params *primme, QudaFieldLocation location)
 {
+  fprintf(stderr,"CHKPT - Got into tprimme # 6\n");
   if (location == QUDA_CPU_FIELD_LOCATION ) return       zprimme_normal (evals, evecs, resNorms, primme);
   if (location == QUDA_CUDA_FIELD_LOCATION) return magma_zprimme_normal (evals, evecs, resNorms, primme);
   errorQuda("Invalid location %d", location); return -1;
@@ -100,10 +106,10 @@ namespace quda
   }
 
   namespace { // Auxiliary functions
-    /*
+    
     // Auxiliary function to copy the xi-th column of x into the yi-th column of y
     // NOTE: column indices start from zero
-    void copy_column(ColorSpinorField &y, int yi, ColorSpinorField &x, int xi) {
+    /*    void copy_column(ColorSpinorField &y, int yi, ColorSpinorField &x, int xi) {
 
       ColorSpinorParam xparam(x), yparam(y);
       if (xi > xparam.nVec)
@@ -119,7 +125,7 @@ namespace quda
       blas::copy(*y1, *x1);
       delete x1;
       delete y1;
-      } */
+      }*/
 
     // Auxiliary function for global sum reduction
     void globalSumDouble(void *sendBuf, void *recvBuf, int *count, 
@@ -138,6 +144,7 @@ namespace quda
       static void fun(void *x0, PRIMME_INT *ldx, void *y0, PRIMME_INT *ldy,
           int *blockSize, primme_params *primme, int *ierr)
       {
+	fprintf(stderr,"CHKPT - fun-func: Got into the function\n");
         // If this routine exits before reaching the end, notify it as an error by default
         *ierr = -1;
 
@@ -148,6 +155,7 @@ namespace quda
         Solver *solve = (Solver*)primme->preconditioner;
 
         for (int i=0; i<*blockSize; i++) {
+	  fprintf(stderr,"CHKPT - fun-func: Got into for-loop %d / %d\n", i, *blockSize);
           // Wrap the raw pointers into ColorSpinorField
           ColorSpinorParam *csParam = (ColorSpinorParam *)primme->commInfo;
           csParam->nVec = 1;
@@ -157,15 +165,22 @@ namespace quda
           csParam->v = (evecs_type*)y0 + *ldy*i;
           ColorSpinorField *y = ColorSpinorField::Create(*csParam);
 
+	  fprintf(stderr,"CHKPT - fun-func: After csField wrap %d / %d\n", i, *blockSize);
+
           // Initialize y, for instance y = x
           blas::zero(*y);
+
+	  fprintf(stderr,"CHKPT - fun-func: After blas::zero(*y) %d / %d\n", i, *blockSize);
 
           if (!use_inv) {
             // Do y = Dirac * x
             eigensolver->matVec(eigensolver->mat, *y, *x);
+	    fprintf(stderr,"CHKPT - fun-func: !use_inv %d / %d\n", i, *blockSize);
           } else {
             // Do y = Dirac^{-1} * x
+	    fprintf(stderr,"CHKPT - fun-func: use_inv Before solve %d / %d\n", i, *blockSize);
             (*solve)(*y, *x);
+	    fprintf(stderr,"CHKPT - fun-func: use_inv After solve %d / %d\n", i, *blockSize);
 
             // Check residual
             //ColorSpinorParam *csParam = (ColorSpinorParam *)primme->commInfo;
@@ -183,7 +198,8 @@ namespace quda
 
           // Do y = gamma * y
 	   // g5 application should be done only when the operator is not Hermitian, i.e. it is either M or Mdag
-          if(!isHermitian) gamma5(*y, *y);
+          if(isHermitian) printfQuda("Skipping g5-application\n");
+          else gamma5(*y, *y);
 
           // Clean up
           delete x;
@@ -192,6 +208,7 @@ namespace quda
 
         // We're good!
         *ierr = 0;
+	fprintf(stderr,"CHKPT - fun-func: Exiting\n");
       }
     };
 
@@ -266,6 +283,8 @@ namespace quda
       csParam.create = QUDA_NULL_FIELD_CREATE;
       csParam.v = nullptr;
 
+      fprintf(stderr,"CHKPT - call-func: Before copying init guess\n");
+      
       // Copy initial guess to evecs
       int initSize = 0;
       for (size_t i=0; i<kSpace.size() && i<(size_t)std::min(eig_param->nEv, 0); i++) {
@@ -274,6 +293,7 @@ namespace quda
 	//        copy_column(*evecs, i, *kSpace[i], 0);
 	*evecs = *kSpace[i];
         initSize++;
+	fprintf(stderr,"CHKPT - call-func: Copying init guess %zu\n", i);
       }
       if (getVerbosity() >= QUDA_SUMMARIZE && initSize > 0)
         printfQuda("Using %d initial guesses\n", initSize);
@@ -328,7 +348,8 @@ namespace quda
         solver = Solver::create(solverParam, m, mSloppy, mPre, profileInvert);
         primme.preconditioner = solver;
       } 
-
+      fprintf(stderr,"CHKPT - call-func: Solver created\n");
+      
       // Use a fast, but inaccurate orthogonalization. It seems enough for these problems
       primme.orth = primme_orth_implicit_I;
 
@@ -348,9 +369,13 @@ namespace quda
       if (getVerbosity() >= QUDA_SUMMARIZE)
         primme.printLevel = 3;
 
+      fprintf(stderr,"CHKPT - call-func: Before calling tprimme\n");
+      
       // Call primme
       int ret = tprimme(evals, evecs_ptr, rnorms, &primme, location);
       checkCudaError();
+
+      fprintf(stderr,"CHKPT - call-func: After calling tprimme\n");
 
       if (use_inv) {
         delete solver;
@@ -362,6 +387,8 @@ namespace quda
       if (ret != 0) {
         errorQuda("PRIMME returns the error code %d. Computed %d pairs.", ret, primme.initSize);
       }
+
+      fprintf(stderr,"CHKPT - call-func: After deleting objects\n");
 
       // Invert eigenvalues if needed
       if (use_inv) {
@@ -375,8 +402,10 @@ namespace quda
       for (int i=0; i<primme.initSize; i++) {
 	//        copy_column(*kSpace[i], 0, *evecs, i);
 	*kSpace[i] = *evecs;
+	fprintf(stderr,"CHKPT - call-func: Copying evecs to kSpace %d\n",i);
       }
 
+      
       // Compute eigenvalues and residuals
       eigensolver->computeEvals(eigensolver->mat, kSpace, evals_out, primme.initSize);
 
