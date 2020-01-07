@@ -100,7 +100,7 @@ namespace quda
   }
 
   namespace { // Auxiliary functions
-
+    /*
     // Auxiliary function to copy the xi-th column of x into the yi-th column of y
     // NOTE: column indices start from zero
     void copy_column(ColorSpinorField &y, int yi, ColorSpinorField &x, int xi) {
@@ -119,7 +119,7 @@ namespace quda
       blas::copy(*y1, *x1);
       delete x1;
       delete y1;
-    }
+      } */
 
     // Auxiliary function for global sum reduction
     void globalSumDouble(void *sendBuf, void *recvBuf, int *count, 
@@ -271,7 +271,8 @@ namespace quda
       for (size_t i=0; i<kSpace.size() && i<(size_t)std::min(eig_param->nEv, 0); i++) {
         if (kSpace[i] == nullptr) break;
         if (sqrt(blas::norm2(*kSpace[i])) <= 0) break;
-        copy_column(*evecs, i, *kSpace[i], 0);
+	//        copy_column(*evecs, i, *kSpace[i], 0);
+	*evecs = *kSpace[i];
         initSize++;
       }
       if (getVerbosity() >= QUDA_SUMMARIZE && initSize > 0)
@@ -372,7 +373,8 @@ namespace quda
       // Copy evecs to kSpace
       kSpace.resize(primme.initSize);
       for (int i=0; i<primme.initSize; i++) {
-        copy_column(*kSpace[i], 0, *evecs, i);
+	//        copy_column(*kSpace[i], 0, *evecs, i);
+	*kSpace[i] = *evecs;
       }
 
       // Compute eigenvalues and residuals
