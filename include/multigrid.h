@@ -378,6 +378,11 @@ public:
      */
     double flops() const;
 
+    /**
+       @brief Return the coarse Dirac operator
+    */
+    Dirac *getDiracCoarse(){ return diracCoarseResidual;}
+
   };
 
   /**
