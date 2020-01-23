@@ -383,6 +383,11 @@ public:
     */
     Dirac *getDiracCoarse(){ return diracCoarseResidual;}
 
+    /**
+       @brief Return the Transfer operator
+    */
+    Transfer *getTransferOperator(){ return transfer;}
+
   };
 
   /**
