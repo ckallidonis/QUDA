@@ -178,7 +178,7 @@ namespace quda {
 
     /** This is the transfer operator that defines the prolongation and restriction operators */
     Transfer *transfer;
-
+    
     /** This tell to reset() if transfer needs to be rebuilt */
     bool resetTransfer;
 
@@ -265,7 +265,7 @@ namespace quda {
 
     /** Parallel hyper-cubic random number generator for generating null-space vectors */
     RNG *rng;
-
+    
     /**
        @brief Helper function called on entry to each MG function
        @param[in] level The level we working on
@@ -384,10 +384,19 @@ public:
     Dirac *getDiracCoarse(){ return diracCoarseResidual;}
 
     /**
-       @brief Return the Transfer operator
+       @brief Return the Transfer operator from finest to 1st coarse level
     */
-    Transfer *getTransferOperator(){ return transfer;}
+    Transfer *getTransferFinest(){ return transfer;}
 
+    /**
+       @brief Return the Transfer operator from 1st coarse to 2nd coarse level
+    */
+    Transfer *getTransferCoarse(){ return param.fine->transfer;}
+
+    /**
+       @brief Return the Transfer operator from next-to-coarse to coarsest level
+    */
+    Transfer *getTransferCoarsest(){ return coarse->transfer;}
   };
 
   /**
