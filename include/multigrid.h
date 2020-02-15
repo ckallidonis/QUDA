@@ -388,6 +388,27 @@ public:
      */
     double flops() const;
 
+    /**
+       @brief Return the coarse Dirac operator
+    */
+    Dirac *getDiracCoarse(){ return diracCoarseResidual;}
+
+    /**
+       @brief Return the Transfer operator from finest to 1st coarse level
+    */
+    Transfer *getTransferFinest(){ return transfer;}
+
+    /**
+       @brief Return the Transfer operator from 1st coarse to 2nd coarse level
+    */
+    Transfer *getTransferCoarse(){ return param.fine->transfer;}
+
+    /**
+       @brief Return the Transfer operator from next-to-coarse to coarsest level
+    */
+    Transfer *getTransferCoarsest(){ return coarse->transfer;}
+    
+
   };
 
   /**
